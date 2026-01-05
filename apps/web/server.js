@@ -542,6 +542,9 @@ app.prepare().then(async () => {
           where: { telegramId: BigInt(data.telegramId) },
         });
 
+        // Detect language (ru if starts with 'ru', else 'en')
+        const userLang = data.languageCode?.startsWith('ru') ? 'ru' : 'en';
+
         if (!user) {
           user = await prisma.user.create({
             data: {
@@ -549,11 +552,20 @@ app.prepare().then(async () => {
               username: data.username || null,
               firstName: data.firstName || null,
               photoUrl: data.photoUrl || null,
+              language: userLang,
             },
           });
-          console.log(`[Auth] New user created: ${data.telegramId}`);
+          console.log(`[Auth] New user created: ${data.telegramId}, lang: ${userLang}`);
         } else {
-          console.log(`[Auth] Existing user: ${data.telegramId}`);
+          // Update language if changed
+          if (user.language !== userLang) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { language: userLang },
+            });
+            user.language = userLang;
+          }
+          console.log(`[Auth] Existing user: ${data.telegramId}, lang: ${userLang}`);
         }
 
         // Calculate offline earnings

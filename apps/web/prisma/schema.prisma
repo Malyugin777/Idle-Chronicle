@@ -19,6 +19,7 @@ model User {
   username        String?
   firstName       String?
   photoUrl        String?
+  language        String   @default("en")  // ru, en
 
   // Stats (L2-style)
   level           Int      @default(1)

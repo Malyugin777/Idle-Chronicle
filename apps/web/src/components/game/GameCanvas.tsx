@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { THEME } from '@/lib/constants';
 import { getSocket } from '@/lib/socket';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface BossState {
   id: string;
@@ -66,6 +67,8 @@ export default function GameCanvas() {
   const [respawnCountdown, setRespawnCountdown] = useState(0);
   const [showWelcome, setShowWelcome] = useState(false);
   const [autoAttackDamage, setAutoAttackDamage] = useState(0);
+  const [lang, setLang] = useState<Language>('en');
+  const t = useTranslation(lang);
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -105,6 +108,10 @@ export default function GameCanvas() {
   useEffect(() => {
     const socket = getSocket();
 
+    // Detect language on mount
+    const detectedLang = detectLanguage();
+    setLang(detectedLang);
+
     // Auth function - reusable for connect and reconnect
     const doAuth = () => {
       if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
@@ -112,12 +119,13 @@ export default function GameCanvas() {
         const user = webApp.initDataUnsafe?.user;
 
         if (user) {
-          console.log('[Auth] Sending auth for user:', user.id);
+          console.log('[Auth] Sending auth for user:', user.id, 'lang:', user.language_code);
           socket.emit('auth', {
             telegramId: user.id,
             username: user.username,
             firstName: user.first_name,
             photoUrl: user.photo_url,
+            languageCode: user.language_code,
             initData: webApp.initData,
           });
         } else {
@@ -594,13 +602,13 @@ export default function GameCanvas() {
             {/* Header */}
             <div className="text-center mb-3">
               <div className="text-3xl mb-1">{victoryData.bossIcon}</div>
-              <div className="text-l2-gold text-lg font-bold">VICTORY!</div>
-              <div className="text-gray-300 text-sm">{victoryData.bossName} defeated</div>
+              <div className="text-l2-gold text-lg font-bold">{t.boss.victory}</div>
+              <div className="text-gray-300 text-sm">{victoryData.bossName} {t.boss.defeated}</div>
             </div>
 
             {/* Countdown */}
             <div className="bg-black/40 rounded-lg p-3 mb-3 text-center">
-              <div className="text-xs text-gray-400 mb-1">Next boss in</div>
+              <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
               <div className="text-2xl font-bold text-white font-mono">
                 {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
               </div>
@@ -609,20 +617,20 @@ export default function GameCanvas() {
             {/* Bonuses */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 text-center">
-                <div className="text-xs text-red-400">Final Blow</div>
+                <div className="text-xs text-red-400">{t.boss.finalBlow}</div>
                 <div className="text-sm font-bold text-white truncate">{victoryData.finalBlowBy}</div>
-                <div className="text-xs text-green-400">+20% bonus</div>
+                <div className="text-xs text-green-400">+20% {t.boss.bonus}</div>
               </div>
               <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2 text-center">
-                <div className="text-xs text-purple-400">Top Damage</div>
+                <div className="text-xs text-purple-400">{t.boss.topDamage}</div>
                 <div className="text-sm font-bold text-white truncate">{victoryData.topDamageBy}</div>
-                <div className="text-xs text-green-400">+15% bonus</div>
+                <div className="text-xs text-green-400">+15% {t.boss.bonus}</div>
               </div>
             </div>
 
             {/* Top Players */}
             <div className="bg-black/30 rounded-lg p-2">
-              <div className="text-xs text-gray-400 mb-2 text-center">Top Participants</div>
+              <div className="text-xs text-gray-400 mb-2 text-center">{t.boss.topParticipants}</div>
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {victoryData.rewards.slice(0, 5).map((reward, i) => (
                   <div
@@ -649,7 +657,7 @@ export default function GameCanvas() {
             {/* Your session damage */}
             {sessionDamage > 0 && (
               <div className="mt-2 text-center text-xs text-gray-400">
-                Your damage: {sessionDamage.toLocaleString()}
+                {t.boss.yourDamage}: {sessionDamage.toLocaleString()}
               </div>
             )}
           </div>
@@ -664,10 +672,10 @@ export default function GameCanvas() {
             <div className="text-center mb-4">
               <div className="text-4xl mb-2">&#9876;</div>
               <h1 className="text-xl font-bold text-l2-gold mb-1">
-                Welcome, Hero!
+                {t.welcome.title}
               </h1>
               <p className="text-gray-300 text-sm">
-                You&apos;ve entered the most mysterious place in Telegram
+                {t.welcome.subtitle}
               </p>
             </div>
 
@@ -675,37 +683,37 @@ export default function GameCanvas() {
             <div className="space-y-3 mb-4">
               <div className="bg-black/40 rounded-lg p-3 border-l-2 border-l2-gold">
                 <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-1">
-                  <span>&#128081;</span> 10 Epic World Bosses
+                  <span>&#128081;</span> {t.welcome.bosses}
                 </div>
                 <p className="text-gray-400 text-xs">
-                  Fight legendary monsters together with other players in real-time!
+                  {t.welcome.bossesDesc}
                 </p>
               </div>
 
               <div className="bg-black/40 rounded-lg p-3 border-l-2 border-purple-500">
                 <div className="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1">
-                  <span>&#128176;</span> Increasing Rewards
+                  <span>&#128176;</span> {t.welcome.rewards}
                 </div>
                 <p className="text-gray-400 text-xs">
-                  Each boss drops more loot than the last. Final blow and top damage get bonuses!
+                  {t.welcome.rewardsDesc}
                 </p>
               </div>
 
               <div className="bg-black/40 rounded-lg p-3 border-l-2 border-blue-500">
                 <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-1">
-                  <span>&#9889;</span> Auto-Battle System
+                  <span>&#9889;</span> {t.welcome.autoBattle}
                 </div>
                 <p className="text-gray-400 text-xs">
-                  Upgrade your auto-attack to deal damage even while you&apos;re away!
+                  {t.welcome.autoBattleDesc}
                 </p>
               </div>
 
               <div className="bg-black/40 rounded-lg p-3 border-l-2 border-green-500">
                 <div className="flex items-center gap-2 text-green-400 font-bold text-sm mb-1">
-                  <span>&#128200;</span> Upgrade & Grow
+                  <span>&#128200;</span> {t.welcome.upgrade}
                 </div>
                 <p className="text-gray-400 text-xs">
-                  Level up STR, DEX, LUCK and unlock powerful abilities!
+                  {t.welcome.upgradeDesc}
                 </p>
               </div>
             </div>
@@ -715,7 +723,7 @@ export default function GameCanvas() {
               onClick={handleWelcomeClose}
               className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-500 hover:to-l2-gold transition-all text-lg"
             >
-              Start Adventure!
+              {t.welcome.startButton}
             </button>
           </div>
         </div>
@@ -725,12 +733,12 @@ export default function GameCanvas() {
       {offlineEarnings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-l2-panel rounded-lg p-6 m-4 max-w-sm text-center">
-            <div className="text-l2-gold text-lg font-bold mb-2">Welcome Back!</div>
+            <div className="text-l2-gold text-lg font-bold mb-2">{t.offline.welcomeBack}</div>
             <p className="text-gray-300 text-sm mb-4">
-              You were away for {offlineEarnings.hours} hours
+              {t.offline.awayFor} {offlineEarnings.hours} {t.offline.hours}
             </p>
             <div className="bg-black/30 rounded-lg p-4 mb-4">
-              <div className="text-xs text-gray-400 mb-1">Offline Earnings</div>
+              <div className="text-xs text-gray-400 mb-1">{t.offline.earnings}</div>
               <div className="text-2xl font-bold text-l2-gold">
                 +{offlineEarnings.adena.toLocaleString()} Adena
               </div>
@@ -739,7 +747,7 @@ export default function GameCanvas() {
               onClick={() => setOfflineEarnings(null)}
               className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg hover:bg-l2-gold/80 transition-colors"
             >
-              Collect
+              {t.offline.collect}
             </button>
           </div>
         </div>
@@ -760,7 +768,7 @@ export default function GameCanvas() {
             </div>
           </div>
           <span className="text-xs text-gray-400">
-            {connected ? `${bossState.playersOnline} online` : 'Connecting...'}
+            {connected ? `${bossState.playersOnline} ${t.game.online}` : t.game.connecting}
           </span>
         </div>
         <div className="flex justify-between items-center mb-2">
@@ -821,7 +829,7 @@ export default function GameCanvas() {
         {/* Mana bar */}
         <div className="mb-3">
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-blue-400">MANA</span>
+            <span className="text-blue-400">{t.game.mana}</span>
             <span>{Math.floor(mana)} / {maxMana}</span>
           </div>
           <div className="h-2 bg-black/50 rounded-full overflow-hidden">
@@ -834,19 +842,19 @@ export default function GameCanvas() {
 
         <div className="flex justify-between items-center">
           <div>
-            <span className="text-xs text-gray-400">Session Damage</span>
+            <span className="text-xs text-gray-400">{t.game.sessionDamage}</span>
             <div className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</div>
           </div>
           {autoAttackDamage > 0 && (
             <div className="text-center">
-              <span className="text-xs text-purple-400">Auto</span>
+              <span className="text-xs text-purple-400">{t.game.auto}</span>
               <div className="text-purple-300 font-bold text-sm">-{autoAttackDamage.toLocaleString()}</div>
             </div>
           )}
           <div className="text-right">
-            <span className="text-xs text-gray-400">Status</span>
+            <span className="text-xs text-gray-400">{t.game.status}</span>
             <div className={connected ? 'text-green-400' : 'text-red-400'}>
-              {connected ? 'Online' : 'Offline'}
+              {connected ? 'Online' : t.game.offline}
             </div>
           </div>
         </div>

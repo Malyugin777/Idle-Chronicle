@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { Sword, Zap, Clover, Coins, Timer, Bot, Droplets } from 'lucide-react';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface PlayerStats {
   id: string;
@@ -25,6 +26,8 @@ interface PlayerStats {
 export default function CharacterTab() {
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
 
   useEffect(() => {
     const socket = getSocket();
@@ -114,8 +117,8 @@ export default function CharacterTab() {
     return (
       <div className="flex-1 flex items-center justify-center bg-l2-dark">
         <div className="text-center">
-          <p className="text-gray-400 mb-2">Not authenticated</p>
-          <p className="text-xs text-gray-500">Play in Telegram to save progress</p>
+          <p className="text-gray-400 mb-2">{t.character.notAuth}</p>
+          <p className="text-xs text-gray-500">{t.character.playInTelegram}</p>
         </div>
       </div>
     );
@@ -124,26 +127,26 @@ export default function CharacterTab() {
   const statItems = [
     {
       id: 'str' as const,
-      name: 'STR',
+      name: t.character.str,
       value: stats.str,
       icon: <Sword className="text-red-400" size={24} />,
-      effect: '+8% damage',
+      effect: t.character.strEffect,
       color: 'red',
     },
     {
       id: 'dex' as const,
-      name: 'DEX',
+      name: t.character.dex,
       value: stats.dex,
       icon: <Zap className="text-yellow-400" size={24} />,
-      effect: '+5% speed',
+      effect: t.character.dexEffect,
       color: 'yellow',
     },
     {
       id: 'luck' as const,
-      name: 'LUCK',
+      name: t.character.luck,
       value: stats.luck,
       icon: <Clover className="text-green-400" size={24} />,
-      effect: '+3% crit',
+      effect: t.character.luckEffect,
       color: 'green',
     },
   ];
@@ -162,7 +165,7 @@ export default function CharacterTab() {
             <h2 className="text-lg font-bold text-white">
               {stats.firstName || stats.username || 'Hero'}
             </h2>
-            <p className="text-sm text-gray-400">Level {stats.level}</p>
+            <p className="text-sm text-gray-400">{t.character.level} {stats.level}</p>
           </div>
         </div>
 
@@ -172,28 +175,28 @@ export default function CharacterTab() {
             <Coins className="text-l2-gold" size={20} />
             <span className="text-l2-gold font-bold">{stats.adena.toLocaleString()}</span>
           </div>
-          <span className="text-xs text-gray-400">Adena</span>
+          <span className="text-xs text-gray-400">{t.character.adena}</span>
         </div>
       </div>
 
       {/* Derived Stats */}
       <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">Combat Stats</h3>
+        <h3 className="text-sm text-gray-400 mb-3">{t.character.combatStats}</h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-xs text-gray-500">P.Atk</p>
+            <p className="text-xs text-gray-500">{t.character.pAtk}</p>
             <p className="text-lg font-bold text-white">{stats.pAtk}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Crit Chance</p>
+            <p className="text-xs text-gray-500">{t.character.critChance}</p>
             <p className="text-lg font-bold text-white">{(stats.critChance * 100).toFixed(1)}%</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total Damage</p>
+            <p className="text-xs text-gray-500">{t.character.totalDamage}</p>
             <p className="text-lg font-bold text-l2-gold">{stats.totalDamage.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Bosses Killed</p>
+            <p className="text-xs text-gray-500">{t.character.bossesKilled}</p>
             <p className="text-lg font-bold text-white">{stats.bossesKilled}</p>
           </div>
         </div>
@@ -201,7 +204,7 @@ export default function CharacterTab() {
 
       {/* Base Stats Upgrade */}
       <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">Base Stats</h3>
+        <h3 className="text-sm text-gray-400 mb-3">{t.character.baseStats}</h3>
         <div className="space-y-3">
           {statItems.map((stat) => {
             const cost = getUpgradeCost(stat.value);
@@ -239,17 +242,17 @@ export default function CharacterTab() {
 
       {/* Combat Skills */}
       <div className="bg-l2-panel rounded-lg p-4">
-        <h3 className="text-sm text-gray-400 mb-3">Combat Skills</h3>
+        <h3 className="text-sm text-gray-400 mb-3">{t.character.combatSkills}</h3>
         <div className="space-y-3">
           {/* Tap Speed */}
           <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg">
             <Timer className="text-cyan-400" size={24} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-white">Tap Speed</span>
+                <span className="font-bold text-white">{t.character.tapSpeed}</span>
                 <span className="text-cyan-400">{stats.tapsPerSecond || 3}/10</span>
               </div>
-              <p className="text-xs text-gray-500">Taps per second limit</p>
+              <p className="text-xs text-gray-500">{t.character.tapSpeedDesc}</p>
             </div>
             {(stats.tapsPerSecond || 3) < 10 ? (
               <button
@@ -264,7 +267,7 @@ export default function CharacterTab() {
                 {upgrading === 'tapsPerSecond' ? '...' : getTapSpeedCost(stats.tapsPerSecond || 3).toLocaleString()}
               </button>
             ) : (
-              <span className="text-green-400 text-sm font-bold">MAX</span>
+              <span className="text-green-400 text-sm font-bold">{t.character.max}</span>
             )}
           </div>
 
@@ -273,10 +276,10 @@ export default function CharacterTab() {
             <Bot className="text-purple-400" size={24} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-white">Auto-Attack</span>
+                <span className="font-bold text-white">{t.character.autoAttack}</span>
                 <span className="text-purple-400">{stats.autoAttackSpeed || 0}/10</span>
               </div>
-              <p className="text-xs text-gray-500">Passive damage per second</p>
+              <p className="text-xs text-gray-500">{t.character.autoAttackDesc}</p>
             </div>
             {(stats.autoAttackSpeed || 0) < 10 ? (
               <button
@@ -291,7 +294,7 @@ export default function CharacterTab() {
                 {upgrading === 'autoAttackSpeed' ? '...' : getAutoAttackCost(stats.autoAttackSpeed || 0).toLocaleString()}
               </button>
             ) : (
-              <span className="text-green-400 text-sm font-bold">MAX</span>
+              <span className="text-green-400 text-sm font-bold">{t.character.max}</span>
             )}
           </div>
 
@@ -300,10 +303,10 @@ export default function CharacterTab() {
             <Droplets className="text-blue-400" size={24} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-white">Mana Regen</span>
+                <span className="font-bold text-white">{t.character.manaRegen}</span>
                 <span className="text-blue-400">{(stats.manaRegen || 0.2).toFixed(1)}/s</span>
               </div>
-              <p className="text-xs text-gray-500">Mana recovery per second</p>
+              <p className="text-xs text-gray-500">{t.character.manaRegenDesc}</p>
             </div>
             {(stats.manaRegen || 0.2) < 10 ? (
               <button
@@ -318,7 +321,7 @@ export default function CharacterTab() {
                 {upgrading === 'manaRegen' ? '...' : getManaRegenCost(stats.manaRegen || 0.2).toLocaleString()}
               </button>
             ) : (
-              <span className="text-green-400 text-sm font-bold">MAX</span>
+              <span className="text-green-400 text-sm font-bold">{t.character.max}</span>
             )}
           </div>
         </div>
