@@ -38,6 +38,7 @@ export default function GameCanvas() {
   const [sessionDamage, setSessionDamage] = useState(0);
   const [connected, setConnected] = useState(false);
   const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
+  const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -138,6 +139,11 @@ export default function GameCanvas() {
       setSessionDamage(data.sessionDamage);
     });
 
+    // Offline earnings notification
+    socket.on('offline:earnings', (data: { adena: number; hours: number }) => {
+      setOfflineEarnings(data);
+    });
+
     // Tap batching - flush every 100ms
     tapFlushIntervalRef.current = setInterval(() => {
       if (tapQueueRef.current > 0) {
@@ -159,6 +165,7 @@ export default function GameCanvas() {
       socket.off('boss:respawn');
       socket.off('boss:rage');
       socket.off('player:state');
+      socket.off('offline:earnings');
     };
   }, []);
 
@@ -453,6 +460,30 @@ export default function GameCanvas() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Offline Earnings Modal */}
+      {offlineEarnings && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-l2-panel rounded-lg p-6 m-4 max-w-sm text-center">
+            <div className="text-l2-gold text-lg font-bold mb-2">Welcome Back!</div>
+            <p className="text-gray-300 text-sm mb-4">
+              You were away for {offlineEarnings.hours} hours
+            </p>
+            <div className="bg-black/30 rounded-lg p-4 mb-4">
+              <div className="text-xs text-gray-400 mb-1">Offline Earnings</div>
+              <div className="text-2xl font-bold text-l2-gold">
+                +{offlineEarnings.adena.toLocaleString()} Adena
+              </div>
+            </div>
+            <button
+              onClick={() => setOfflineEarnings(null)}
+              className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg hover:bg-l2-gold/80 transition-colors"
+            >
+              Collect
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header with HP */}
       <div className="p-4 bg-l2-panel/80">
         <div className="flex justify-between items-center mb-1">

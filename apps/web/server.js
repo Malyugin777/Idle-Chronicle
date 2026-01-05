@@ -45,6 +45,46 @@ const RAGE_PHASES = [
   { hpPercent: 25, multiplier: 2.0 },
 ];
 
+// Soulshot config
+const SOULSHOTS = {
+  NG: { multiplier: 1.5, cost: 10 },
+  D: { multiplier: 2.2, cost: 50 },
+  C: { multiplier: 3.5, cost: 250 },
+  B: { multiplier: 5.0, cost: 1000 },
+  A: { multiplier: 7.0, cost: 5000 },
+  S: { multiplier: 10.0, cost: 20000 },
+};
+
+// Buff config
+const BUFFS = {
+  haste: { effect: 'speed', value: 0.3, duration: 30000, cost: 500 },
+  acumen: { effect: 'damage', value: 0.5, duration: 30000, cost: 500 },
+  luck: { effect: 'crit', value: 0.1, duration: 60000, cost: 1000 },
+};
+
+// Stat upgrade cost formula
+function getUpgradeCost(level) {
+  return Math.floor(100 * Math.pow(1.5, level - 1));
+}
+
+// Offline progress constants
+const OFFLINE_ADENA_PER_HOUR = 50; // Base adena per hour offline
+const MAX_OFFLINE_HOURS = 8; // Maximum hours to accumulate
+
+function calculateOfflineEarnings(player, lastOnline) {
+  const now = Date.now();
+  const offlineMs = now - lastOnline.getTime();
+  const offlineHours = Math.min(offlineMs / (1000 * 60 * 60), MAX_OFFLINE_HOURS);
+
+  if (offlineHours < 0.1) return { adena: 0, hours: 0 }; // Less than 6 min, no reward
+
+  // Adena scales with player level/stats
+  const multiplier = 1 + (player.str * 0.1) + (player.dex * 0.05);
+  const adenaEarned = Math.floor(OFFLINE_ADENA_PER_HOUR * offlineHours * multiplier);
+
+  return { adena: adenaEarned, hours: Math.round(offlineHours * 10) / 10 };
+}
+
 // ═══════════════════════════════════════════════════════════
 // DAMAGE CALCULATION
 // ═══════════════════════════════════════════════════════════
@@ -52,12 +92,49 @@ const RAGE_PHASES = [
 function calculateDamage(player, tapCount) {
   let totalDamage = 0;
   let crits = 0;
+  let soulshotUsed = 0;
 
   const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
-  const critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
+  let critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
+
+  // Check active buffs
+  const now = Date.now();
+  player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > now);
+
+  let damageBonus = 1.0;
+  for (const buff of player.activeBuffs) {
+    if (buff.type === 'acumen') damageBonus += buff.value;
+    if (buff.type === 'luck') critChance = Math.min(0.75, critChance + buff.value);
+  }
+
+  // Soulshot multiplier
+  let ssMultiplier = 1.0;
+  const ssGrade = player.activeSoulshot;
+  if (ssGrade && SOULSHOTS[ssGrade]) {
+    const ssKey = `soulshot${ssGrade}`;
+    if (player[ssKey] > 0) {
+      ssMultiplier = SOULSHOTS[ssGrade].multiplier;
+      // Consume soulshots (1 per tap)
+      const consumed = Math.min(player[ssKey], tapCount);
+      player[ssKey] -= consumed;
+      soulshotUsed = consumed;
+      // Auto-deactivate if ran out
+      if (player[ssKey] <= 0) {
+        player.activeSoulshot = null;
+      }
+    }
+  }
 
   for (let i = 0; i < tapCount; i++) {
     let dmg = baseDamage * (0.9 + Math.random() * 0.2);
+
+    // Apply soulshot (only for taps that had soulshots)
+    if (i < soulshotUsed) {
+      dmg *= ssMultiplier;
+    }
+
+    // Apply damage buff
+    dmg *= damageBonus;
 
     if (Math.random() < critChance) {
       dmg *= BASE_CRIT_DAMAGE;
@@ -70,7 +147,7 @@ function calculateDamage(player, tapCount) {
     totalDamage += Math.floor(dmg);
   }
 
-  return { totalDamage, crits };
+  return { totalDamage, crits, soulshotUsed };
 }
 
 function updateRagePhase() {
@@ -200,9 +277,24 @@ app.prepare().then(async () => {
       critChance: BASE_CRIT_CHANCE,
       energy: 1000,
       maxEnergy: 1000,
+      adena: 0,
       sessionDamage: 0,
       sessionClicks: 0,
       sessionCrits: 0,
+      // Soulshots
+      activeSoulshot: null,
+      soulshotNG: 100,
+      soulshotD: 0,
+      soulshotC: 0,
+      soulshotB: 0,
+      soulshotA: 0,
+      soulshotS: 0,
+      // Potions
+      potionHaste: 0,
+      potionAcumen: 0,
+      potionLuck: 0,
+      // Active buffs (in-memory)
+      activeBuffs: [],
     };
 
     onlineUsers.set(socket.id, player);
@@ -242,14 +334,58 @@ app.prepare().then(async () => {
           console.log(`[Auth] New user: ${data.telegramId}`);
         }
 
+        // Calculate offline earnings
+        const offlineEarnings = calculateOfflineEarnings(user, user.lastOnline);
+        let offlineAdena = 0;
+
+        if (offlineEarnings.adena > 0) {
+          offlineAdena = offlineEarnings.adena;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              adena: { increment: BigInt(offlineAdena) },
+              offlineEarnings: { increment: BigInt(offlineAdena) },
+            },
+          });
+          user.adena = BigInt(Number(user.adena) + offlineAdena);
+        }
+
+        // Update player state from DB
         player.odamage = user.id;
         player.odamageN = user.firstName || user.username || 'Player';
         player.str = user.str;
         player.dex = user.dex;
         player.luck = user.luck;
         player.pAtk = user.pAtk;
+        player.critChance = user.critChance;
         player.energy = user.energy;
         player.maxEnergy = user.maxEnergy;
+        player.adena = Number(user.adena);
+        player.activeSoulshot = user.activeSoulshot;
+        player.soulshotNG = user.soulshotNG;
+        player.soulshotD = user.soulshotD;
+        player.soulshotC = user.soulshotC;
+        player.potionHaste = user.potionHaste;
+        player.potionAcumen = user.potionAcumen;
+        player.potionLuck = user.potionLuck;
+
+        // Load active buffs from DB
+        const activeBuffs = await prisma.activeBuff.findMany({
+          where: { userId: user.id, expiresAt: { gt: new Date() } },
+        });
+        player.activeBuffs = activeBuffs.map(b => ({
+          type: b.buffType.toLowerCase(),
+          value: b.value,
+          expiresAt: b.expiresAt.getTime(),
+        }));
+
+        // Send offline earnings notification if any
+        if (offlineAdena > 0) {
+          socket.emit('offline:earnings', {
+            adena: offlineAdena,
+            hours: offlineEarnings.hours,
+          });
+        }
 
         socket.emit('auth:success', {
           id: user.id,
@@ -259,10 +395,21 @@ app.prepare().then(async () => {
           str: user.str,
           dex: user.dex,
           luck: user.luck,
+          pAtk: user.pAtk,
+          critChance: user.critChance,
           adena: Number(user.adena),
           energy: user.energy,
+          maxEnergy: user.maxEnergy,
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
+          activeSoulshot: user.activeSoulshot,
+          soulshotNG: user.soulshotNG,
+          soulshotD: user.soulshotD,
+          soulshotC: user.soulshotC,
+          potionHaste: user.potionHaste,
+          potionAcumen: user.potionAcumen,
+          potionLuck: user.potionLuck,
+          activeBuffs: player.activeBuffs,
         });
       } catch (err) {
         console.error('[Auth] Error:', err.message);
@@ -286,9 +433,13 @@ app.prepare().then(async () => {
 
       player.energy -= tapCount * ENERGY_COST_PER_TAP;
 
-      const { totalDamage, crits } = calculateDamage(player, tapCount);
+      const { totalDamage, crits, soulshotUsed } = calculateDamage(player, tapCount);
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
+
+      // Adena reward: 1 adena per 100 damage
+      const adenaGained = Math.floor(actualDamage / 100);
+      player.adena += adenaGained;
 
       player.sessionDamage += actualDamage;
       player.sessionClicks += tapCount;
@@ -306,6 +457,11 @@ app.prepare().then(async () => {
         crits,
         energy: player.energy,
         sessionDamage: player.sessionDamage,
+        adena: player.adena,
+        adenaGained,
+        soulshotUsed,
+        activeSoulshot: player.activeSoulshot,
+        [`soulshot${player.activeSoulshot}`]: player.activeSoulshot ? player[`soulshot${player.activeSoulshot}`] : undefined,
       });
 
       io.emit('damage:feed', {
@@ -348,8 +504,12 @@ app.prepare().then(async () => {
         }
 
         const leaderboard = Array.from(sessionLeaderboard.entries())
-          .map(([id, data]) => ({ odamage: id, ...data }))
-          .sort((a, b) => b.odamage - a.odamage)
+          .map(([id, data]) => ({
+            visitorId: id,
+            visitorName: data.odamageN,
+            damage: data.odamage,
+          }))
+          .sort((a, b) => b.damage - a.damage)
           .slice(0, 10);
 
         io.emit('boss:killed', {
@@ -373,28 +533,271 @@ app.prepare().then(async () => {
     // LEADERBOARD
     socket.on('leaderboard:get', () => {
       const leaderboard = Array.from(sessionLeaderboard.entries())
-        .map(([id, data]) => ({ odamage: id, ...data }))
-        .sort((a, b) => b.odamage - a.odamage)
+        .map(([id, data]) => ({
+          visitorId: id,
+          visitorName: data.odamageN,
+          damage: data.odamage,
+        }))
+        .sort((a, b) => b.damage - a.damage)
         .slice(0, 20);
       socket.emit('leaderboard:data', leaderboard);
+    });
+
+    // ALL-TIME LEADERBOARD
+    socket.on('leaderboard:alltime:get', async () => {
+      try {
+        const topUsers = await prisma.user.findMany({
+          orderBy: { totalDamage: 'desc' },
+          take: 20,
+          select: {
+            id: true,
+            firstName: true,
+            username: true,
+            totalDamage: true,
+          },
+        });
+        const leaderboard = topUsers.map(u => ({
+          visitorId: u.id,
+          visitorName: u.firstName || u.username || 'Anonymous',
+          damage: Number(u.totalDamage),
+        }));
+        socket.emit('leaderboard:alltime', leaderboard);
+      } catch (err) {
+        console.error('[Leaderboard] Error:', err.message);
+      }
+    });
+
+    // STAT UPGRADE
+    socket.on('upgrade:stat', async (data) => {
+      if (!player.odamage) {
+        socket.emit('upgrade:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const stat = data.stat;
+      if (!['str', 'dex', 'luck'].includes(stat)) {
+        socket.emit('upgrade:error', { message: 'Invalid stat' });
+        return;
+      }
+
+      const cost = getUpgradeCost(player[stat]);
+      if (player.adena < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough adena' });
+        return;
+      }
+
+      try {
+        player[stat] += 1;
+        player.adena -= cost;
+
+        // Recalculate derived stats
+        player.pAtk = 10 + Math.floor(player.str * 2);
+        player.critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            [stat]: player[stat],
+            adena: BigInt(player.adena),
+            pAtk: player.pAtk,
+            critChance: player.critChance,
+          },
+        });
+
+        socket.emit('upgrade:success', {
+          stat,
+          value: player[stat],
+          adena: player.adena,
+          pAtk: player.pAtk,
+          critChance: player.critChance,
+        });
+      } catch (err) {
+        console.error('[Upgrade] Error:', err.message);
+        socket.emit('upgrade:error', { message: 'Upgrade failed' });
+      }
+    });
+
+    // SHOP BUY
+    socket.on('shop:buy', async (data) => {
+      if (!player.odamage) {
+        socket.emit('shop:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      try {
+        if (data.type === 'soulshot') {
+          const grade = data.grade;
+          const quantity = data.quantity || 100;
+
+          if (!SOULSHOTS[grade]) {
+            socket.emit('shop:error', { message: 'Invalid grade' });
+            return;
+          }
+
+          const totalCost = SOULSHOTS[grade].cost * (quantity / 100);
+          if (player.adena < totalCost) {
+            socket.emit('shop:error', { message: 'Not enough adena' });
+            return;
+          }
+
+          player.adena -= totalCost;
+          const ssKey = `soulshot${grade}`;
+          player[ssKey] = (player[ssKey] || 0) + quantity;
+
+          // Update DB (only for NG, D, C which exist in schema)
+          const updateData = { adena: BigInt(player.adena) };
+          if (['NG', 'D', 'C'].includes(grade)) {
+            updateData[ssKey] = player[ssKey];
+          }
+
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: updateData,
+          });
+
+          socket.emit('shop:success', {
+            adena: player.adena,
+            [ssKey]: player[ssKey],
+          });
+        } else if (data.type === 'buff') {
+          const buffId = data.buffId;
+          if (!BUFFS[buffId]) {
+            socket.emit('shop:error', { message: 'Invalid buff' });
+            return;
+          }
+
+          const cost = BUFFS[buffId].cost;
+          if (player.adena < cost) {
+            socket.emit('shop:error', { message: 'Not enough adena' });
+            return;
+          }
+
+          player.adena -= cost;
+          const potionKey = `potion${buffId.charAt(0).toUpperCase() + buffId.slice(1)}`;
+          player[potionKey] = (player[potionKey] || 0) + 1;
+
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: {
+              adena: BigInt(player.adena),
+              [potionKey]: player[potionKey],
+            },
+          });
+
+          socket.emit('shop:success', {
+            adena: player.adena,
+            [potionKey]: player[potionKey],
+          });
+        }
+      } catch (err) {
+        console.error('[Shop] Error:', err.message);
+        socket.emit('shop:error', { message: 'Purchase failed' });
+      }
+    });
+
+    // SOULSHOT TOGGLE
+    socket.on('soulshot:toggle', async (data) => {
+      if (!player.odamage) return;
+
+      const grade = data.grade;
+      player.activeSoulshot = grade;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { activeSoulshot: grade },
+        });
+      } catch (err) {}
+
+      socket.emit('shop:success', { activeSoulshot: grade });
+    });
+
+    // BUFF USE
+    socket.on('buff:use', async (data) => {
+      if (!player.odamage) {
+        socket.emit('buff:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const buffId = data.buffId;
+      if (!BUFFS[buffId]) {
+        socket.emit('buff:error', { message: 'Invalid buff' });
+        return;
+      }
+
+      const potionKey = `potion${buffId.charAt(0).toUpperCase() + buffId.slice(1)}`;
+      if ((player[potionKey] || 0) <= 0) {
+        socket.emit('buff:error', { message: 'No potions available' });
+        return;
+      }
+
+      try {
+        player[potionKey] -= 1;
+
+        const buff = BUFFS[buffId];
+        const expiresAt = Date.now() + buff.duration;
+
+        // Add to in-memory buffs
+        player.activeBuffs.push({
+          type: buffId,
+          value: buff.value,
+          expiresAt,
+        });
+
+        // Save to DB
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { [potionKey]: player[potionKey] },
+        });
+
+        await prisma.activeBuff.create({
+          data: {
+            userId: player.odamage,
+            buffType: buffId.toUpperCase(),
+            value: buff.value,
+            expiresAt: new Date(expiresAt),
+          },
+        });
+
+        socket.emit('buff:success', {
+          buffId,
+          expiresAt,
+          [potionKey]: player[potionKey],
+        });
+      } catch (err) {
+        console.error('[Buff] Error:', err.message);
+        socket.emit('buff:error', { message: 'Failed to use buff' });
+      }
     });
 
     // DISCONNECT
     socket.on('disconnect', async () => {
       console.log(`[Socket] Disconnected: ${socket.id}`);
 
-      if (player.odamage && player.sessionDamage > 0) {
+      if (player.odamage) {
         try {
+          const updateData = {
+            energy: player.energy,
+            adena: BigInt(player.adena),
+            activeSoulshot: player.activeSoulshot,
+            soulshotNG: player.soulshotNG,
+            soulshotD: player.soulshotD,
+            soulshotC: player.soulshotC,
+            lastOnline: new Date(),
+          };
+
+          if (player.sessionDamage > 0) {
+            updateData.totalDamage = { increment: BigInt(player.sessionDamage) };
+            updateData.totalClicks = { increment: BigInt(player.sessionClicks) };
+          }
+
           await prisma.user.update({
             where: { id: player.odamage },
-            data: {
-              energy: player.energy,
-              totalDamage: { increment: BigInt(player.sessionDamage) },
-              totalClicks: { increment: BigInt(player.sessionClicks) },
-              lastOnline: new Date(),
-            },
+            data: updateData,
           });
-        } catch (e) {}
+        } catch (e) {
+          console.error('[Disconnect] Save error:', e.message);
+        }
       }
 
       onlineUsers.delete(socket.id);

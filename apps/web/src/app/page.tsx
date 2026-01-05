@@ -2,21 +2,42 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import BottomNav, { TabType } from '@/components/ui/BottomNav';
 
-// Dynamic import Phaser (no SSR)
+// Dynamic imports for tabs (no SSR)
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
   ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-screen bg-l2-dark">
+  loading: () => <TabLoading />,
+});
+
+const CharacterTab = dynamic(() => import('@/components/tabs/CharacterTab'), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+
+const ShopTab = dynamic(() => import('@/components/tabs/ShopTab'), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+
+const LeaderboardTab = dynamic(() => import('@/components/tabs/LeaderboardTab'), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+
+function TabLoading() {
+  return (
+    <div className="flex-1 flex items-center justify-center bg-l2-dark">
       <div className="text-l2-gold font-pixel text-sm animate-pulse">
         Loading...
       </div>
     </div>
-  ),
-});
+  );
+}
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('game');
 
   useEffect(() => {
     setIsClient(true);
@@ -38,9 +59,25 @@ export default function Home() {
     );
   }
 
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'game':
+        return <GameCanvas />;
+      case 'character':
+        return <CharacterTab />;
+      case 'shop':
+        return <ShopTab />;
+      case 'leaderboard':
+        return <LeaderboardTab />;
+      default:
+        return <GameCanvas />;
+    }
+  };
+
   return (
-    <main className="h-screen w-screen overflow-hidden bg-l2-dark">
-      <GameCanvas />
+    <main className="h-screen w-screen overflow-hidden bg-l2-dark flex flex-col">
+      {renderTab()}
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </main>
   );
 }
