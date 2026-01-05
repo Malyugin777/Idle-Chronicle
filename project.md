@@ -8,7 +8,7 @@
 **Backend:** Fastify + Socket.io + Prisma
 **Version:** 2.0.0
 **GitHub:** https://github.com/Malyugin777/Idle-Chronicle
-**Vercel:** https://idle-chronicle.vercel.app
+**Render:** https://world-boss-web.onrender.com
 **Integration:** [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg)
 
 ---
