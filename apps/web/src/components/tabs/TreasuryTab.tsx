@@ -55,16 +55,21 @@ export default function TreasuryTab() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Request inventory on mount
+    // Request data on mount
+    socket.emit('player:get');
     socket.emit('inventory:get');
 
-    socket.on('auth:success', (data: any) => {
+    const updateCurrency = (data: any) => {
+      if (!data) return;
       setTreasury(prev => ({
         ...prev,
         adena: data.adena || 0,
         ancientCoin: data.ancientCoin || 0,
       }));
-    });
+    };
+
+    socket.on('player:data', updateCurrency);
+    socket.on('auth:success', updateCurrency);
 
     socket.on('inventory:data', (data: { items: InventoryItem[] }) => {
       setTreasury(prev => ({
@@ -99,6 +104,7 @@ export default function TreasuryTab() {
     });
 
     return () => {
+      socket.off('player:data');
       socket.off('auth:success');
       socket.off('inventory:data');
       socket.off('loot:drop');

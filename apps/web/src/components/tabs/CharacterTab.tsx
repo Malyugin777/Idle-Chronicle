@@ -26,6 +26,13 @@ export default function CharacterTab() {
   useEffect(() => {
     const socket = getSocket();
 
+    // Request player data on mount
+    socket.emit('player:get');
+
+    socket.on('player:data', (data: PlayerStats) => {
+      setStats(data);
+    });
+
     socket.on('auth:success', (data: PlayerStats) => {
       setStats(data);
     });
@@ -46,6 +53,7 @@ export default function CharacterTab() {
     });
 
     return () => {
+      socket.off('player:data');
       socket.off('auth:success');
       socket.off('upgrade:success');
       socket.off('upgrade:error');

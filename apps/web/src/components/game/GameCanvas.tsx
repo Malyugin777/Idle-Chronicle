@@ -83,24 +83,47 @@ export default function GameCanvas() {
   useEffect(() => {
     const socket = getSocket();
 
-    socket.on('connect', () => {
-      setConnected(true);
-
-      // Auth with Telegram if available
+    // Auth function - reusable for connect and reconnect
+    const doAuth = () => {
       if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
         const webApp = window.Telegram.WebApp;
         const user = webApp.initDataUnsafe?.user;
 
         if (user) {
+          console.log('[Auth] Sending auth for user:', user.id);
           socket.emit('auth', {
             telegramId: user.id,
             username: user.username,
             firstName: user.first_name,
             photoUrl: user.photo_url,
-            initData: webApp.initData, // Send for verification
+            initData: webApp.initData,
           });
+        } else {
+          console.log('[Auth] No Telegram user found, playing as guest');
         }
+      } else {
+        console.log('[Auth] Not in Telegram WebApp');
       }
+    };
+
+    socket.on('connect', () => {
+      console.log('[Game] Socket connected');
+      setConnected(true);
+      doAuth();
+    });
+
+    socket.on('reconnect', () => {
+      console.log('[Game] Socket reconnected');
+      setConnected(true);
+      doAuth();
+    });
+
+    socket.on('auth:success', (data) => {
+      console.log('[Auth] Success! User:', data.firstName || data.username || data.id);
+    });
+
+    socket.on('auth:error', (data) => {
+      console.error('[Auth] Error:', data.message);
     });
 
     socket.on('disconnect', () => {
@@ -167,6 +190,7 @@ export default function GameCanvas() {
         clearInterval(tapFlushIntervalRef.current);
       }
       socket.off('connect');
+      socket.off('reconnect');
       socket.off('disconnect');
       socket.off('boss:state');
       socket.off('tap:result');
@@ -176,6 +200,8 @@ export default function GameCanvas() {
       socket.off('boss:rage');
       socket.off('player:state');
       socket.off('offline:earnings');
+      socket.off('auth:success');
+      socket.off('auth:error');
     };
   }, []);
 

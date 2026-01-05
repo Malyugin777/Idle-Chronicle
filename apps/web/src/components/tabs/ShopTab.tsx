@@ -46,7 +46,11 @@ export default function ShopTab() {
   useEffect(() => {
     const socket = getSocket();
 
-    socket.on('auth:success', (data: any) => {
+    // Request player data on mount
+    socket.emit('player:get');
+
+    const updateShopState = (data: any) => {
+      if (!data) return;
       setShopState({
         adena: data.adena || 0,
         activeSoulshot: data.activeSoulshot || null,
@@ -57,7 +61,10 @@ export default function ShopTab() {
         potionAcumen: data.potionAcumen || 0,
         potionLuck: data.potionLuck || 0,
       });
-    });
+    };
+
+    socket.on('player:data', updateShopState);
+    socket.on('auth:success', updateShopState);
 
     socket.on('shop:success', (data: any) => {
       setShopState(prev => ({ ...prev, ...data }));
@@ -69,6 +76,7 @@ export default function ShopTab() {
     });
 
     return () => {
+      socket.off('player:data');
       socket.off('auth:success');
       socket.off('shop:success');
       socket.off('shop:error');

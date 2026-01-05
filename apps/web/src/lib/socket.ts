@@ -8,19 +8,37 @@ export function getSocket(): Socket {
     socket = io({
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socket.on('connect', () => {
       console.log('[Socket] Connected:', socket?.id);
     });
 
-    socket.on('disconnect', () => {
-      console.log('[Socket] Disconnected');
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', reason);
+      // Auto reconnect if server disconnected
+      if (reason === 'io server disconnect') {
+        socket?.connect();
+      }
     });
 
     socket.on('connect_error', (err) => {
       console.error('[Socket] Connection error:', err.message);
     });
+
+    socket.on('reconnect', (attempt) => {
+      console.log('[Socket] Reconnected after', attempt, 'attempts');
+    });
+  }
+
+  // Ensure socket is connected
+  if (!socket.connected) {
+    socket.connect();
   }
 
   return socket;
