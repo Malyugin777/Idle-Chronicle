@@ -11,7 +11,6 @@ Part of [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) univer
 | **Platform** | Telegram Mini App (TMA) |
 | **Version** | 2.0.0 |
 | **GitHub** | https://github.com/Malyugin777/Idle-Chronicle |
-| **Render** | https://world-boss-web.onrender.com |
 
 ---
 
@@ -19,10 +18,10 @@ Part of [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) univer
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 14, TypeScript, Phaser 3.80.1, Zustand, TailwindCSS |
-| Backend | Fastify, Socket.io, Prisma, ioredis |
-| Database | PostgreSQL 15, Redis 7 |
-| Deploy | Render |
+| Frontend | Next.js 14, TypeScript, Canvas 2D, Socket.io-client, TailwindCSS |
+| Backend | Fastify, Socket.io, Prisma |
+| Database | PostgreSQL |
+| Deploy | Render (2 services + database) |
 
 ---
 
@@ -31,26 +30,23 @@ Part of [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) univer
 ```
 world-boss-clicker/
 ├── apps/
-│   ├── web/                    # Next.js 14 (App Router)
+│   ├── web/                    # Next.js 14 Frontend
 │   │   ├── src/
 │   │   │   ├── app/            # Pages
-│   │   │   ├── components/     # React + Phaser
-│   │   │   ├── hooks/          # Custom hooks
-│   │   │   ├── stores/         # Zustand stores
-│   │   │   └── lib/            # Utils
-│   │   └── public/assets/      # Images, sounds
+│   │   │   ├── components/     # GameCanvas, UI
+│   │   │   └── lib/            # Socket, constants
+│   │   └── public/assets/      # Boss sprites
 │   │
-│   └── server/                 # Fastify + Socket.io
+│   └── server/                 # Fastify + Socket.io Backend
 │       ├── src/
 │       │   ├── config/         # Environment
-│       │   ├── modules/        # Business logic
-│       │   └── shared/         # Prisma, Redis
-│       └── prisma/             # Schema, migrations
+│       │   ├── shared/prisma/  # Prisma client
+│       │   └── index.ts        # Main server
+│       └── prisma/             # Schema
 │
 ├── packages/
-│   └── shared/                 # Types, constants
+│   └── shared/                 # Types, constants (optional)
 │
-├── docker-compose.yml          # Local dev
 ├── render.yaml                 # Render Blueprint
 └── turbo.json
 ```
@@ -60,9 +56,10 @@ world-boss-clicker/
 ## Game Mechanics
 
 ### World Boss
-- Entire server attacks ONE boss in real-time
-- HP syncs across all connected clients
-- Rage phases at 75%, 50%, 25% HP
+- **All players attack ONE boss** in real-time
+- HP syncs across all connected clients via WebSocket
+- Boss respawns 5 seconds after death
+- Rage phases at 75%, 50%, 25% HP (damage multiplier increases)
 
 ### Stats (L2-style)
 
@@ -72,101 +69,94 @@ world-boss-clicker/
 | DEX | +5% attack speed per point |
 | LUCK | +3% crit chance per point |
 
-### Soulshots
-
-| Grade | Multiplier | Cost |
-|-------|------------|------|
-| NG | x1.5 | 1 |
-| D | x2.2 | 5 |
-| C | x3.5 | 25 |
-| B | x5.0 | 100 |
-| A | x7.0 | 500 |
-| S | x10.0 | 2000 |
+### Damage Formula
+```
+baseDamage = pAtk * (1 + STR * 0.08)
+variance = baseDamage * (0.9 to 1.1)
+critCheck = random < (0.05 + LUCK * 0.03)
+critDamage = damage * 2.0
+rageMultiplier = [1.0, 1.2, 1.5, 2.0][ragePhase]
+finalDamage = (damage - bossDefense) * rageMultiplier
+```
 
 ### Energy System (Anti-cheat)
 - 1 energy per tap
-- Max: 1000, Regen: 10/sec
-
----
-
-## Database Schema
-
-| Model | Description |
-|-------|-------------|
-| User | Stats, currencies, inventory |
-| Boss | HP, defense, loot table |
-| BossSession | Active boss instance |
-| DamageLog | Per-user damage tracking |
-| Weapon | Upgradeable weapons |
-| Item | Loot drops (RPG items) |
-| Task | Daily/weekly quests |
-
-## Redis Keys
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `boss:hp` | String | Current HP (atomic DECRBY) |
-| `boss:session:*:lb` | Sorted Set | Session leaderboard |
-| `user:*` | Hash | User cache (TTL 1h) |
-| `users:online` | Set | Online users |
-| `boss:damagefeed` | List | Recent damage (cap 50) |
+- Max: 1000
+- Regen: 10/sec
+- Tap batching: up to 50 taps per batch
 
 ---
 
 ## WebSocket Events
 
 ### Client → Server
-- `tap:batch` - Batch of taps
-- `upgrade:stat` - Buy stat upgrade
-- `soulshot:toggle` - Toggle soulshot
+| Event | Data | Description |
+|-------|------|-------------|
+| `auth` | `{ telegramId, username, firstName, photoUrl }` | Authenticate user |
+| `tap:batch` | `{ count }` | Batch of taps (1-50) |
+| `upgrade:stat` | `{ stat: 'str'|'dex'|'luck' }` | Buy stat upgrade |
+| `leaderboard:get` | - | Request leaderboard |
 
 ### Server → Client
-- `boss:state` - HP update (100ms)
-- `tap:result` - Damage result
-- `boss:killed` - Victory + rewards
-- `boss:rage` - Rage phase change
+| Event | Data | Description |
+|-------|------|-------------|
+| `boss:state` | `{ id, name, hp, maxHp, ragePhase, playersOnline }` | Boss HP (100ms) |
+| `tap:result` | `{ damage, crits, energy, sessionDamage }` | Tap result |
+| `damage:feed` | `{ playerName, damage, isCrit }` | Other players' damage |
+| `boss:killed` | `{ bossName, finalBlowBy, leaderboard }` | Boss death |
+| `boss:respawn` | `{ id, name, hp, maxHp }` | New boss spawned |
+| `boss:rage` | `{ phase, multiplier }` | Rage phase change |
+| `auth:success` | `{ id, username, level, str, dex, luck, ... }` | Auth success |
 
 ---
 
-## Visual Style
+## Database Schema (PostgreSQL)
 
-- **Theme:** Dark Fantasy (Lineage 2 C1-C4)
-- **Font:** Press Start 2P
-- **Colors:**
-  - Background: `#0e141b` → `#2a313b`
-  - Gold: `#D6B36A`
-  - Health: `#C41E3A`
-  - Energy: `#3498DB`
-  - Crit: `#FF4444`
+| Model | Description |
+|-------|-------------|
+| User | Telegram user, stats, currencies, energy |
+| Boss | Boss definition, HP, defense, loot table |
+| BossSession | Active boss instance, damage tracking |
+| DamageLog | Per-user damage per session |
+| Weapon | Upgradeable weapons |
+| Item | Loot drops |
+| Task | Daily/weekly quests |
 
 ---
 
 ## Local Development
 
 ```bash
-# Install
+# 1. Install pnpm
 npm install -g pnpm
+
+# 2. Install dependencies
 pnpm install
 
-# Docker
-docker-compose up -d
+# 3. Start PostgreSQL (Docker)
+docker run -d --name worldboss-db \
+  -e POSTGRES_USER=worldboss \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=worldboss \
+  -p 5432:5432 postgres:15
 
-# Setup
+# 4. Setup server
 cp apps/server/.env.example apps/server/.env
+# Edit DATABASE_URL if needed
 pnpm db:push
 
-# Run
+# 5. Run development
 pnpm dev
 ```
 
-## Commands
+### Commands
 
 ```bash
-pnpm dev                    # Start all
+pnpm dev                    # Start all (frontend + backend)
 pnpm --filter web dev       # Frontend only
 pnpm --filter server dev    # Backend only
-pnpm db:push                # Push schema
-pnpm db:studio              # Prisma Studio
+pnpm db:push                # Push Prisma schema
+pnpm db:studio              # Prisma Studio (DB GUI)
 pnpm build                  # Build all
 ```
 
@@ -174,39 +164,76 @@ pnpm build                  # Build all
 
 ## Deploy to Render
 
-### Frontend (apps/web)
+### Option 1: Blueprint (Recommended)
 
-| Setting | Value |
-|---------|-------|
-| Name | `world-boss-web` |
-| Root Directory | `apps/web` |
-| Build Command | `npm i -g pnpm && pnpm i && pnpm build` |
-| Start Command | `pnpm start` |
+1. Go to [Render Dashboard](https://dashboard.render.com)
+2. **New** → **Blueprint**
+3. Connect GitHub repo
+4. Render will detect `render.yaml` and create:
+   - `world-boss-web` (Frontend)
+   - `world-boss-server` (Backend)
+   - `world-boss-db` (PostgreSQL)
 
-### Backend (apps/server)
+5. **After deployment**, set environment variables:
+   - **Frontend** (`world-boss-web`):
+     - `NEXT_PUBLIC_API_URL` = `https://world-boss-server.onrender.com`
+   - **Backend** (`world-boss-server`):
+     - `CORS_ORIGIN` = `https://world-boss-web.onrender.com`
 
-| Setting | Value |
-|---------|-------|
-| Name | `world-boss-server` |
-| Root Directory | `apps/server` |
-| Build Command | `npm i -g pnpm && pnpm i && pnpm build` |
-| Start Command | `pnpm start` |
+### Option 2: Manual Setup
 
-### Environment Variables
+#### 1. Database
+- **New** → **PostgreSQL**
+- Name: `world-boss-db`
+- Copy **Internal Database URL**
 
-**Frontend:**
+#### 2. Backend
+- **New** → **Web Service**
+- Connect repo
+- Settings:
+  - **Name:** `world-boss-server`
+  - **Root Directory:** `apps/server`
+  - **Build Command:** `npm i -g pnpm && cd ../.. && pnpm i && cd apps/server && pnpm build && pnpm db:push`
+  - **Start Command:** `pnpm start`
+- Environment Variables:
+  - `DATABASE_URL` = (from PostgreSQL)
+  - `CORS_ORIGIN` = (frontend URL after deploy)
+  - `NODE_ENV` = `production`
+
+#### 3. Frontend
+- **New** → **Web Service**
+- Connect repo
+- Settings:
+  - **Name:** `world-boss-web`
+  - **Root Directory:** `apps/web`
+  - **Build Command:** `npm i -g pnpm && cd ../.. && pnpm i && pnpm build:web`
+  - **Start Command:** `pnpm start`
+- Environment Variables:
+  - `NEXT_PUBLIC_API_URL` = (backend URL)
+  - `NODE_ENV` = `production`
+
+---
+
+## Seeding Initial Boss
+
+After deploy, you need to add a boss to the database:
+
+```sql
+-- Connect to Render PostgreSQL and run:
+INSERT INTO "Boss" (id, code, name, title, "baseHp", defense, "ragePhases", "isActive")
+VALUES (
+  'orfen-001',
+  'ORFEN',
+  'Orfen',
+  'Nightmare',
+  1000000,
+  0,
+  '[{"hpPercent": 75, "multiplier": 1.2}, {"hpPercent": 50, "multiplier": 1.5}, {"hpPercent": 25, "multiplier": 2.0}]',
+  true
+);
 ```
-NEXT_PUBLIC_API_URL=https://world-boss-server.onrender.com
-```
 
-**Backend:**
-```
-DATABASE_URL=postgresql://...
-REDIS_URL=redis://... (Upstash free)
-CORS_ORIGIN=https://world-boss-web.onrender.com
-PORT=3001
-NODE_ENV=production
-```
+Or use Prisma Studio: `pnpm db:studio`
 
 ---
 
@@ -215,17 +242,29 @@ NODE_ENV=production
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 05.01.2026 | Initial simple clicker |
-| 2.0.0 | 05.01.2026 | Turborepo monorepo, Next.js 14, Fastify, Prisma, Redis |
+| 2.0.0 | 05.01.2026 | Turborepo, Next.js, Fastify, Prisma |
+| **2.1.0** | **05.01.2026** | **Full multiplayer implementation** |
+| | | - Server-side damage calculation |
+| | | - WebSocket real-time sync |
+| | | - Rage phases |
+| | | - Energy system |
+| | | - Damage feed |
+| | | - Session leaderboard |
+| | | - No Redis (in-memory state) |
 
 ---
 
 ## TODO
 
-- [ ] Server-side damage calculation
-- [ ] WebSocket authentication
-- [ ] Boss rotation system
-- [ ] Leaderboard tab
-- [ ] Shop tab
-- [ ] Character upgrades tab
-- [ ] Treasury (RPG loot)
+- [x] Server-side damage calculation
+- [x] WebSocket real-time sync
+- [x] Rage phases
+- [x] Energy system
+- [ ] Telegram authentication verification
+- [ ] Persistent leaderboard (all-time)
+- [ ] Shop tab (soulshots, buffs)
+- [ ] Character upgrades UI
+- [ ] Treasury (RPG loot drops)
 - [ ] Offline progress
+- [ ] Multiple bosses rotation
+- [ ] Boss Spine animations

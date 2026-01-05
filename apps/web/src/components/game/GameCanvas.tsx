@@ -1,13 +1,43 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { VIEWPORT, THEME } from '@/lib/constants';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { THEME } from '@/lib/constants';
+import { getSocket } from '@/lib/socket';
+
+interface BossState {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  ragePhase: number;
+  playersOnline: number;
+}
+
+interface DamageFeed {
+  playerName: string;
+  damage: number;
+  isCrit: boolean;
+  timestamp: number;
+}
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [hp, setHp] = useState(1_000_000);
-  const [maxHp] = useState(1_000_000);
-  const [damage, setDamage] = useState(0);
+
+  // Server state
+  const [bossState, setBossState] = useState<BossState>({
+    id: '',
+    name: 'Loading...',
+    hp: 1_000_000,
+    maxHp: 1_000_000,
+    ragePhase: 0,
+    playersOnline: 0,
+  });
+
+  const [energy, setEnergy] = useState(1000);
+  const [maxEnergy] = useState(1000);
+  const [sessionDamage, setSessionDamage] = useState(0);
+  const [connected, setConnected] = useState(false);
+  const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -30,7 +60,11 @@ export default function GameCanvas() {
     life: number;
   }>>([]);
 
-  // Constants from friend's code
+  // Tap batching
+  const tapQueueRef = useRef(0);
+  const tapFlushIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Constants
   const HIT_MS = 240;
   const SHAKE_MS = 120;
   const FLASH_MS = 120;
@@ -38,11 +72,98 @@ export default function GameCanvas() {
   const CUT_Y_RATIO = 0.46;
   const MAX_TILT = -0.22;
   const MAX_BACK = 10;
-  const DMG_MIN = 8;
-  const DMG_MAX = 20;
 
+  // Socket connection
   useEffect(() => {
-    // Load boss image
+    const socket = getSocket();
+
+    socket.on('connect', () => {
+      setConnected(true);
+
+      // Auth with Telegram if available
+      if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user) {
+        const user = window.Telegram.WebApp.initDataUnsafe.user;
+        socket.emit('auth', {
+          telegramId: user.id,
+          username: user.username,
+          firstName: user.first_name,
+          photoUrl: user.photo_url,
+        });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      setConnected(false);
+    });
+
+    // Boss state updates
+    socket.on('boss:state', (data: BossState) => {
+      setBossState(data);
+    });
+
+    // Tap results
+    socket.on('tap:result', (data: { damage: number; crits: number; energy: number; sessionDamage: number }) => {
+      setEnergy(data.energy);
+      setSessionDamage(data.sessionDamage);
+    });
+
+    // Damage feed from other players
+    socket.on('damage:feed', (data: { playerName: string; damage: number; isCrit: boolean }) => {
+      setDamageFeed(prev => [
+        { ...data, timestamp: Date.now() },
+        ...prev.slice(0, 9), // Keep last 10
+      ]);
+    });
+
+    // Boss killed
+    socket.on('boss:killed', (data: { bossName: string; finalBlowBy: string; leaderboard: any[] }) => {
+      console.log('[Boss] Killed!', data);
+      // Could show victory modal here
+    });
+
+    // Boss respawn
+    socket.on('boss:respawn', (data: BossState) => {
+      setBossState(prev => ({ ...prev, ...data }));
+      setSessionDamage(0);
+    });
+
+    // Boss rage phase
+    socket.on('boss:rage', (data: { phase: number; multiplier: number }) => {
+      console.log('[Boss] Rage phase:', data.phase, 'x', data.multiplier);
+    });
+
+    // Player state
+    socket.on('player:state', (data: { energy: number; maxEnergy: number; sessionDamage: number }) => {
+      setEnergy(data.energy);
+      setSessionDamage(data.sessionDamage);
+    });
+
+    // Tap batching - flush every 100ms
+    tapFlushIntervalRef.current = setInterval(() => {
+      if (tapQueueRef.current > 0) {
+        socket.emit('tap:batch', { count: tapQueueRef.current });
+        tapQueueRef.current = 0;
+      }
+    }, 100);
+
+    return () => {
+      if (tapFlushIntervalRef.current) {
+        clearInterval(tapFlushIntervalRef.current);
+      }
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('boss:state');
+      socket.off('tap:result');
+      socket.off('damage:feed');
+      socket.off('boss:killed');
+      socket.off('boss:respawn');
+      socket.off('boss:rage');
+      socket.off('player:state');
+    };
+  }, []);
+
+  // Load boss image
+  useEffect(() => {
     const img = new Image();
     img.src = '/assets/bosses/boss_single.png';
     img.onload = () => {
@@ -50,6 +171,7 @@ export default function GameCanvas() {
     };
   }, []);
 
+  // Canvas drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -57,7 +179,6 @@ export default function GameCanvas() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Resize canvas
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
@@ -76,9 +197,8 @@ export default function GameCanvas() {
       t = clamp01(t);
       return 1 - Math.pow(1 - t, 3);
     };
-    const randInt = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1) + a);
 
-    // Draw boss with split (top/bottom recoil)
+    // Draw boss with split
     const drawBossSplit = (
       img: HTMLImageElement,
       dx: number,
@@ -127,7 +247,6 @@ export default function GameCanvas() {
       ctx.restore();
     };
 
-    // Animation loop
     let animationId: number;
 
     const draw = (now: number) => {
@@ -262,13 +381,16 @@ export default function GameCanvas() {
       ctx.textAlign = 'left';
 
       // Victory screen
-      if (hp <= 0) {
+      if (bossState.hp <= 0) {
         ctx.fillStyle = 'rgba(0,0,0,.45)';
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = THEME.COLORS.GOLD;
         ctx.textAlign = 'center';
         ctx.font = '800 28px system-ui';
         ctx.fillText('VICTORY!', w / 2, 80);
+        ctx.font = '600 16px system-ui';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('Boss respawning...', w / 2, 120);
         ctx.textAlign = 'left';
       }
 
@@ -281,11 +403,12 @@ export default function GameCanvas() {
       window.removeEventListener('resize', resize);
       cancelAnimationFrame(animationId);
     };
-  }, [hp]);
+  }, [bossState.hp]);
 
   // Handle tap/click
-  const handleTap = () => {
-    if (hp <= 0) return;
+  const handleTap = useCallback(() => {
+    if (bossState.hp <= 0) return;
+    if (energy <= 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -294,20 +417,20 @@ export default function GameCanvas() {
     const w = rect.width;
     const h = rect.height;
 
-    // Calculate damage
-    const isCrit = Math.random() < 0.15; // 15% crit chance
-    const baseDmg = Math.floor(Math.random() * (DMG_MAX - DMG_MIN + 1) + DMG_MIN);
-    const dmg = isCrit ? baseDmg * 2 : baseDmg;
+    // Queue tap for batching
+    tapQueueRef.current++;
 
-    setHp((prev) => Math.max(0, prev - dmg));
-    setDamage((prev) => prev + dmg);
+    // Optimistic UI update
+    setEnergy(prev => Math.max(0, prev - 1));
 
     // Trigger hit animation
     hitT0Ref.current = performance.now();
 
-    // Spawn floating text
+    // Spawn floating text (estimated damage)
+    const estimatedDmg = Math.floor(10 + Math.random() * 10);
+    const isCrit = Math.random() < 0.15;
     floatsRef.current.push({
-      text: '-' + dmg,
+      text: '-' + (isCrit ? estimatedDmg * 2 : estimatedDmg),
       x: w / 2 + Math.floor(Math.random() * 160 - 80),
       y: h / 2 + Math.floor(Math.random() * 60 - 30),
       vy: -0.35,
@@ -323,23 +446,38 @@ export default function GameCanvas() {
       born: performance.now(),
       life: 260,
     });
-  };
+  }, [bossState.hp, energy]);
 
-  const hpPercent = (hp / maxHp) * 100;
+  const hpPercent = (bossState.hp / bossState.maxHp) * 100;
+  const energyPercent = (energy / maxEnergy) * 100;
 
   return (
     <div className="flex flex-col h-full">
       {/* Header with HP */}
       <div className="p-4 bg-l2-panel/80">
-        <div className="flex justify-between items-center mb-2">
-          <span className="font-pixel text-xs text-l2-gold">WORLD BOSS</span>
-          <span className="text-sm">
-            {hp.toLocaleString()} / {maxHp.toLocaleString()}
+        <div className="flex justify-between items-center mb-1">
+          <span className="font-pixel text-xs text-l2-gold">{bossState.name}</span>
+          <span className="text-xs text-gray-400">
+            {connected ? `${bossState.playersOnline} online` : 'Connecting...'}
           </span>
+        </div>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm">
+            {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
+          </span>
+          {bossState.ragePhase > 0 && (
+            <span className="text-xs text-red-500 font-bold">
+              RAGE x{[1, 1.2, 1.5, 2][bossState.ragePhase]}
+            </span>
+          )}
         </div>
         <div className="h-4 bg-black/50 rounded-full overflow-hidden">
           <div
-            className={`h-full bg-l2-health transition-all duration-100 ${hpPercent < 25 ? 'hp-critical' : ''}`}
+            className={`h-full transition-all duration-100 ${
+              hpPercent < 25 ? 'bg-red-600 hp-critical' :
+              hpPercent < 50 ? 'bg-orange-500' :
+              hpPercent < 75 ? 'bg-yellow-500' : 'bg-l2-health'
+            }`}
             style={{ width: `${hpPercent}%` }}
           />
         </div>
@@ -356,17 +494,48 @@ export default function GameCanvas() {
             handleTap();
           }}
         />
+
+        {/* Damage feed overlay */}
+        <div className="absolute top-2 right-2 text-xs space-y-1 pointer-events-none">
+          {damageFeed.slice(0, 5).map((item, i) => (
+            <div
+              key={item.timestamp}
+              className={`${item.isCrit ? 'text-red-400' : 'text-gray-300'} opacity-${100 - i * 20}`}
+              style={{ opacity: 1 - i * 0.2 }}
+            >
+              {item.playerName}: -{item.damage.toLocaleString()}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Stats footer */}
-      <div className="p-4 bg-l2-panel/80 flex justify-between items-center">
-        <div>
-          <span className="text-xs text-gray-400">Your Damage</span>
-          <div className="text-l2-gold font-bold">{damage.toLocaleString()}</div>
+      <div className="p-4 bg-l2-panel/80">
+        {/* Energy bar */}
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-l2-energy">Energy</span>
+            <span>{energy} / {maxEnergy}</span>
+          </div>
+          <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-l2-energy transition-all duration-100"
+              style={{ width: `${energyPercent}%` }}
+            />
+          </div>
         </div>
-        <div className="text-right">
-          <span className="text-xs text-gray-400">DMG/Click</span>
-          <div className="text-white">{DMG_MIN}-{DMG_MAX}</div>
+
+        <div className="flex justify-between items-center">
+          <div>
+            <span className="text-xs text-gray-400">Session Damage</span>
+            <div className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</div>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-gray-400">Status</span>
+            <div className={connected ? 'text-green-400' : 'text-red-400'}>
+              {connected ? 'Online' : 'Offline'}
+            </div>
+          </div>
         </div>
       </div>
     </div>
