@@ -6,7 +6,7 @@ services:
     name: world-boss
     runtime: node
     rootDir: apps/web
-    buildCommand: npm install -g pnpm && cd ../.. && pnpm install && cd apps/web && pnpm build && pnpm db:push
+    buildCommand: npm install -g pnpm && cd ../.. && NODE_ENV=development pnpm install && cd apps/web && pnpm build && pnpm db:push
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
