@@ -1,5 +1,17 @@
 # Dependencies
 node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # IDE
 .idea/
@@ -14,15 +26,20 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+pnpm-debug.log*
 
-# Environment
-.env
-.env.local
-.env.*.local
+# Turbo
+.turbo/
 
-# Build
-dist/
-build/
+# Prisma
+apps/server/prisma/migrations/**/migration_lock.toml
+
+# Testing
+coverage/
 
 # Vercel
 .vercel
+
+# Docker
+postgres_data/
+redis_data/

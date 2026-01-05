@@ -1,42 +1,64 @@
-# Idle Chronicle
+# World Boss Clicker
 
-Clicker game for Telegram Mini App (TMA).
+Multiplayer World Boss Clicker for Telegram Mini App (TMA).
 
 ## Tech Stack
 
-- **Engine:** Phaser 3.80.1
-- **Platform:** Telegram Mini App
-- **Language:** Vanilla JavaScript (ES6)
+### Frontend (apps/web)
+- **Next.js 14** - App Router
+- **TypeScript** - Strict mode
+- **Phaser 3.80.1** - Boss scene, effects
+- **Zustand** - Global state
+- **Socket.io-client** - WebSocket
+- **TailwindCSS** - Styling
 
-## Features
+### Backend (apps/server)
+- **Fastify** - HTTP server
+- **Socket.io** - WebSocket server
+- **Prisma** - PostgreSQL ORM
+- **ioredis** - Redis client
 
-- Click to earn gold
-- Upgrades: Click Power, Auto Clicker, Multiplier
-- Offline progress (up to 8 hours)
-- Auto-save every 30 seconds
-- Dark Fantasy UI style
+### Infrastructure
+- **PostgreSQL 15** - Persistent data
+- **Redis 7** - Hot state, rate limiting
+- **Vercel** - Frontend deploy
+- **Railway** - Backend deploy
 
 ## Project Structure
 
 ```
-src/
-├── core/
-│   └── config.js      # Phaser config, constants
-├── state/
-│   ├── clickerState.js # Game state
-│   └── saveSystem.js   # localStorage save/load
-├── ui/
-│   └── clickerUI.js    # Main UI scene
-└── game.js             # Entry point
+world-boss-clicker/
+├── apps/
+│   ├── web/                # Next.js TMA Client
+│   └── server/             # Fastify Backend
+├── packages/
+│   └── shared/             # TypeScript types, constants
+├── docker-compose.yml      # Redis + PostgreSQL
+├── turbo.json
+└── pnpm-workspace.yaml
 ```
 
-## Integration
+## Getting Started
 
-Designed to integrate with [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) as a mini-game.
+```bash
+# Install dependencies
+pnpm install
 
-## Development
+# Start Docker (Redis + PostgreSQL)
+docker-compose up -d
 
-Just open `index.html` in browser or deploy to Vercel.
+# Push Prisma schema
+pnpm db:push
+
+# Start development
+pnpm dev
+```
+
+## Links
+
+- **GitHub:** https://github.com/Malyugin777/Idle-Chronicle
+- **Vercel:** https://idle-chronicle.vercel.app
+- **Main Game:** [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg)
 
 ## License
 
