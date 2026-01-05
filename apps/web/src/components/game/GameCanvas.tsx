@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { VIEWPORT, THEME } from '@world-boss/shared';
+import { VIEWPORT, THEME } from '@/lib/constants';
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
