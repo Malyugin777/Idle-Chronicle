@@ -106,6 +106,14 @@ export default function GameCanvas() {
       }
     };
 
+    // Check if already connected (when returning to tab)
+    if (socket.connected) {
+      console.log('[Game] Socket already connected');
+      setConnected(true);
+      // Request current player state
+      socket.emit('player:get');
+    }
+
     socket.on('connect', () => {
       console.log('[Game] Socket connected');
       setConnected(true);
@@ -172,6 +180,13 @@ export default function GameCanvas() {
       setSessionDamage(data.sessionDamage);
     });
 
+    // Player data (from player:get request)
+    socket.on('player:data', (data: any) => {
+      if (data) {
+        setEnergy(data.energy || 1000);
+      }
+    });
+
     // Offline earnings notification
     socket.on('offline:earnings', (data: { adena: number; hours: number }) => {
       setOfflineEarnings(data);
@@ -199,6 +214,7 @@ export default function GameCanvas() {
       socket.off('boss:respawn');
       socket.off('boss:rage');
       socket.off('player:state');
+      socket.off('player:data');
       socket.off('offline:earnings');
       socket.off('auth:success');
       socket.off('auth:error');
