@@ -119,13 +119,14 @@ export default function GameCanvas() {
         const user = webApp.initDataUnsafe?.user;
 
         if (user) {
-          console.log('[Auth] Sending auth for user:', user.id, 'lang:', user.language_code);
+          const langCode = (user as { language_code?: string }).language_code;
+          console.log('[Auth] Sending auth for user:', user.id, 'lang:', langCode);
           socket.emit('auth', {
             telegramId: user.id,
             username: user.username,
             firstName: user.first_name,
             photoUrl: user.photo_url,
-            languageCode: user.language_code,
+            languageCode: langCode,
             initData: webApp.initData,
           });
         } else {
