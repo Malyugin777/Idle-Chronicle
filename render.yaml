@@ -5,13 +5,9 @@ services:
   - type: web
     name: world-boss-clicker
     runtime: node
-    buildCommand: |
-      npm install -g pnpm &&
-      pnpm install &&
-      pnpm build:web &&
-      cp -r apps/web/public apps/web/.next/standalone/apps/web/ &&
-      cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/
-    startCommand: HOSTNAME=0.0.0.0 node apps/web/.next/standalone/apps/web/server.js
+    rootDir: apps/web
+    buildCommand: npm install -g pnpm && cd ../.. && pnpm install && pnpm build:web
+    startCommand: pnpm start
     envVars:
       - key: NODE_ENV
         value: production
