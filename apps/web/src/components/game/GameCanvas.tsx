@@ -25,6 +25,24 @@ interface DamageFeed {
   timestamp: number;
 }
 
+interface VictoryData {
+  bossName: string;
+  bossIcon: string;
+  finalBlowBy: string;
+  topDamageBy: string;
+  topDamage: number;
+  rewards: Array<{
+    visitorName: string;
+    damage: number;
+    damagePercent: number;
+    adenaReward: number;
+    expReward: number;
+    isFinalBlow: boolean;
+    isTopDamage: boolean;
+  }>;
+  respawnAt: number;
+}
+
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -44,6 +62,8 @@ export default function GameCanvas() {
   const [connected, setConnected] = useState(false);
   const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
   const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
+  const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
+  const [respawnCountdown, setRespawnCountdown] = useState(0);
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -143,10 +163,28 @@ export default function GameCanvas() {
       setBossState(data);
     });
 
-    // Tap results
+    // Tap results - show actual damage from server
     socket.on('tap:result', (data: { damage: number; crits: number; energy: number; sessionDamage: number }) => {
       setEnergy(data.energy);
       setSessionDamage(data.sessionDamage);
+
+      // Show actual damage number from server
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+
+        floatsRef.current.push({
+          text: '-' + data.damage.toLocaleString(),
+          x: w / 2 + Math.floor(Math.random() * 120 - 60),
+          y: h / 2 + Math.floor(Math.random() * 40 - 20),
+          vy: -0.4,
+          born: performance.now(),
+          life: 1200,
+          crit: data.crits > 0,
+        });
+      }
     });
 
     // Damage feed from other players
@@ -158,15 +196,42 @@ export default function GameCanvas() {
     });
 
     // Boss killed
-    socket.on('boss:killed', (data: { bossName: string; finalBlowBy: string; leaderboard: any[] }) => {
+    socket.on('boss:killed', (data: {
+      bossName: string;
+      bossIcon: string;
+      finalBlowBy: string;
+      topDamageBy: string;
+      topDamage: number;
+      rewards: any[];
+      respawnAt: number;
+    }) => {
       console.log('[Boss] Killed!', data);
-      // Could show victory modal here
+      setVictoryData({
+        bossName: data.bossName,
+        bossIcon: data.bossIcon || '👹',
+        finalBlowBy: data.finalBlowBy,
+        topDamageBy: data.topDamageBy,
+        topDamage: data.topDamage,
+        rewards: data.rewards || [],
+        respawnAt: data.respawnAt,
+      });
+      // Start countdown
+      const updateCountdown = () => {
+        const remaining = Math.max(0, data.respawnAt - Date.now());
+        setRespawnCountdown(remaining);
+        if (remaining > 0) {
+          setTimeout(updateCountdown, 1000);
+        }
+      };
+      updateCountdown();
     });
 
     // Boss respawn
     socket.on('boss:respawn', (data: BossState) => {
       setBossState(prev => ({ ...prev, ...data }));
       setSessionDamage(0);
+      setVictoryData(null);
+      setRespawnCountdown(0);
     });
 
     // Boss rage phase
@@ -439,18 +504,10 @@ export default function GameCanvas() {
       }
       ctx.textAlign = 'left';
 
-      // Victory screen
+      // Victory overlay (dimmed) - actual UI is rendered via React
       if (bossState.hp <= 0) {
-        ctx.fillStyle = 'rgba(0,0,0,.45)';
+        ctx.fillStyle = 'rgba(0,0,0,.6)';
         ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = THEME.COLORS.GOLD;
-        ctx.textAlign = 'center';
-        ctx.font = '800 28px system-ui';
-        ctx.fillText('VICTORY!', w / 2, 80);
-        ctx.font = '600 16px system-ui';
-        ctx.fillStyle = '#fff';
-        ctx.fillText('Boss respawning...', w / 2, 120);
-        ctx.textAlign = 'left';
       }
 
       animationId = requestAnimationFrame(draw);
@@ -479,26 +536,13 @@ export default function GameCanvas() {
     // Queue tap for batching
     tapQueueRef.current++;
 
-    // Optimistic UI update
+    // Optimistic UI update for energy only
     setEnergy(prev => Math.max(0, prev - 1));
 
     // Trigger hit animation
     hitT0Ref.current = performance.now();
 
-    // Spawn floating text (estimated damage)
-    const estimatedDmg = Math.floor(10 + Math.random() * 10);
-    const isCrit = Math.random() < 0.15;
-    floatsRef.current.push({
-      text: '-' + (isCrit ? estimatedDmg * 2 : estimatedDmg),
-      x: w / 2 + Math.floor(Math.random() * 160 - 80),
-      y: h / 2 + Math.floor(Math.random() * 60 - 30),
-      vy: -0.35,
-      born: performance.now(),
-      life: 950,
-      crit: isCrit,
-    });
-
-    // Spawn spark
+    // Spawn spark effect (damage numbers come from server via tap:result)
     sparksRef.current.push({
       x: w / 2 + Math.floor(Math.random() * 80 - 40),
       y: h / 2 + Math.floor(Math.random() * 90 - 50),
@@ -512,6 +556,75 @@ export default function GameCanvas() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Victory Screen with Respawn Countdown */}
+      {victoryData && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-l2-panel/95 rounded-lg p-4 m-2 max-w-sm w-full pointer-events-auto">
+            {/* Header */}
+            <div className="text-center mb-3">
+              <div className="text-3xl mb-1">{victoryData.bossIcon}</div>
+              <div className="text-l2-gold text-lg font-bold">VICTORY!</div>
+              <div className="text-gray-300 text-sm">{victoryData.bossName} defeated</div>
+            </div>
+
+            {/* Countdown */}
+            <div className="bg-black/40 rounded-lg p-3 mb-3 text-center">
+              <div className="text-xs text-gray-400 mb-1">Next boss in</div>
+              <div className="text-2xl font-bold text-white font-mono">
+                {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+              </div>
+            </div>
+
+            {/* Bonuses */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 text-center">
+                <div className="text-xs text-red-400">Final Blow</div>
+                <div className="text-sm font-bold text-white truncate">{victoryData.finalBlowBy}</div>
+                <div className="text-xs text-green-400">+20% bonus</div>
+              </div>
+              <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2 text-center">
+                <div className="text-xs text-purple-400">Top Damage</div>
+                <div className="text-sm font-bold text-white truncate">{victoryData.topDamageBy}</div>
+                <div className="text-xs text-green-400">+15% bonus</div>
+              </div>
+            </div>
+
+            {/* Top Players */}
+            <div className="bg-black/30 rounded-lg p-2">
+              <div className="text-xs text-gray-400 mb-2 text-center">Top Participants</div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {victoryData.rewards.slice(0, 5).map((reward, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between text-xs p-1 rounded ${
+                      reward.isFinalBlow || reward.isTopDamage ? 'bg-l2-gold/20' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-500 w-4">{i + 1}.</span>
+                      <span className="text-white truncate max-w-[80px]">{reward.visitorName}</span>
+                      {reward.isFinalBlow && <span className="text-red-400 text-[10px]">FB</span>}
+                      {reward.isTopDamage && <span className="text-purple-400 text-[10px]">TD</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">{reward.damagePercent}%</span>
+                      <span className="text-l2-gold">+{reward.adenaReward.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Your session damage */}
+            {sessionDamage > 0 && (
+              <div className="mt-2 text-center text-xs text-gray-400">
+                Your damage: {sessionDamage.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Offline Earnings Modal */}
       {offlineEarnings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">

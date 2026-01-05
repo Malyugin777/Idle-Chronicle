@@ -79,7 +79,9 @@ let bossState = {
   sessionId: null,
   icon: '🦎',
   bossIndex: 1,
-  totalBosses: 6,
+  totalBosses: 10,
+  adenaReward: 1000,
+  expReward: 500,
 };
 
 const onlineUsers = new Map();
@@ -224,13 +226,21 @@ function updateRagePhase() {
 
 // Default bosses for rotation (used if DB is empty)
 const DEFAULT_BOSSES = [
-  { name: 'Lizard', hp: 500000, defense: 0, icon: '🦎' },
-  { name: 'Golem', hp: 750000, defense: 5, icon: '🗿' },
-  { name: 'Spider Queen', hp: 1000000, defense: 10, icon: '🕷️' },
-  { name: 'Demon', hp: 2000000, defense: 20, icon: '👹' },
-  { name: 'Dragon', hp: 5000000, defense: 50, icon: '🐉' },
-  { name: 'Phoenix', hp: 10000000, defense: 100, icon: '🔥' },
+  { name: 'Lizard', hp: 500000, defense: 0, icon: '🦎', adenaReward: 1000, expReward: 500 },
+  { name: 'Golem', hp: 750000, defense: 5, icon: '🗿', adenaReward: 2000, expReward: 1000 },
+  { name: 'Spider Queen', hp: 1000000, defense: 10, icon: '🕷️', adenaReward: 3500, expReward: 1800 },
+  { name: 'Werewolf', hp: 1500000, defense: 15, icon: '🐺', adenaReward: 5000, expReward: 2500 },
+  { name: 'Demon', hp: 2000000, defense: 20, icon: '👹', adenaReward: 7000, expReward: 3500 },
+  { name: 'Kraken', hp: 3000000, defense: 30, icon: '🐙', adenaReward: 10000, expReward: 5000 },
+  { name: 'Dragon', hp: 5000000, defense: 50, icon: '🐉', adenaReward: 15000, expReward: 8000 },
+  { name: 'Hydra', hp: 7500000, defense: 75, icon: '🐍', adenaReward: 25000, expReward: 12000 },
+  { name: 'Phoenix', hp: 10000000, defense: 100, icon: '🔥', adenaReward: 35000, expReward: 20000 },
+  { name: 'Ancient Dragon', hp: 15000000, defense: 150, icon: '🏴', adenaReward: 50000, expReward: 30000 },
 ];
+
+// Respawn timer (10 minutes = 600000ms)
+const RESPAWN_TIME_MS = 600000;
+let respawnTimestamp = 0;
 
 let currentBossIndex = 0;
 
@@ -291,6 +301,8 @@ async function respawnBoss(prisma, forceNext = true) {
         icon: boss.icon,
         bossIndex: currentBossIndex + 1,
         totalBosses: DEFAULT_BOSSES.length,
+        adenaReward: boss.adenaReward,
+        expReward: boss.expReward,
       };
     }
   } catch (err) {
@@ -308,6 +320,8 @@ async function respawnBoss(prisma, forceNext = true) {
       icon: boss.icon,
       bossIndex: 1,
       totalBosses: DEFAULT_BOSSES.length,
+      adenaReward: boss.adenaReward,
+      expReward: boss.expReward,
     };
   }
 
@@ -660,43 +674,110 @@ app.prepare().then(async () => {
           } catch (e) {}
         }
 
-        if (player.odamage) {
-          try {
-            await prisma.user.update({
-              where: { id: player.odamage },
-              data: {
-                totalDamage: { increment: BigInt(player.sessionDamage) },
-                totalClicks: { increment: BigInt(player.sessionClicks) },
-                bossesKilled: { increment: 1 },
-              },
-            });
-          } catch (e) {}
-        }
-
+        // Build leaderboard
         const leaderboard = Array.from(sessionLeaderboard.entries())
           .map(([id, data]) => ({
+            odamage: id,
             visitorId: id,
             visitorName: data.odamageN,
             damage: data.odamage,
           }))
-          .sort((a, b) => b.damage - a.damage)
-          .slice(0, 10);
+          .sort((a, b) => b.damage - a.damage);
+
+        const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
+        const topDamagePlayer = leaderboard[0];
+
+        // Boss rewards (from DB or defaults)
+        const bossAdenaPool = bossState.adenaReward || 5000;
+        const bossExpPool = bossState.expReward || 2000;
+
+        // Distribute rewards to all participants
+        const rewards = [];
+        for (const entry of leaderboard) {
+          const damagePercent = entry.damage / totalDamageDealt;
+          let adenaReward = Math.floor(bossAdenaPool * damagePercent);
+          let expReward = Math.floor(bossExpPool * damagePercent);
+
+          // Bonus for final blow (20% extra)
+          const isFinalBlow = entry.odamage === player.odamage;
+          if (isFinalBlow) {
+            adenaReward = Math.floor(adenaReward * 1.2);
+            expReward = Math.floor(expReward * 1.2);
+          }
+
+          // Bonus for top damage (15% extra)
+          const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
+          if (isTopDamage) {
+            adenaReward = Math.floor(adenaReward * 1.15);
+            expReward = Math.floor(expReward * 1.15);
+          }
+
+          rewards.push({
+            odamage: entry.odamage,
+            visitorName: entry.visitorName,
+            damage: entry.damage,
+            damagePercent: Math.round(damagePercent * 100),
+            adenaReward,
+            expReward,
+            isFinalBlow,
+            isTopDamage,
+          });
+
+          // Update player in DB
+          try {
+            await prisma.user.update({
+              where: { id: entry.odamage },
+              data: {
+                adena: { increment: BigInt(adenaReward) },
+                exp: { increment: BigInt(expReward) },
+                totalDamage: { increment: BigInt(entry.damage) },
+                bossesKilled: { increment: isFinalBlow ? 1 : 0 },
+              },
+            });
+
+            // Update in-memory player if online
+            for (const [sid, p] of onlineUsers.entries()) {
+              if (p.odamage === entry.odamage) {
+                p.adena += adenaReward;
+                p.sessionDamage = 0; // Reset session damage
+                break;
+              }
+            }
+          } catch (e) {
+            console.error('[Reward] Error:', e.message);
+          }
+        }
+
+        // Set respawn timer
+        respawnTimestamp = Date.now() + RESPAWN_TIME_MS;
 
         io.emit('boss:killed', {
           bossName: bossState.name,
+          bossIcon: bossState.icon,
           finalBlowBy: player.odamageN,
-          leaderboard,
+          topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
+          topDamage: topDamagePlayer?.damage || 0,
+          leaderboard: leaderboard.slice(0, 10),
+          rewards: rewards.slice(0, 10),
+          respawnAt: respawnTimestamp,
+          respawnIn: RESPAWN_TIME_MS,
         });
 
+        console.log(`[Boss] ${bossState.name} killed! Final blow: ${player.odamageN}, Top damage: ${topDamagePlayer?.visitorName}`);
+
+        // Respawn after 10 minutes
         setTimeout(async () => {
           await respawnBoss(prisma);
+          respawnTimestamp = 0;
           io.emit('boss:respawn', {
             id: bossState.id,
             name: bossState.name,
+            title: bossState.title,
             hp: bossState.currentHp,
             maxHp: bossState.maxHp,
+            icon: bossState.icon,
           });
-        }, 5000);
+        }, RESPAWN_TIME_MS);
       }
     });
 
