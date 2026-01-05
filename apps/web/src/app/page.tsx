@@ -25,6 +25,11 @@ const LeaderboardTab = dynamic(() => import('@/components/tabs/LeaderboardTab'),
   loading: () => <TabLoading />,
 });
 
+const TreasuryTab = dynamic(() => import('@/components/tabs/TreasuryTab'), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+
 function TabLoading() {
   return (
     <div className="flex-1 flex items-center justify-center bg-l2-dark">
@@ -67,6 +72,8 @@ export default function Home() {
         return <CharacterTab />;
       case 'shop':
         return <ShopTab />;
+      case 'treasury':
+        return <TreasuryTab />;
       case 'leaderboard':
         return <LeaderboardTab />;
       default:

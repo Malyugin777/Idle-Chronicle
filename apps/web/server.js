@@ -833,6 +833,37 @@ app.prepare().then(async () => {
       socket.emit('shop:success', { activeSoulshot: grade });
     });
 
+    // INVENTORY
+    socket.on('inventory:get', async () => {
+      if (!player.odamage) {
+        socket.emit('inventory:data', { items: [] });
+        return;
+      }
+
+      try {
+        const inventory = await prisma.inventoryItem.findMany({
+          where: { userId: player.odamage },
+          include: { item: true },
+        });
+
+        const items = inventory.map(inv => ({
+          id: inv.id,
+          itemId: inv.itemId,
+          name: inv.item.name,
+          description: inv.item.description,
+          quantity: inv.quantity,
+          rarity: inv.item.rarity,
+          type: inv.item.type,
+          iconUrl: inv.item.iconUrl,
+        }));
+
+        socket.emit('inventory:data', { items });
+      } catch (err) {
+        console.error('[Inventory] Error:', err.message);
+        socket.emit('inventory:data', { items: [] });
+      }
+    });
+
     // BUFF USE
     socket.on('buff:use', async (data) => {
       if (!player.odamage) {

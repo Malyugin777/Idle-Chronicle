@@ -1,8 +1,8 @@
 'use client';
 
-import { Swords, User, ShoppingBag, Trophy } from 'lucide-react';
+import { Swords, User, ShoppingBag, Trophy, Package } from 'lucide-react';
 
-export type TabType = 'game' | 'character' | 'shop' | 'leaderboard';
+export type TabType = 'game' | 'character' | 'shop' | 'treasury' | 'leaderboard';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -13,6 +13,7 @@ const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
   { id: 'game', label: 'Battle', icon: <Swords size={20} /> },
   { id: 'character', label: 'Hero', icon: <User size={20} /> },
   { id: 'shop', label: 'Shop', icon: <ShoppingBag size={20} /> },
+  { id: 'treasury', label: 'Loot', icon: <Package size={20} /> },
   { id: 'leaderboard', label: 'Top', icon: <Trophy size={20} /> },
 ];
 
