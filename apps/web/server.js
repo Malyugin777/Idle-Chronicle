@@ -70,14 +70,14 @@ const handle = app.getRequestHandler();
 
 let bossState = {
   id: 'default',
-  name: 'Orfen',
+  name: 'Lizard',
   title: 'World Boss',
   maxHp: 500000,
   currentHp: 500000,
   defense: 0,
   ragePhase: 0,
   sessionId: null,
-  icon: '🕷️',
+  icon: '🦎',
   bossIndex: 1,
   totalBosses: 6,
 };
@@ -224,12 +224,12 @@ function updateRagePhase() {
 
 // Default bosses for rotation (used if DB is empty)
 const DEFAULT_BOSSES = [
-  { name: 'Orfen', hp: 500000, defense: 0, icon: '🕷️' },
-  { name: 'Core', hp: 750000, defense: 5, icon: '🔮' },
-  { name: 'Queen Ant', hp: 1000000, defense: 10, icon: '🐜' },
-  { name: 'Baium', hp: 2000000, defense: 20, icon: '👹' },
-  { name: 'Antharas', hp: 5000000, defense: 50, icon: '🐉' },
-  { name: 'Valakas', hp: 10000000, defense: 100, icon: '🔥' },
+  { name: 'Lizard', hp: 500000, defense: 0, icon: '🦎' },
+  { name: 'Golem', hp: 750000, defense: 5, icon: '🗿' },
+  { name: 'Spider Queen', hp: 1000000, defense: 10, icon: '🕷️' },
+  { name: 'Demon', hp: 2000000, defense: 20, icon: '👹' },
+  { name: 'Dragon', hp: 5000000, defense: 50, icon: '🐉' },
+  { name: 'Phoenix', hp: 10000000, defense: 100, icon: '🔥' },
 ];
 
 let currentBossIndex = 0;
@@ -249,23 +249,29 @@ async function respawnBoss(prisma, forceNext = true) {
       }
       const boss = bosses[currentBossIndex];
 
-      const session = await prisma.bossSession.create({
-        data: { bossId: boss.id, maxHp: boss.baseHp },
-      });
+      let session = null;
+      try {
+        session = await prisma.bossSession.create({
+          data: { bossId: boss.id, maxHp: boss.baseHp },
+        });
+      } catch (e) {
+        console.error('[Boss] Session create error:', e.message);
+      }
 
       bossState = {
         id: boss.id,
         name: boss.name,
-        title: boss.title || '',
+        title: boss.title || 'World Boss',
         maxHp: Number(boss.baseHp),
         currentHp: Number(boss.baseHp),
         defense: boss.defense,
         ragePhase: 0,
-        sessionId: session.id,
+        sessionId: session?.id || null,
         icon: boss.iconUrl || '👹',
         bossIndex: currentBossIndex + 1,
         totalBosses: bosses.length,
       };
+      console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP)`);
     } else {
       // Use default bosses
       if (forceNext) {
@@ -1006,7 +1012,7 @@ app.prepare().then(async () => {
   // INTERVALS
   // ─────────────────────────────────────────────────────────
 
-  // Broadcast boss state every 100ms
+  // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {
     io.emit('boss:state', {
       id: bossState.id,
@@ -1021,7 +1027,7 @@ app.prepare().then(async () => {
       totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
     });
-  }, 100);
+  }, 250);
 
   // Energy regen every second
   setInterval(() => {
