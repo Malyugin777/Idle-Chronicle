@@ -7,10 +7,15 @@ import { getSocket } from '@/lib/socket';
 interface BossState {
   id: string;
   name: string;
+  title?: string;
   hp: number;
   maxHp: number;
+  defense?: number;
   ragePhase: number;
   playersOnline: number;
+  icon?: string;
+  bossIndex?: number;
+  totalBosses?: number;
 }
 
 interface DamageFeed {
@@ -82,14 +87,19 @@ export default function GameCanvas() {
       setConnected(true);
 
       // Auth with Telegram if available
-      if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user) {
-        const user = window.Telegram.WebApp.initDataUnsafe.user;
-        socket.emit('auth', {
-          telegramId: user.id,
-          username: user.username,
-          firstName: user.first_name,
-          photoUrl: user.photo_url,
-        });
+      if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+        const webApp = window.Telegram.WebApp;
+        const user = webApp.initDataUnsafe?.user;
+
+        if (user) {
+          socket.emit('auth', {
+            telegramId: user.id,
+            username: user.username,
+            firstName: user.first_name,
+            photoUrl: user.photo_url,
+            initData: webApp.initData, // Send for verification
+          });
+        }
       }
     });
 
@@ -487,7 +497,17 @@ export default function GameCanvas() {
       {/* Header with HP */}
       <div className="p-4 bg-l2-panel/80">
         <div className="flex justify-between items-center mb-1">
-          <span className="font-pixel text-xs text-l2-gold">{bossState.name}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{bossState.icon || '👹'}</span>
+            <div>
+              <span className="font-pixel text-sm text-l2-gold">{bossState.name}</span>
+              {bossState.bossIndex && (
+                <span className="text-xs text-gray-500 ml-2">
+                  ({bossState.bossIndex}/{bossState.totalBosses})
+                </span>
+              )}
+            </div>
+          </div>
           <span className="text-xs text-gray-400">
             {connected ? `${bossState.playersOnline} online` : 'Connecting...'}
           </span>
@@ -496,11 +516,16 @@ export default function GameCanvas() {
           <span className="text-sm">
             {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
           </span>
-          {bossState.ragePhase > 0 && (
-            <span className="text-xs text-red-500 font-bold">
-              RAGE x{[1, 1.2, 1.5, 2][bossState.ragePhase]}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {bossState.defense && bossState.defense > 0 && (
+              <span className="text-xs text-blue-400">🛡️ {bossState.defense}</span>
+            )}
+            {bossState.ragePhase > 0 && (
+              <span className="text-xs text-red-500 font-bold">
+                RAGE x{[1, 1.2, 1.5, 2][bossState.ragePhase]}
+              </span>
+            )}
+          </div>
         </div>
         <div className="h-4 bg-black/50 rounded-full overflow-hidden">
           <div

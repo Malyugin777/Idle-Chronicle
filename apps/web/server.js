@@ -3,6 +3,59 @@ const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+
+// ═══════════════════════════════════════════════════════════
+// TELEGRAM VERIFICATION
+// ═══════════════════════════════════════════════════════════
+
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const SKIP_TELEGRAM_AUTH = process.env.NODE_ENV === 'development';
+
+function verifyTelegramAuth(initData) {
+  if (!initData || !TELEGRAM_BOT_TOKEN) return false;
+  if (SKIP_TELEGRAM_AUTH) return true; // Skip in dev mode
+
+  try {
+    const urlParams = new URLSearchParams(initData);
+    const hash = urlParams.get('hash');
+    if (!hash) return false;
+
+    urlParams.delete('hash');
+    const params = Array.from(urlParams.entries());
+    params.sort((a, b) => a[0].localeCompare(b[0]));
+
+    const dataCheckString = params
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n');
+
+    const secretKey = crypto
+      .createHmac('sha256', 'WebAppData')
+      .update(TELEGRAM_BOT_TOKEN)
+      .digest();
+
+    const calculatedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(dataCheckString)
+      .digest('hex');
+
+    return calculatedHash === hash;
+  } catch (err) {
+    console.error('[Telegram] Verify error:', err.message);
+    return false;
+  }
+}
+
+function parseTelegramUser(initData) {
+  try {
+    const urlParams = new URLSearchParams(initData);
+    const userJson = urlParams.get('user');
+    if (!userJson) return null;
+    return JSON.parse(userJson);
+  } catch {
+    return null;
+  }
+}
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -18,11 +71,15 @@ const handle = app.getRequestHandler();
 let bossState = {
   id: 'default',
   name: 'Orfen',
-  maxHp: 1000000,
-  currentHp: 1000000,
+  title: 'World Boss',
+  maxHp: 500000,
+  currentHp: 500000,
   defense: 0,
   ragePhase: 0,
   sessionId: null,
+  icon: '🕷️',
+  bossIndex: 1,
+  totalBosses: 6,
 };
 
 const onlineUsers = new Map();
@@ -165,11 +222,33 @@ function updateRagePhase() {
   return false;
 }
 
-async function respawnBoss(prisma) {
-  try {
-    const boss = await prisma.boss.findFirst({ where: { isActive: true } });
+// Default bosses for rotation (used if DB is empty)
+const DEFAULT_BOSSES = [
+  { name: 'Orfen', hp: 500000, defense: 0, icon: '🕷️' },
+  { name: 'Core', hp: 750000, defense: 5, icon: '🔮' },
+  { name: 'Queen Ant', hp: 1000000, defense: 10, icon: '🐜' },
+  { name: 'Baium', hp: 2000000, defense: 20, icon: '👹' },
+  { name: 'Antharas', hp: 5000000, defense: 50, icon: '🐉' },
+  { name: 'Valakas', hp: 10000000, defense: 100, icon: '🔥' },
+];
 
-    if (boss) {
+let currentBossIndex = 0;
+
+async function respawnBoss(prisma, forceNext = true) {
+  try {
+    // Try to get bosses from DB
+    const bosses = await prisma.boss.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
+
+    if (bosses.length > 0) {
+      // Rotate to next boss
+      if (forceNext) {
+        currentBossIndex = (currentBossIndex + 1) % bosses.length;
+      }
+      const boss = bosses[currentBossIndex];
+
       const session = await prisma.bossSession.create({
         data: { bossId: boss.id, maxHp: boss.baseHp },
       });
@@ -177,38 +256,57 @@ async function respawnBoss(prisma) {
       bossState = {
         id: boss.id,
         name: boss.name,
+        title: boss.title || '',
         maxHp: Number(boss.baseHp),
         currentHp: Number(boss.baseHp),
         defense: boss.defense,
         ragePhase: 0,
         sessionId: session.id,
+        icon: boss.iconUrl || '👹',
+        bossIndex: currentBossIndex + 1,
+        totalBosses: bosses.length,
       };
     } else {
+      // Use default bosses
+      if (forceNext) {
+        currentBossIndex = (currentBossIndex + 1) % DEFAULT_BOSSES.length;
+      }
+      const boss = DEFAULT_BOSSES[currentBossIndex];
+
       bossState = {
-        id: 'default',
-        name: 'Orfen',
-        maxHp: 1000000,
-        currentHp: 1000000,
-        defense: 0,
+        id: `default-${currentBossIndex}`,
+        name: boss.name,
+        title: 'World Boss',
+        maxHp: boss.hp,
+        currentHp: boss.hp,
+        defense: boss.defense,
         ragePhase: 0,
         sessionId: null,
+        icon: boss.icon,
+        bossIndex: currentBossIndex + 1,
+        totalBosses: DEFAULT_BOSSES.length,
       };
     }
   } catch (err) {
     console.error('[Boss] Respawn error:', err.message);
+    const boss = DEFAULT_BOSSES[0];
     bossState = {
       id: 'default',
-      name: 'Orfen',
-      maxHp: 1000000,
-      currentHp: 1000000,
-      defense: 0,
+      name: boss.name,
+      title: 'World Boss',
+      maxHp: boss.hp,
+      currentHp: boss.hp,
+      defense: boss.defense,
       ragePhase: 0,
       sessionId: null,
+      icon: boss.icon,
+      bossIndex: 1,
+      totalBosses: DEFAULT_BOSSES.length,
     };
   }
 
   sessionLeaderboard.clear();
-  console.log(`[Boss] Respawned: ${bossState.name} with ${bossState.maxHp} HP`);
+  console.log(`[Boss] Respawned: ${bossState.name} (${bossState.bossIndex}/${bossState.totalBosses}) with ${bossState.maxHp} HP`);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -225,8 +323,8 @@ app.prepare().then(async () => {
     console.error('[Prisma] Connection error:', err.message);
   }
 
-  // Initialize boss
-  await respawnBoss(prisma);
+  // Initialize boss (start with first boss, don't rotate)
+  await respawnBoss(prisma, false);
 
   const server = createServer(async (req, res) => {
     try {
@@ -303,10 +401,15 @@ app.prepare().then(async () => {
     socket.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
+      title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
+      defense: bossState.defense,
       ragePhase: bossState.ragePhase,
       playersOnline: onlineUsers.size,
+      icon: bossState.icon,
+      bossIndex: bossState.bossIndex,
+      totalBosses: bossState.totalBosses,
     });
 
     socket.emit('player:state', {
@@ -318,6 +421,24 @@ app.prepare().then(async () => {
     // AUTH
     socket.on('auth', async (data) => {
       try {
+        // Verify Telegram initData if provided
+        if (data.initData) {
+          const isValid = verifyTelegramAuth(data.initData);
+          if (!isValid) {
+            console.warn(`[Auth] Invalid Telegram signature for ${data.telegramId}`);
+            socket.emit('auth:error', { message: 'Invalid Telegram auth' });
+            return;
+          }
+
+          // Parse user from initData for extra security
+          const tgUser = parseTelegramUser(data.initData);
+          if (tgUser && tgUser.id !== data.telegramId) {
+            console.warn(`[Auth] Telegram ID mismatch: ${tgUser.id} vs ${data.telegramId}`);
+            socket.emit('auth:error', { message: 'Telegram ID mismatch' });
+            return;
+          }
+        }
+
         let user = await prisma.user.findUnique({
           where: { telegramId: BigInt(data.telegramId) },
         });
@@ -813,9 +934,14 @@ app.prepare().then(async () => {
     io.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
+      title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
+      defense: bossState.defense,
       ragePhase: bossState.ragePhase,
+      icon: bossState.icon,
+      bossIndex: bossState.bossIndex,
+      totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
     });
   }, 100);
