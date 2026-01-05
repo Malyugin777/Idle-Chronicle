@@ -157,7 +157,8 @@ export type Translations = typeof translations.en;
 // Get user's language from Telegram
 export function detectLanguage(): Language {
   if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-    const lang = window.Telegram.WebApp.initDataUnsafe?.user?.language_code;
+    const user = window.Telegram.WebApp.initDataUnsafe?.user;
+    const lang = (user as { language_code?: string } | undefined)?.language_code;
     if (lang?.startsWith('ru')) return 'ru';
   }
   return 'en';
