@@ -56,14 +56,16 @@ export default function GameCanvas() {
     playersOnline: 0,
   });
 
-  const [energy, setEnergy] = useState(1000);
-  const [maxEnergy] = useState(1000);
+  const [mana, setMana] = useState(1000);
+  const [maxMana] = useState(1000);
   const [sessionDamage, setSessionDamage] = useState(0);
   const [connected, setConnected] = useState(false);
   const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
   const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
   const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(0);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [autoAttackDamage, setAutoAttackDamage] = useState(0);
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -164,8 +166,8 @@ export default function GameCanvas() {
     });
 
     // Tap results - show actual damage from server
-    socket.on('tap:result', (data: { damage: number; crits: number; energy: number; sessionDamage: number }) => {
-      setEnergy(data.energy);
+    socket.on('tap:result', (data: { damage: number; crits: number; mana: number; sessionDamage: number }) => {
+      setMana(data.mana);
       setSessionDamage(data.sessionDamage);
 
       // Show actual damage number from server
@@ -185,6 +187,14 @@ export default function GameCanvas() {
           crit: data.crits > 0,
         });
       }
+    });
+
+    // Auto-attack results
+    socket.on('autoAttack:result', (data: { damage: number; sessionDamage: number }) => {
+      setSessionDamage(data.sessionDamage);
+      setAutoAttackDamage(data.damage);
+      // Clear auto attack indicator after a moment
+      setTimeout(() => setAutoAttackDamage(0), 500);
     });
 
     // Damage feed from other players
@@ -240,16 +250,30 @@ export default function GameCanvas() {
     });
 
     // Player state
-    socket.on('player:state', (data: { energy: number; maxEnergy: number; sessionDamage: number }) => {
-      setEnergy(data.energy);
+    socket.on('player:state', (data: { mana: number; maxMana: number; sessionDamage: number; isFirstLogin?: boolean }) => {
+      setMana(data.mana);
       setSessionDamage(data.sessionDamage);
+      if (data.isFirstLogin) {
+        setShowWelcome(true);
+      }
     });
 
     // Player data (from player:get request)
     socket.on('player:data', (data: any) => {
       if (data) {
-        setEnergy(data.energy || 1000);
+        setMana(data.mana || 1000);
+        if (data.isFirstLogin) {
+          setShowWelcome(true);
+        }
       }
+    });
+
+    // Auth success - check first login
+    socket.on('auth:success', (data: any) => {
+      if (data.isFirstLogin) {
+        setShowWelcome(true);
+      }
+      setMana(data.mana || 1000);
     });
 
     // Offline earnings notification
@@ -274,6 +298,7 @@ export default function GameCanvas() {
       socket.off('disconnect');
       socket.off('boss:state');
       socket.off('tap:result');
+      socket.off('autoAttack:result');
       socket.off('damage:feed');
       socket.off('boss:killed');
       socket.off('boss:respawn');
@@ -524,7 +549,7 @@ export default function GameCanvas() {
   // Handle tap/click
   const handleTap = useCallback(() => {
     if (bossState.hp <= 0) return;
-    if (energy <= 0) return;
+    if (mana <= 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -536,8 +561,8 @@ export default function GameCanvas() {
     // Queue tap for batching
     tapQueueRef.current++;
 
-    // Optimistic UI update for energy only
-    setEnergy(prev => Math.max(0, prev - 1));
+    // Optimistic UI update for mana only
+    setMana(prev => Math.max(0, prev - 1));
 
     // Trigger hit animation
     hitT0Ref.current = performance.now();
@@ -549,10 +574,16 @@ export default function GameCanvas() {
       born: performance.now(),
       life: 260,
     });
-  }, [bossState.hp, energy]);
+  }, [bossState.hp, mana]);
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
-  const energyPercent = (energy / maxEnergy) * 100;
+  const manaPercent = (mana / maxMana) * 100;
+
+  // Handle welcome popup close
+  const handleWelcomeClose = () => {
+    setShowWelcome(false);
+    getSocket().emit('firstLogin:complete');
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -621,6 +652,71 @@ export default function GameCanvas() {
                 Your damage: {sessionDamage.toLocaleString()}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Welcome Popup for First-Time Players */}
+      {showWelcome && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30">
+            {/* Header */}
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">&#9876;</div>
+              <h1 className="text-xl font-bold text-l2-gold mb-1">
+                Welcome, Hero!
+              </h1>
+              <p className="text-gray-300 text-sm">
+                You&apos;ve entered the most mysterious place in Telegram
+              </p>
+            </div>
+
+            {/* Features */}
+            <div className="space-y-3 mb-4">
+              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-l2-gold">
+                <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-1">
+                  <span>&#128081;</span> 10 Epic World Bosses
+                </div>
+                <p className="text-gray-400 text-xs">
+                  Fight legendary monsters together with other players in real-time!
+                </p>
+              </div>
+
+              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-purple-500">
+                <div className="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1">
+                  <span>&#128176;</span> Increasing Rewards
+                </div>
+                <p className="text-gray-400 text-xs">
+                  Each boss drops more loot than the last. Final blow and top damage get bonuses!
+                </p>
+              </div>
+
+              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-blue-500">
+                <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-1">
+                  <span>&#9889;</span> Auto-Battle System
+                </div>
+                <p className="text-gray-400 text-xs">
+                  Upgrade your auto-attack to deal damage even while you&apos;re away!
+                </p>
+              </div>
+
+              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-green-500">
+                <div className="flex items-center gap-2 text-green-400 font-bold text-sm mb-1">
+                  <span>&#128200;</span> Upgrade & Grow
+                </div>
+                <p className="text-gray-400 text-xs">
+                  Level up STR, DEX, LUCK and unlock powerful abilities!
+                </p>
+              </div>
+            </div>
+
+            {/* CTA Button */}
+            <button
+              onClick={handleWelcomeClose}
+              className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-500 hover:to-l2-gold transition-all text-lg"
+            >
+              Start Adventure!
+            </button>
           </div>
         </div>
       )}
@@ -722,16 +818,16 @@ export default function GameCanvas() {
 
       {/* Stats footer */}
       <div className="p-4 bg-l2-panel/80">
-        {/* Energy bar */}
+        {/* Mana bar */}
         <div className="mb-3">
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-l2-energy">Energy</span>
-            <span>{energy} / {maxEnergy}</span>
+            <span className="text-blue-400">MANA</span>
+            <span>{Math.floor(mana)} / {maxMana}</span>
           </div>
           <div className="h-2 bg-black/50 rounded-full overflow-hidden">
             <div
-              className="h-full bg-l2-energy transition-all duration-100"
-              style={{ width: `${energyPercent}%` }}
+              className="h-full bg-blue-500 transition-all duration-100"
+              style={{ width: `${manaPercent}%` }}
             />
           </div>
         </div>
@@ -741,6 +837,12 @@ export default function GameCanvas() {
             <span className="text-xs text-gray-400">Session Damage</span>
             <div className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</div>
           </div>
+          {autoAttackDamage > 0 && (
+            <div className="text-center">
+              <span className="text-xs text-purple-400">Auto</span>
+              <div className="text-purple-300 font-bold text-sm">-{autoAttackDamage.toLocaleString()}</div>
+            </div>
+          )}
           <div className="text-right">
             <span className="text-xs text-gray-400">Status</span>
             <div className={connected ? 'text-green-400' : 'text-red-400'}>

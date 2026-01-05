@@ -94,9 +94,13 @@ const sessionLeaderboard = new Map();
 const STAT_EFFECTS = { str: 0.08, dex: 0.05, luck: 0.03 };
 const BASE_CRIT_CHANCE = 0.05;
 const BASE_CRIT_DAMAGE = 2.0;
-const ENERGY_COST_PER_TAP = 1;
-const ENERGY_REGEN_PER_SEC = 10;
+const MANA_COST_PER_TAP = 1;
+const BASE_MANA_REGEN = 0.2; // 1 per 5 seconds = 0.2/sec
 const MAX_TAPS_PER_BATCH = 50;
+const BASE_TAPS_PER_SECOND = 3;
+const MAX_TAPS_PER_SECOND = 10;
+const MAX_AUTO_ATTACK_SPEED = 10;
+const MAX_MANA_REGEN = 10;
 const RAGE_PHASES = [
   { hpPercent: 100, multiplier: 1.0 },
   { hpPercent: 75, multiplier: 1.2 },
@@ -124,6 +128,22 @@ const BUFFS = {
 // Stat upgrade cost formula
 function getUpgradeCost(level) {
   return Math.floor(100 * Math.pow(1.5, level - 1));
+}
+
+// Tap speed upgrade cost (tapsPerSecond: 3 -> 10)
+function getTapSpeedCost(level) {
+  return Math.floor(500 * Math.pow(2, level - 3)); // Starts at level 3
+}
+
+// Auto-attack upgrade cost (10x more expensive than tap speed)
+function getAutoAttackCost(level) {
+  return Math.floor(5000 * Math.pow(2.5, level)); // Very expensive
+}
+
+// Mana regen upgrade cost
+function getManaRegenCost(currentRegen) {
+  const level = Math.round(currentRegen * 5); // 0.2 -> 1, 0.4 -> 2, etc.
+  return Math.floor(1000 * Math.pow(2, level));
 }
 
 // Offline progress constants
@@ -393,8 +413,18 @@ app.prepare().then(async () => {
       luck: 1,
       pAtk: 10,
       critChance: BASE_CRIT_CHANCE,
-      energy: 1000,
-      maxEnergy: 1000,
+      // Mana system (renamed from energy)
+      mana: 1000,
+      maxMana: 1000,
+      manaRegen: BASE_MANA_REGEN,
+      // Tap & Auto-attack
+      tapsPerSecond: BASE_TAPS_PER_SECOND,
+      autoAttackSpeed: 0,
+      lastTapTime: 0,
+      tapCount: 0,
+      // First login
+      isFirstLogin: true,
+      // Stats
       adena: 0,
       sessionDamage: 0,
       sessionClicks: 0,
@@ -433,9 +463,13 @@ app.prepare().then(async () => {
     });
 
     socket.emit('player:state', {
-      energy: player.energy,
-      maxEnergy: player.maxEnergy,
+      mana: player.mana,
+      maxMana: player.maxMana,
+      manaRegen: player.manaRegen,
+      tapsPerSecond: player.tapsPerSecond,
+      autoAttackSpeed: player.autoAttackSpeed,
       sessionDamage: player.sessionDamage,
+      isFirstLogin: player.isFirstLogin,
     });
 
     // GET PLAYER DATA (for tabs that mount after auth)
@@ -462,8 +496,12 @@ app.prepare().then(async () => {
             pAtk: user.pAtk,
             critChance: user.critChance,
             adena: Number(user.adena),
-            energy: user.energy,
-            maxEnergy: user.maxEnergy,
+            mana: user.mana,
+            maxMana: user.maxMana,
+            manaRegen: user.manaRegen,
+            tapsPerSecond: user.tapsPerSecond,
+            autoAttackSpeed: user.autoAttackSpeed,
+            isFirstLogin: user.isFirstLogin,
             totalDamage: Number(user.totalDamage),
             bossesKilled: user.bossesKilled,
             activeSoulshot: user.activeSoulshot,
@@ -542,8 +580,12 @@ app.prepare().then(async () => {
         player.luck = user.luck;
         player.pAtk = user.pAtk;
         player.critChance = user.critChance;
-        player.energy = user.energy;
-        player.maxEnergy = user.maxEnergy;
+        player.mana = user.mana;
+        player.maxMana = user.maxMana;
+        player.manaRegen = user.manaRegen;
+        player.tapsPerSecond = user.tapsPerSecond;
+        player.autoAttackSpeed = user.autoAttackSpeed;
+        player.isFirstLogin = user.isFirstLogin;
         player.adena = Number(user.adena);
         player.activeSoulshot = user.activeSoulshot;
         player.soulshotNG = user.soulshotNG;
@@ -582,8 +624,12 @@ app.prepare().then(async () => {
           pAtk: user.pAtk,
           critChance: user.critChance,
           adena: Number(user.adena),
-          energy: user.energy,
-          maxEnergy: user.maxEnergy,
+          mana: user.mana,
+          maxMana: user.maxMana,
+          manaRegen: user.manaRegen,
+          tapsPerSecond: user.tapsPerSecond,
+          autoAttackSpeed: user.autoAttackSpeed,
+          isFirstLogin: user.isFirstLogin,
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
           activeSoulshot: user.activeSoulshot,
@@ -603,10 +649,22 @@ app.prepare().then(async () => {
 
     // TAP
     socket.on('tap:batch', async (data) => {
-      const tapCount = Math.min(data.count || 1, MAX_TAPS_PER_BATCH);
+      let tapCount = Math.min(data.count || 1, MAX_TAPS_PER_BATCH);
 
-      if (player.energy < tapCount * ENERGY_COST_PER_TAP) {
-        socket.emit('tap:error', { message: 'Not enough energy' });
+      // Rate limiting based on tapsPerSecond
+      const now = Date.now();
+      const timeSinceLastTap = now - player.lastTapTime;
+      const maxTapsAllowed = Math.floor((timeSinceLastTap / 1000) * player.tapsPerSecond) + 1;
+
+      if (timeSinceLastTap < 100) {
+        // Too fast, limit taps
+        tapCount = Math.min(tapCount, Math.max(1, maxTapsAllowed));
+      }
+
+      player.lastTapTime = now;
+
+      if (player.mana < tapCount * MANA_COST_PER_TAP) {
+        socket.emit('tap:error', { message: 'Not enough mana' });
         return;
       }
 
@@ -615,7 +673,7 @@ app.prepare().then(async () => {
         return;
       }
 
-      player.energy -= tapCount * ENERGY_COST_PER_TAP;
+      player.mana -= tapCount * MANA_COST_PER_TAP;
 
       const { totalDamage, crits, soulshotUsed } = calculateDamage(player, tapCount);
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
@@ -639,7 +697,7 @@ app.prepare().then(async () => {
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
-        energy: player.energy,
+        mana: player.mana,
         sessionDamage: player.sessionDamage,
         adena: player.adena,
         adenaGained,
@@ -868,6 +926,152 @@ app.prepare().then(async () => {
       }
     });
 
+    // UPGRADE TAP SPEED (tapsPerSecond: 3 -> 10)
+    socket.on('upgrade:tapSpeed', async () => {
+      if (!player.odamage) {
+        socket.emit('upgrade:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      if (player.tapsPerSecond >= MAX_TAPS_PER_SECOND) {
+        socket.emit('upgrade:error', { message: 'Already at max level' });
+        return;
+      }
+
+      const cost = getTapSpeedCost(player.tapsPerSecond);
+      if (player.adena < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough adena' });
+        return;
+      }
+
+      try {
+        player.tapsPerSecond += 1;
+        player.adena -= cost;
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            tapsPerSecond: player.tapsPerSecond,
+            adena: BigInt(player.adena),
+          },
+        });
+
+        socket.emit('upgrade:success', {
+          stat: 'tapsPerSecond',
+          value: player.tapsPerSecond,
+          adena: player.adena,
+          nextCost: player.tapsPerSecond < MAX_TAPS_PER_SECOND ? getTapSpeedCost(player.tapsPerSecond) : null,
+        });
+      } catch (err) {
+        console.error('[Upgrade] Error:', err.message);
+        socket.emit('upgrade:error', { message: 'Upgrade failed' });
+      }
+    });
+
+    // UPGRADE AUTO-ATTACK SPEED (0 -> 10)
+    socket.on('upgrade:autoAttack', async () => {
+      if (!player.odamage) {
+        socket.emit('upgrade:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      if (player.autoAttackSpeed >= MAX_AUTO_ATTACK_SPEED) {
+        socket.emit('upgrade:error', { message: 'Already at max level' });
+        return;
+      }
+
+      const cost = getAutoAttackCost(player.autoAttackSpeed);
+      if (player.adena < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough adena' });
+        return;
+      }
+
+      try {
+        player.autoAttackSpeed += 1;
+        player.adena -= cost;
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            autoAttackSpeed: player.autoAttackSpeed,
+            adena: BigInt(player.adena),
+          },
+        });
+
+        socket.emit('upgrade:success', {
+          stat: 'autoAttackSpeed',
+          value: player.autoAttackSpeed,
+          adena: player.adena,
+          nextCost: player.autoAttackSpeed < MAX_AUTO_ATTACK_SPEED ? getAutoAttackCost(player.autoAttackSpeed) : null,
+        });
+      } catch (err) {
+        console.error('[Upgrade] Error:', err.message);
+        socket.emit('upgrade:error', { message: 'Upgrade failed' });
+      }
+    });
+
+    // UPGRADE MANA REGEN (0.2 -> 10)
+    socket.on('upgrade:manaRegen', async () => {
+      if (!player.odamage) {
+        socket.emit('upgrade:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      if (player.manaRegen >= MAX_MANA_REGEN) {
+        socket.emit('upgrade:error', { message: 'Already at max level' });
+        return;
+      }
+
+      const cost = getManaRegenCost(player.manaRegen);
+      if (player.adena < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough adena' });
+        return;
+      }
+
+      try {
+        // Increase by 0.2 per upgrade (5 levels to go from 0.2 to 1, then increments of 1)
+        if (player.manaRegen < 1) {
+          player.manaRegen = Math.round((player.manaRegen + 0.2) * 10) / 10;
+        } else {
+          player.manaRegen += 1;
+        }
+        player.adena -= cost;
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            manaRegen: player.manaRegen,
+            adena: BigInt(player.adena),
+          },
+        });
+
+        socket.emit('upgrade:success', {
+          stat: 'manaRegen',
+          value: player.manaRegen,
+          adena: player.adena,
+          nextCost: player.manaRegen < MAX_MANA_REGEN ? getManaRegenCost(player.manaRegen) : null,
+        });
+      } catch (err) {
+        console.error('[Upgrade] Error:', err.message);
+        socket.emit('upgrade:error', { message: 'Upgrade failed' });
+      }
+    });
+
+    // MARK FIRST LOGIN COMPLETE
+    socket.on('firstLogin:complete', async () => {
+      if (!player.odamage) return;
+
+      try {
+        player.isFirstLogin = false;
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { isFirstLogin: false },
+        });
+      } catch (err) {
+        console.error('[FirstLogin] Error:', err.message);
+      }
+    });
+
     // SHOP BUY
     socket.on('shop:buy', async (data) => {
       if (!player.odamage) {
@@ -1059,7 +1263,7 @@ app.prepare().then(async () => {
       if (player.odamage) {
         try {
           const updateData = {
-            energy: player.energy,
+            mana: Math.floor(player.mana),
             adena: BigInt(player.adena),
             activeSoulshot: player.activeSoulshot,
             soulshotNG: player.soulshotNG,
@@ -1110,11 +1314,73 @@ app.prepare().then(async () => {
     });
   }, 250);
 
-  // Energy regen every second
+  // Mana regen every second (based on player's manaRegen stat)
   setInterval(() => {
     for (const player of onlineUsers.values()) {
-      if (player.energy < player.maxEnergy) {
-        player.energy = Math.min(player.maxEnergy, player.energy + ENERGY_REGEN_PER_SEC);
+      if (player.mana < player.maxMana) {
+        const regenAmount = player.manaRegen || BASE_MANA_REGEN;
+        player.mana = Math.min(player.maxMana, player.mana + regenAmount);
+      }
+    }
+  }, 1000);
+
+  // Auto-attack every second (for players with autoAttackSpeed > 0)
+  setInterval(() => {
+    if (bossState.currentHp <= 0) return; // Boss is dead
+
+    for (const [socketId, player] of onlineUsers.entries()) {
+      if (player.autoAttackSpeed > 0 && player.odamage) {
+        // Calculate auto damage (same as regular damage but weaker)
+        const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
+        let totalAutoDamage = 0;
+
+        // Number of auto attacks per second
+        for (let i = 0; i < player.autoAttackSpeed; i++) {
+          let dmg = baseDamage * (0.8 + Math.random() * 0.2); // Slightly lower variance
+          const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
+          dmg *= rageMultiplier;
+          dmg = Math.max(1, dmg - bossState.defense);
+          totalAutoDamage += Math.floor(dmg);
+        }
+
+        if (totalAutoDamage > 0 && bossState.currentHp > 0) {
+          const actualDamage = Math.min(totalAutoDamage, bossState.currentHp);
+          bossState.currentHp -= actualDamage;
+
+          // Update leaderboard
+          const key = player.odamage;
+          const existing = sessionLeaderboard.get(key);
+          sessionLeaderboard.set(key, {
+            odamage: (existing?.odamage || 0) + actualDamage,
+            odamageN: player.odamageN,
+          });
+
+          player.sessionDamage += actualDamage;
+
+          // Adena from auto-attack (lower rate)
+          const adenaGained = Math.floor(actualDamage / 200);
+          player.adena += adenaGained;
+
+          // Send auto-attack result to player
+          const socket = io.sockets.sockets.get(socketId);
+          if (socket) {
+            socket.emit('autoAttack:result', {
+              damage: actualDamage,
+              sessionDamage: player.sessionDamage,
+              adena: player.adena,
+            });
+          }
+
+          // Broadcast to damage feed
+          io.emit('damage:feed', {
+            playerName: player.odamageN + ' (Auto)',
+            damage: actualDamage,
+            isCrit: false,
+          });
+
+          // Check rage phase
+          updateRagePhase();
+        }
       }
     }
   }, 1000);

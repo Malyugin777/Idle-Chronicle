@@ -35,11 +35,18 @@ model User {
   critDamage      Float    @default(2.0)
   attackSpeed     Float    @default(1.0)
 
-  // Energy System
-  energy          Int      @default(1000)
-  maxEnergy       Int      @default(1000)
-  energyRegen     Int      @default(10)
-  lastEnergyTick  DateTime @default(now())
+  // Mana System (renamed from Energy)
+  mana            Int      @default(1000)
+  maxMana         Int      @default(1000)
+  manaRegen       Float    @default(0.2)  // 1 per 5 seconds = 0.2/sec, upgradeable to 10/sec
+  lastManaTick    DateTime @default(now())
+
+  // Tap & Auto-Attack System
+  tapsPerSecond   Int      @default(3)    // Base 3 TPS, max 10
+  autoAttackSpeed Int      @default(0)    // Auto attacks per second, max 10
+
+  // First time player flag
+  isFirstLogin    Boolean  @default(true)
 
   // Currencies
   adena           BigInt   @default(0)
