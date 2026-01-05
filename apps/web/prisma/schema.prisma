@@ -1,0 +1,313 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// USERS
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id              String   @id @default(cuid())
+
+  // Telegram
+  telegramId      BigInt   @unique
+  username        String?
+  firstName       String?
+  photoUrl        String?
+
+  // Stats (L2-style)
+  level           Int      @default(1)
+  exp             BigInt   @default(0)
+
+  // Base Stats (upgradeable)
+  str             Int      @default(1)
+  dex             Int      @default(1)
+  luck            Int      @default(1)
+
+  // Derived Stats
+  pAtk            Int      @default(10)
+  critChance      Float    @default(0.05)
+  critDamage      Float    @default(2.0)
+  attackSpeed     Float    @default(1.0)
+
+  // Energy System
+  energy          Int      @default(1000)
+  maxEnergy       Int      @default(1000)
+  energyRegen     Int      @default(10)
+  lastEnergyTick  DateTime @default(now())
+
+  // Currencies
+  adena           BigInt   @default(0)
+  ancientCoin     Int      @default(0)
+
+  // Consumables
+  soulshotNG      Int      @default(100)
+  soulshotD       Int      @default(0)
+  soulshotC       Int      @default(0)
+
+  potionHaste     Int      @default(0)
+  potionAcumen    Int      @default(0)
+  potionLuck      Int      @default(0)
+
+  activeSoulshot  String?
+
+  // Equipment
+  weaponId        String?
+  weapon          Weapon?  @relation(fields: [weaponId], references: [id])
+  weaponEnchant   Int      @default(0)
+
+  // Progression
+  totalDamage     BigInt   @default(0)
+  totalClicks     BigInt   @default(0)
+  bossesKilled    Int      @default(0)
+  highestDps      Int      @default(0)
+
+  // Offline
+  lastOnline      DateTime @default(now())
+  offlineEarnings BigInt   @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inventory       InventoryItem[]
+  damageLog       DamageLog[]
+  buffs           ActiveBuff[]
+  tasks           UserTask[]
+
+  @@index([telegramId])
+  @@index([totalDamage])
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEAPONS
+// ═══════════════════════════════════════════════════════════
+
+model Weapon {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  grade       Grade    @default(NG)
+
+  pAtk        Int
+  critBonus   Float    @default(0)
+
+  cost        BigInt
+  requiredLvl Int      @default(1)
+
+  iconUrl     String?
+
+  users       User[]
+}
+
+enum Grade {
+  NG
+  D
+  C
+  B
+  A
+  S
+}
+
+// ═══════════════════════════════════════════════════════════
+// ACTIVE BUFFS
+// ═══════════════════════════════════════════════════════════
+
+model ActiveBuff {
+  id        String   @id @default(cuid())
+  userId    String
+
+  buffType  BuffType
+  value     Float
+  expiresAt DateTime
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum BuffType {
+  HASTE
+  ACUMEN
+  LUCK
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEMS & INVENTORY
+// ═══════════════════════════════════════════════════════════
+
+model Item {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+
+  type        ItemType
+  rarity      Rarity   @default(COMMON)
+  grade       Grade    @default(NG)
+
+  isRpgItem   Boolean  @default(true)
+  rpgValue    Int?
+
+  iconUrl     String?
+
+  inventory   InventoryItem[]
+  lootTables  BossLoot[]
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  itemId    String
+  quantity  Int      @default(1)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item      Item     @relation(fields: [itemId], references: [id])
+
+  @@unique([userId, itemId])
+}
+
+enum ItemType {
+  SCROLL
+  MATERIAL
+  RECIPE
+  ARMOR_PART
+  CURRENCY
+}
+
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORLD BOSS
+// ═══════════════════════════════════════════════════════════
+
+model Boss {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  title       String?
+
+  baseHp      BigInt
+  defense     Int      @default(0)
+
+  ragePhases  Json
+
+  spineJson   String?
+  spineAtlas  String?
+  iconUrl     String?
+
+  isActive    Boolean  @default(false)
+  order       Int      @default(0)
+
+  timesKilled Int      @default(0)
+
+  lootTable   BossLoot[]
+  sessions    BossSession[]
+}
+
+model BossLoot {
+  id        String   @id @default(cuid())
+  bossId    String
+  itemId    String
+
+  dropChance Float
+  minQty     Int     @default(1)
+  maxQty     Int     @default(1)
+
+  minDamagePercent Float?
+
+  boss      Boss     @relation(fields: [bossId], references: [id])
+  item      Item     @relation(fields: [itemId], references: [id])
+}
+
+model BossSession {
+  id          String   @id @default(cuid())
+  bossId      String
+
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+
+  maxHp       BigInt
+  finalBlowBy String?
+
+  boss        Boss     @relation(fields: [bossId], references: [id])
+  damageLog   DamageLog[]
+
+  @@index([bossId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAMAGE LOG
+// ═══════════════════════════════════════════════════════════
+
+model DamageLog {
+  id        String   @id @default(cuid())
+
+  sessionId String
+  odamage    String
+
+  damage    BigInt
+  clicks    Int
+  crits     Int
+
+  timestamp DateTime @default(now())
+
+  session   BossSession @relation(fields: [sessionId], references: [id])
+  user      User        @relation(fields: [odamage], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([odamage])
+}
+
+// ═══════════════════════════════════════════════════════════
+// TASKS
+// ═══════════════════════════════════════════════════════════
+
+model Task {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String
+
+  type        TaskType
+  target      Int
+
+  adenaReward      BigInt @default(0)
+  ancientCoinReward Int   @default(0)
+
+  users       UserTask[]
+}
+
+model UserTask {
+  id        String   @id @default(cuid())
+  odamage    String
+  taskId    String
+
+  progress  Int      @default(0)
+  completed Boolean  @default(false)
+  claimedAt DateTime?
+
+  resetAt   DateTime @default(now())
+
+  user      User     @relation(fields: [odamage], references: [id], onDelete: Cascade)
+  task      Task     @relation(fields: [taskId], references: [id])
+
+  @@unique([odamage, taskId])
+}
+
+enum TaskType {
+  DAILY
+  WEEKLY
+  ACHIEVEMENT
+}

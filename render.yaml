@@ -1,31 +1,12 @@
-# Render Blueprint - World Boss Clicker
+# Render Blueprint - World Boss Clicker (Single Service)
 # https://render.com/docs/blueprint-spec
 
 services:
-  # ═══════════════════════════════════════════════════════════
-  # FRONTEND - Next.js
-  # ═══════════════════════════════════════════════════════════
   - type: web
-    name: world-boss-web
+    name: world-boss
     runtime: node
     rootDir: apps/web
-    buildCommand: npm install -g pnpm && cd ../.. && pnpm install && pnpm build:web
-    startCommand: pnpm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        sync: false  # Set manually to server URL
-    healthCheckPath: /
-
-  # ═══════════════════════════════════════════════════════════
-  # BACKEND - Fastify + Socket.io
-  # ═══════════════════════════════════════════════════════════
-  - type: web
-    name: world-boss-server
-    runtime: node
-    rootDir: apps/server
-    buildCommand: npm install -g pnpm && cd ../.. && pnpm install && cd apps/server && pnpm build && pnpm db:push
+    buildCommand: npm install -g pnpm && pnpm install && pnpm build && pnpm db:push
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
@@ -34,13 +15,8 @@ services:
         fromDatabase:
           name: world-boss-db
           property: connectionString
-      - key: CORS_ORIGIN
-        sync: false  # Set to frontend URL
-    healthCheckPath: /health
+    healthCheckPath: /api/health
 
-# ═══════════════════════════════════════════════════════════
-# DATABASE - PostgreSQL
-# ═══════════════════════════════════════════════════════════
 databases:
   - name: world-boss-db
     databaseName: worldboss
