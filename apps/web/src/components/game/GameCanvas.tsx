@@ -741,7 +741,7 @@ export default function GameCanvas() {
             <div className="bg-black/30 rounded-lg p-4 mb-4">
               <div className="text-xs text-gray-400 mb-1">{t.offline.earnings}</div>
               <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.adena.toLocaleString()} Adena
+                +{offlineEarnings.adena.toLocaleString()} {t.character.adena}
               </div>
             </div>
             <button
@@ -782,7 +782,7 @@ export default function GameCanvas() {
             )}
             {bossState.ragePhase > 0 && (
               <span className="text-xs text-red-500 font-bold">
-                RAGE x{[1, 1.2, 1.5, 2][bossState.ragePhase]}
+                {t.game.rage} x{[1, 1.2, 1.5, 2][bossState.ragePhase]}
               </span>
             )}
           </div>
@@ -855,7 +855,7 @@ export default function GameCanvas() {
           <div className="text-right">
             <span className="text-xs text-gray-400">{t.game.status}</span>
             <div className={connected ? 'text-green-400' : 'text-red-400'}>
-              {connected ? 'Online' : t.game.offline}
+              {connected ? t.game.onlineStatus : t.game.offline}
             </div>
           </div>
         </div>

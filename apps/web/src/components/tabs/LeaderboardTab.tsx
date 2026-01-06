@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { Trophy, Medal, Crown, Swords } from 'lucide-react';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface LeaderboardEntry {
 visitorId: string;
@@ -15,6 +16,8 @@ export default function LeaderboardTab() {
   const [allTimeBoard, setAllTimeBoard] = useState<LeaderboardEntry[]>([]);
   const [activeTab, setActiveTab] = useState<'session' | 'alltime'>('session');
   const [loading, setLoading] = useState(true);
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
 
   useEffect(() => {
     const socket = getSocket();
@@ -78,8 +81,8 @@ export default function LeaderboardTab() {
         <div className="flex items-center gap-3">
           <Trophy className="text-l2-gold" size={28} />
           <div>
-            <h2 className="text-lg font-bold text-white">Leaderboard</h2>
-            <p className="text-xs text-gray-400">Top damage dealers</p>
+            <h2 className="text-lg font-bold text-white">{t.leaderboard.title}</h2>
+            <p className="text-xs text-gray-400">{t.leaderboard.subtitle}</p>
           </div>
         </div>
       </div>
@@ -95,7 +98,7 @@ export default function LeaderboardTab() {
           }`}
         >
           <Swords size={16} className="inline mr-2" />
-          Current Boss
+          {t.leaderboard.currentBoss}
         </button>
         <button
           onClick={() => {
@@ -109,19 +112,19 @@ export default function LeaderboardTab() {
           }`}
         >
           <Trophy size={16} className="inline mr-2" />
-          All Time
+          {t.leaderboard.allTime}
         </button>
       </div>
 
       {/* Leaderboard List */}
       <div className="bg-l2-panel rounded-lg overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400">Loading...</div>
+          <div className="p-8 text-center text-gray-400">{t.leaderboard.loading}</div>
         ) : board.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             <Swords size={32} className="mx-auto mb-2 opacity-50" />
-            <p>No damage dealt yet</p>
-            <p className="text-xs mt-1">Be the first to attack!</p>
+            <p>{t.leaderboard.noDamage}</p>
+            <p className="text-xs mt-1">{t.leaderboard.beFirst}</p>
           </div>
         ) : (
           <div className="divide-y divide-white/5">
@@ -140,7 +143,7 @@ export default function LeaderboardTab() {
                   <p className="font-bold text-l2-gold">
                     {entry.damage.toLocaleString()}
                   </p>
-                  <p className="text-xs text-gray-500">damage</p>
+                  <p className="text-xs text-gray-500">{t.leaderboard.damage}</p>
                 </div>
               </div>
             ))}

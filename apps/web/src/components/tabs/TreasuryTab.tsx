@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { Package, Scroll, Gem, Coins, Sparkles } from 'lucide-react';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface InventoryItem {
   id: string;
@@ -45,6 +46,8 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function TreasuryTab() {
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
   const [treasury, setTreasury] = useState<TreasuryState>({
     adena: 0,
     ancientCoin: 0,
@@ -125,8 +128,8 @@ export default function TreasuryTab() {
         <div className="flex items-center gap-3 mb-3">
           <Package className="text-l2-gold" size={28} />
           <div>
-            <h2 className="text-lg font-bold text-white">Treasury</h2>
-            <p className="text-xs text-gray-400">Your collected loot</p>
+            <h2 className="text-lg font-bold text-white">{t.treasury.title}</h2>
+            <p className="text-xs text-gray-400">{t.treasury.subtitle}</p>
           </div>
         </div>
 
@@ -134,7 +137,7 @@ export default function TreasuryTab() {
           <div className="bg-black/30 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
               <Coins className="text-l2-gold" size={18} />
-              <span className="text-xs text-gray-400">Adena</span>
+              <span className="text-xs text-gray-400">{t.treasury.adena}</span>
             </div>
             <p className="text-xl font-bold text-l2-gold">
               {treasury.adena.toLocaleString()}
@@ -143,7 +146,7 @@ export default function TreasuryTab() {
           <div className="bg-black/30 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="text-purple-400" size={18} />
-              <span className="text-xs text-gray-400">Ancient Coins</span>
+              <span className="text-xs text-gray-400">{t.treasury.ancientCoins}</span>
             </div>
             <p className="text-xl font-bold text-purple-400">
               {treasury.ancientCoin.toLocaleString()}
@@ -154,15 +157,15 @@ export default function TreasuryTab() {
 
       {/* Inventory */}
       <div className="bg-l2-panel rounded-lg p-4">
-        <h3 className="text-sm text-gray-400 mb-3">Inventory</h3>
+        <h3 className="text-sm text-gray-400 mb-3">{t.treasury.inventory}</h3>
 
         {loading ? (
-          <div className="p-8 text-center text-gray-400">Loading...</div>
+          <div className="p-8 text-center text-gray-400">{t.treasury.loading}</div>
         ) : treasury.items.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             <Package size={32} className="mx-auto mb-2 opacity-50" />
-            <p>No items yet</p>
-            <p className="text-xs mt-1">Defeat bosses to collect loot!</p>
+            <p>{t.treasury.noItems}</p>
+            <p className="text-xs mt-1">{t.treasury.defeatBosses}</p>
           </div>
         ) : (
           <div className="space-y-4">

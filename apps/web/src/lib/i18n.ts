@@ -19,13 +19,17 @@ export const translations = {
     },
     // Game UI
     game: {
+      loading: 'Loading...',
+      initializing: 'Initializing...',
       online: 'online',
+      onlineStatus: 'Online',
       connecting: 'Connecting...',
       offline: 'Offline',
       sessionDamage: 'Session Damage',
       status: 'Status',
       mana: 'MANA',
       auto: 'Auto',
+      rage: 'RAGE',
     },
     // Boss
     boss: {
@@ -75,6 +79,60 @@ export const translations = {
       manaRegenDesc: 'Mana recovery per second',
       max: 'MAX',
     },
+    // Navigation
+    nav: {
+      battle: 'Battle',
+      hero: 'Hero',
+      shop: 'Shop',
+      loot: 'Loot',
+      top: 'Top',
+    },
+    // Leaderboard
+    leaderboard: {
+      title: 'Leaderboard',
+      subtitle: 'Top damage dealers',
+      currentBoss: 'Current Boss',
+      allTime: 'All Time',
+      loading: 'Loading...',
+      noDamage: 'No damage dealt yet',
+      beFirst: 'Be the first to attack!',
+      damage: 'damage',
+    },
+    // Shop
+    shop: {
+      adena: 'Adena',
+      soulshots: 'Soulshots',
+      soulshotsDesc: 'Increase damage per tap. Toggle to activate.',
+      owned: 'Owned',
+      buffs: 'Buffs',
+      buffsDesc: 'Temporary boosts. Use wisely!',
+      use: 'Use',
+      // Soulshots
+      ssNG: 'No-Grade SS',
+      ssD: 'D-Grade SS',
+      ssC: 'C-Grade SS',
+      ssB: 'B-Grade SS',
+      ssA: 'A-Grade SS',
+      ssS: 'S-Grade SS',
+      // Buffs
+      haste: 'Haste',
+      hasteEffect: '+30% speed',
+      acumen: 'Acumen',
+      acumenEffect: '+50% damage',
+      luck: 'Luck',
+      luckEffect: '+10% crit',
+    },
+    // Treasury
+    treasury: {
+      title: 'Treasury',
+      subtitle: 'Your collected loot',
+      adena: 'Adena',
+      ancientCoins: 'Ancient Coins',
+      inventory: 'Inventory',
+      loading: 'Loading...',
+      noItems: 'No items yet',
+      defeatBosses: 'Defeat bosses to collect loot!',
+    },
   },
   ru: {
     // Welcome popup
@@ -93,13 +151,17 @@ export const translations = {
     },
     // Game UI
     game: {
+      loading: 'Загрузка...',
+      initializing: 'Инициализация...',
       online: 'онлайн',
+      onlineStatus: 'В сети',
       connecting: 'Подключение...',
       offline: 'Оффлайн',
       sessionDamage: 'Урон за сессию',
       status: 'Статус',
       mana: 'МАНА',
       auto: 'Авто',
+      rage: 'ЯРОСТЬ',
     },
     // Boss
     boss: {
@@ -148,6 +210,60 @@ export const translations = {
       manaRegen: 'Реген Маны',
       manaRegenDesc: 'Восстановление маны в секунду',
       max: 'МАКС',
+    },
+    // Navigation
+    nav: {
+      battle: 'Бой',
+      hero: 'Герой',
+      shop: 'Магазин',
+      loot: 'Добыча',
+      top: 'Топ',
+    },
+    // Leaderboard
+    leaderboard: {
+      title: 'Таблица Лидеров',
+      subtitle: 'Топ по урону',
+      currentBoss: 'Текущий Босс',
+      allTime: 'За Всё Время',
+      loading: 'Загрузка...',
+      noDamage: 'Урон ещё не нанесён',
+      beFirst: 'Будь первым в атаке!',
+      damage: 'урон',
+    },
+    // Shop
+    shop: {
+      adena: 'Адена',
+      soulshots: 'Заряды Души',
+      soulshotsDesc: 'Увеличивают урон за тап. Нажми чтобы активировать.',
+      owned: 'Есть',
+      buffs: 'Баффы',
+      buffsDesc: 'Временные усиления. Используй с умом!',
+      use: 'Юзать',
+      // Soulshots
+      ssNG: 'NG Заряд',
+      ssD: 'D Заряд',
+      ssC: 'C Заряд',
+      ssB: 'B Заряд',
+      ssA: 'A Заряд',
+      ssS: 'S Заряд',
+      // Buffs
+      haste: 'Хаст',
+      hasteEffect: '+30% скорости',
+      acumen: 'Акумен',
+      acumenEffect: '+50% урона',
+      luck: 'Удача',
+      luckEffect: '+10% крита',
+    },
+    // Treasury
+    treasury: {
+      title: 'Сокровищница',
+      subtitle: 'Твоя добыча',
+      adena: 'Адена',
+      ancientCoins: 'Древние Монеты',
+      inventory: 'Инвентарь',
+      loading: 'Загрузка...',
+      noItems: 'Пока пусто',
+      defeatBosses: 'Побеждай боссов чтобы собирать лут!',
     },
   },
 } as const;

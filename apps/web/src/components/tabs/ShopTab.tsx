@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { Flame, Zap, Clover, Coins, Check } from 'lucide-react';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
   adena: number;
@@ -15,22 +16,24 @@ interface ShopState {
   potionLuck: number;
 }
 
-const SOULSHOTS = [
-  { id: 'NG', name: 'No-Grade SS', multiplier: 1.5, cost: 10, color: 'gray' },
-  { id: 'D', name: 'D-Grade SS', multiplier: 2.2, cost: 50, color: 'green' },
-  { id: 'C', name: 'C-Grade SS', multiplier: 3.5, cost: 250, color: 'blue' },
-  { id: 'B', name: 'B-Grade SS', multiplier: 5.0, cost: 1000, color: 'purple' },
-  { id: 'A', name: 'A-Grade SS', multiplier: 7.0, cost: 5000, color: 'orange' },
-  { id: 'S', name: 'S-Grade SS', multiplier: 10.0, cost: 20000, color: 'red' },
-];
-
-const BUFFS = [
-  { id: 'haste', name: 'Haste', icon: <Zap size={20} />, effect: '+30% speed', duration: '30s', cost: 500, color: 'yellow' },
-  { id: 'acumen', name: 'Acumen', icon: <Flame size={20} />, effect: '+50% damage', duration: '30s', cost: 500, color: 'red' },
-  { id: 'luck', name: 'Luck', icon: <Clover size={20} />, effect: '+10% crit', duration: '60s', cost: 1000, color: 'green' },
-];
-
 export default function ShopTab() {
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
+
+  const SOULSHOTS = [
+    { id: 'NG', name: t.shop.ssNG, multiplier: 1.5, cost: 10, color: 'gray' },
+    { id: 'D', name: t.shop.ssD, multiplier: 2.2, cost: 50, color: 'green' },
+    { id: 'C', name: t.shop.ssC, multiplier: 3.5, cost: 250, color: 'blue' },
+    { id: 'B', name: t.shop.ssB, multiplier: 5.0, cost: 1000, color: 'purple' },
+    { id: 'A', name: t.shop.ssA, multiplier: 7.0, cost: 5000, color: 'orange' },
+    { id: 'S', name: t.shop.ssS, multiplier: 10.0, cost: 20000, color: 'red' },
+  ];
+
+  const BUFFS = [
+    { id: 'haste', name: t.shop.haste, icon: <Zap size={20} />, effect: t.shop.hasteEffect, duration: '30s', cost: 500, color: 'yellow' },
+    { id: 'acumen', name: t.shop.acumen, icon: <Flame size={20} />, effect: t.shop.acumenEffect, duration: '30s', cost: 500, color: 'red' },
+    { id: 'luck', name: t.shop.luck, icon: <Clover size={20} />, effect: t.shop.luckEffect, duration: '60s', cost: 1000, color: 'green' },
+  ];
   const [shopState, setShopState] = useState<ShopState>({
     adena: 0,
     activeSoulshot: null,
@@ -111,13 +114,13 @@ export default function ShopTab() {
             {shopState.adena.toLocaleString()}
           </span>
         </div>
-        <span className="text-gray-400">Adena</span>
+        <span className="text-gray-400">{t.shop.adena}</span>
       </div>
 
       {/* Soulshots */}
       <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">Soulshots</h3>
-        <p className="text-xs text-gray-500 mb-3">Increase damage per tap. Toggle to activate.</p>
+        <h3 className="text-sm text-gray-400 mb-3">{t.shop.soulshots}</h3>
+        <p className="text-xs text-gray-500 mb-3">{t.shop.soulshotsDesc}</p>
 
         <div className="space-y-2">
           {SOULSHOTS.map((ss) => {
@@ -140,7 +143,7 @@ export default function ShopTab() {
                     <span className="font-bold text-white">{ss.name}</span>
                     <span className="text-xs text-l2-gold">x{ss.multiplier}</span>
                   </div>
-                  <p className="text-xs text-gray-500">Owned: {owned}</p>
+                  <p className="text-xs text-gray-500">{t.shop.owned}: {owned}</p>
                 </div>
 
                 {owned > 0 && (
@@ -173,8 +176,8 @@ export default function ShopTab() {
 
       {/* Buffs */}
       <div className="bg-l2-panel rounded-lg p-4">
-        <h3 className="text-sm text-gray-400 mb-3">Buffs</h3>
-        <p className="text-xs text-gray-500 mb-3">Temporary boosts. Use wisely!</p>
+        <h3 className="text-sm text-gray-400 mb-3">{t.shop.buffs}</h3>
+        <p className="text-xs text-gray-500 mb-3">{t.shop.buffsDesc}</p>
 
         <div className="space-y-2">
           {BUFFS.map((buff) => {
@@ -194,7 +197,7 @@ export default function ShopTab() {
                     <span className="font-bold text-white">{buff.name}</span>
                     <span className="text-xs text-gray-400">{buff.duration}</span>
                   </div>
-                  <p className="text-xs text-gray-500">{buff.effect} • Owned: {owned}</p>
+                  <p className="text-xs text-gray-500">{buff.effect} • {t.shop.owned}: {owned}</p>
                 </div>
 
                 {owned > 0 && (
@@ -202,7 +205,7 @@ export default function ShopTab() {
                     onClick={() => getSocket().emit('buff:use', { buffId: buff.id })}
                     className="px-3 py-2 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-500"
                   >
-                    Use
+                    {t.shop.use}
                   </button>
                 )}
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import BottomNav, { TabType } from '@/components/ui/BottomNav';
+import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 // Dynamic imports for tabs (no SSR)
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
@@ -31,10 +32,12 @@ const TreasuryTab = dynamic(() => import('@/components/tabs/TreasuryTab'), {
 });
 
 function TabLoading() {
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
   return (
     <div className="flex-1 flex items-center justify-center bg-l2-dark">
       <div className="text-l2-gold font-pixel text-sm animate-pulse">
-        Loading...
+        {t.game.loading}
       </div>
     </div>
   );
@@ -43,6 +46,8 @@ function TabLoading() {
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('game');
+  const [lang] = useState<Language>(() => detectLanguage());
+  const t = useTranslation(lang);
 
   useEffect(() => {
     setIsClient(true);
@@ -58,7 +63,7 @@ export default function Home() {
     return (
       <div className="flex items-center justify-center h-screen bg-l2-dark">
         <div className="text-l2-gold font-pixel text-sm">
-          Initializing...
+          {t.game.initializing}
         </div>
       </div>
     );
