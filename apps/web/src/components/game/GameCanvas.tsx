@@ -76,7 +76,18 @@ export default function GameCanvas() {
   const [respawnCountdown, setRespawnCountdown] = useState(0);
   const [waitingForRespawn, setWaitingForRespawn] = useState(false); // Keep showing countdown screen until boss respawns
   const [showWelcome, setShowWelcome] = useState(false);
-  const [welcomeStage, setWelcomeStage] = useState(1); // 1 = intro, 2 = details
+  const [welcomeStage, setWelcomeStage] = useState(1); // 1 = intro, 2 = details + chest, 3 = chest opened
+  const [starterEquipment, setStarterEquipment] = useState<Array<{
+    id: string;
+    code: string;
+    name: string;
+    icon: string;
+    slot: string;
+    pAtk: number;
+    pDef: number;
+    rarity: string;
+  }>>([]);
+  const [openingChest, setOpeningChest] = useState(false);
   const [autoAttackDamage, setAutoAttackDamage] = useState(0);
   const [lang, setLang] = useState<Language>('en');
   const [showDropTable, setShowDropTable] = useState(false);
@@ -357,6 +368,28 @@ export default function GameCanvas() {
       if (data.exhaustedUntil !== undefined) setExhaustedUntil(data.exhaustedUntil);
     });
 
+    // Starter chest opened - show equipment received
+    socket.on('starter:opened', (data: { equipment: Array<{
+      id: string;
+      code: string;
+      name: string;
+      icon: string;
+      slot: string;
+      pAtk: number;
+      pDef: number;
+      rarity: string;
+    }> }) => {
+      console.log('[Starter] Chest opened, received:', data.equipment);
+      setStarterEquipment(data.equipment);
+      setOpeningChest(false);
+      setWelcomeStage(3);
+    });
+
+    socket.on('starter:error', (data: { message: string }) => {
+      console.error('[Starter] Error:', data.message);
+      setOpeningChest(false);
+    });
+
     // Tap batching - flush every 100ms
     tapFlushIntervalRef.current = setInterval(() => {
       if (tapQueueRef.current > 0) {
@@ -384,6 +417,8 @@ export default function GameCanvas() {
       socket.off('auth:success');
       socket.off('auth:error');
       socket.off('hero:exhausted');  // L2 (NEW)
+      socket.off('starter:opened');
+      socket.off('starter:error');
     };
   }, []);
 
@@ -679,11 +714,18 @@ export default function GameCanvas() {
   const handleWelcomeNext = () => {
     if (welcomeStage === 1) {
       setWelcomeStage(2);
-    } else {
+    } else if (welcomeStage === 3) {
+      // Final stage - close welcome
       setShowWelcome(false);
       setWelcomeStage(1);
-      getSocket().emit('firstLogin:complete');
+      setStarterEquipment([]);
     }
+  };
+
+  // Handle starter chest open
+  const handleOpenStarterChest = () => {
+    setOpeningChest(true);
+    getSocket().emit('starter:open');
   };
 
   return (
@@ -833,8 +875,8 @@ export default function GameCanvas() {
                 {lang === 'ru' ? 'Начать игру' : 'Start Game'} &#10140;
               </button>
             </div>
-          ) : (
-            /* Stage 2: Game Mechanics Info */
+          ) : welcomeStage === 2 ? (
+            /* Stage 2: Game Mechanics Info + Starter Chest */
             <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30 max-h-[85vh] overflow-y-auto">
               {/* Header */}
               <div className="text-center mb-4">
@@ -906,17 +948,72 @@ export default function GameCanvas() {
                   </p>
                 </div>
 
-                {/* Starter Pack */}
-                <div className="bg-gradient-to-r from-l2-gold/20 to-transparent rounded-lg p-3 border border-l2-gold/30">
-                  <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-1">
-                    <span>&#127873;</span> {lang === 'ru' ? 'Стартовый набор' : 'Starter Pack'}
+                {/* Starter Chest Gift */}
+                <div className="bg-gradient-to-r from-l2-gold/30 to-amber-500/20 rounded-lg p-4 border border-l2-gold/50 animate-pulse">
+                  <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-2">
+                    <span className="text-2xl">🎁</span> {lang === 'ru' ? 'Подарок новичка!' : 'Starter Gift!'}
                   </div>
-                  <p className="text-gray-300 text-xs">
+                  <p className="text-gray-200 text-xs">
                     {lang === 'ru'
-                      ? 'Тебе уже выдан полный сет экипировки новичка и деревянный сундук. Загляни в инвентарь!'
-                      : 'You already have a full starter equipment set and a wooden chest. Check your inventory!'}
+                      ? 'Мы дарим тебе сундук новичка с полным сетом стартовой экипировки!'
+                      : 'We give you a starter chest with a full set of starter equipment!'}
                   </p>
                 </div>
+              </div>
+
+              {/* CTA Button - Open Starter Chest */}
+              <button
+                onClick={handleOpenStarterChest}
+                disabled={openingChest}
+                className={`w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg transition-all text-lg ${
+                  openingChest ? 'opacity-50 cursor-not-allowed' : 'hover:from-yellow-500 hover:to-l2-gold'
+                }`}
+              >
+                {openingChest ? (
+                  <span className="animate-pulse">{lang === 'ru' ? 'Открываем...' : 'Opening...'}</span>
+                ) : (
+                  <>{lang === 'ru' ? 'Открыть сундук' : 'Open Chest'} 🎁</>
+                )}
+              </button>
+            </div>
+          ) : (
+            /* Stage 3: Chest Opened - Show Equipment */
+            <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/50 shadow-2xl shadow-l2-gold/30">
+              {/* Header */}
+              <div className="text-center mb-4">
+                <div className="text-5xl mb-2 animate-bounce">🎉</div>
+                <h2 className="text-xl font-bold text-l2-gold">
+                  {lang === 'ru' ? 'Сундук открыт!' : 'Chest Opened!'}
+                </h2>
+                <p className="text-gray-400 text-xs mt-1">
+                  {lang === 'ru' ? 'Ты получил стартовую экипировку:' : 'You received starter equipment:'}
+                </p>
+              </div>
+
+              {/* Equipment Grid */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {starterEquipment.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-black/40 rounded-lg p-2 border border-gray-600/50 flex items-center gap-2"
+                  >
+                    <span className="text-xl">{item.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-xs font-bold truncate">{item.name}</div>
+                      <div className="text-gray-500 text-[10px]">
+                        {item.pAtk > 0 && <span className="text-red-400">+{item.pAtk} ATK</span>}
+                        {item.pDef > 0 && <span className="text-blue-400">+{item.pDef} DEF</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Info */}
+              <div className="text-center text-xs text-gray-400 mb-4">
+                {lang === 'ru'
+                  ? 'Экипировка уже надета! Можешь посмотреть её в инвентаре.'
+                  : 'Equipment is already equipped! Check it in your inventory.'}
               </div>
 
               {/* CTA Button */}
@@ -924,7 +1021,7 @@ export default function GameCanvas() {
                 onClick={handleWelcomeNext}
                 className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-500 hover:to-l2-gold transition-all text-lg"
               >
-                {lang === 'ru' ? 'В бой!' : 'To Battle!'} &#9876;
+                {lang === 'ru' ? 'Играть!' : 'Play!'} &#9876;
               </button>
             </div>
           )}

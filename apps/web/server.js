@@ -1563,17 +1563,18 @@ app.prepare().then(async () => {
           console.log(`[Auth] New user created: ${data.telegramId}, lang: ${userLang}`);
 
           // ═══════════════════════════════════════════════════════════
-          // STARTER PACK - Give new users starter equipment + chest
+          // STARTER PACK - Mark user as needing starter chest opening
+          // Equipment will be given when user opens starter chest via welcome popup
           // ═══════════════════════════════════════════════════════════
           try {
-            // 1. Create starter equipment templates if they don't exist
+            // Just ensure starter equipment templates exist in DB
             for (const starter of STARTER_EQUIPMENT) {
-              let equipment = await prisma.equipment.findUnique({
+              const existing = await prisma.equipment.findUnique({
                 where: { code: starter.code },
               });
 
-              if (!equipment) {
-                equipment = await prisma.equipment.create({
+              if (!existing) {
+                await prisma.equipment.create({
                   data: {
                     code: starter.code,
                     name: starter.name,
@@ -1590,30 +1591,9 @@ app.prepare().then(async () => {
                 });
                 console.log(`[Starter] Created equipment template: ${starter.code}`);
               }
-
-              // 2. Give equipment to user and auto-equip
-              await prisma.userEquipment.create({
-                data: {
-                  userId: user.id,
-                  equipmentId: equipment.id,
-                  pAtk: starter.pAtk || 0,
-                  pDef: starter.pDef || 0,
-                  enchant: 0,
-                  isEquipped: true, // Auto-equip starter gear
-                },
-              });
             }
-            console.log(`[Starter] Gave ${STARTER_EQUIPMENT.length} starter items to user ${user.id}`);
-
-            // 3. Give starter WOODEN chest
-            await prisma.chest.create({
-              data: {
-                userId: user.id,
-                chestType: 'WOODEN',
-                openingDuration: CHEST_CONFIG.WOODEN.duration,
-              },
-            });
-            console.log(`[Starter] Gave starter WOODEN chest to user ${user.id}`);
+            // Note: Equipment will be given when user calls starter:open event
+            console.log(`[Starter] New user ${user.id} ready for starter chest`);
 
           } catch (starterErr) {
             console.error('[Starter] Error giving starter pack:', starterErr.message);
@@ -2578,6 +2558,89 @@ app.prepare().then(async () => {
         });
       } catch (err) {
         console.error('[FirstLogin] Error:', err.message);
+      }
+    });
+
+    // STARTER CHEST OPEN - Give starter equipment when user opens starter chest in welcome popup
+    socket.on('starter:open', async () => {
+      if (!player.odamage) {
+        socket.emit('starter:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      if (!player.isFirstLogin) {
+        socket.emit('starter:error', { message: 'Already opened' });
+        return;
+      }
+
+      try {
+        const givenEquipment = [];
+
+        // Give all starter equipment
+        for (const starter of STARTER_EQUIPMENT) {
+          // Find the equipment template
+          let equipmentTemplate = await prisma.equipment.findUnique({
+            where: { code: starter.code },
+          });
+
+          // Create template if doesn't exist
+          if (!equipmentTemplate) {
+            equipmentTemplate = await prisma.equipment.create({
+              data: {
+                code: starter.code,
+                name: starter.name,
+                nameRu: starter.name,
+                icon: starter.icon,
+                slot: starter.slot,
+                rarity: 'COMMON',
+                pAtkMin: starter.pAtk || 0,
+                pAtkMax: starter.pAtk || 0,
+                pDefMin: starter.pDef || 0,
+                pDefMax: starter.pDef || 0,
+                droppable: false,
+              },
+            });
+          }
+
+          // Create user equipment instance
+          const userEquip = await prisma.userEquipment.create({
+            data: {
+              userId: player.odamage,
+              equipmentId: equipmentTemplate.id,
+              pAtk: starter.pAtk || 0,
+              pDef: starter.pDef || 0,
+              enchant: 0,
+              isEquipped: true, // Auto-equip starter gear
+            },
+          });
+
+          givenEquipment.push({
+            id: userEquip.id,
+            code: starter.code,
+            name: starter.name,
+            icon: starter.icon,
+            slot: starter.slot,
+            pAtk: starter.pAtk || 0,
+            pDef: starter.pDef || 0,
+            rarity: 'COMMON',
+          });
+        }
+
+        console.log(`[Starter] User ${player.odamage} opened starter chest, got ${givenEquipment.length} items`);
+
+        // Mark first login complete
+        player.isFirstLogin = false;
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { isFirstLogin: false },
+        });
+
+        socket.emit('starter:opened', {
+          equipment: givenEquipment,
+        });
+      } catch (err) {
+        console.error('[Starter] Error opening starter chest:', err.message);
+        socket.emit('starter:error', { message: 'Failed to open starter chest' });
       }
     });
 
