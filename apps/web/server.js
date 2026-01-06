@@ -3507,10 +3507,15 @@ app.prepare().then(async () => {
       io.emit('boss:respawn', {
         id: bossState.id,
         name: bossState.name,
+        nameRu: bossState.nameRu,
         title: bossState.title,
         hp: bossState.currentHp,
         maxHp: bossState.maxHp,
         icon: bossState.icon,
+        image: bossState.image,
+        defense: bossState.defense,
+        bossIndex: bossState.bossIndex,
+        totalBosses: bossState.totalBosses,
         prizePool: {
           ton: bossState.tonReward,
           chests: bossState.chestsReward,

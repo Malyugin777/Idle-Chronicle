@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.35';
+const APP_VERSION = 'v1.0.36';
 
 interface BossState {
   name: string;
@@ -25,6 +25,7 @@ interface BossState {
   image?: string;
   hp: number;
   maxHp: number;
+  defense: number;
   bossIndex: number;
   totalBosses: number;
 }
@@ -108,6 +109,7 @@ export default function PhaserGame() {
     icon: '⏳',
     hp: 0,
     maxHp: 1,
+    defense: 0,
     bossIndex: 0,
     totalBosses: 100,
   });
@@ -285,6 +287,7 @@ export default function PhaserGame() {
           image: newImage,
           hp: data.hp,
           maxHp: data.maxHp,
+          defense: data.defense ?? 0,
           bossIndex: data.bossIndex || 1,
           totalBosses: data.totalBosses || 100,
         };
@@ -411,12 +414,32 @@ export default function PhaserGame() {
       socket.emit('rewards:get');
     });
 
-    socket.on('boss:respawn', () => {
+    socket.on('boss:respawn', (data: any) => {
       setSessionDamage(0);
       setVictoryData(null);
       setRespawnCountdown(0);
       setPendingRewards([]);
       setClaimError(null);
+      // Обновить состояние босса с новыми данными
+      if (data) {
+        const newImage = data.image || '/assets/bosses/boss_single.png';
+        setBossState(prev => {
+          if (prev.image !== newImage && sceneRef.current) {
+            sceneRef.current.updateBossImage(newImage);
+          }
+          return {
+            name: data.name || prev.name,
+            nameRu: data.nameRu || prev.nameRu,
+            icon: data.icon || prev.icon,
+            image: newImage,
+            hp: data.hp || data.maxHp || prev.maxHp,
+            maxHp: data.maxHp || prev.maxHp,
+            defense: data.defense ?? 0,
+            bossIndex: data.bossIndex || prev.bossIndex,
+            totalBosses: data.totalBosses || prev.totalBosses,
+          };
+        });
+      }
     });
 
     // Награды
@@ -537,6 +560,11 @@ export default function PhaserGame() {
             style={{ width: `${hpPercent}%` }}
           />
         </div>
+        {bossState.defense > 0 && (
+          <div className="text-xs text-gray-400 mt-1">
+            🛡️ pDef: {bossState.defense}
+          </div>
+        )}
         <button
           onClick={() => setShowDropTable(true)}
           className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
