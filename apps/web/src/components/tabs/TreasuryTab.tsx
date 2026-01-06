@@ -71,13 +71,14 @@ const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: stri
 };
 
 const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
-const BOOST_COST = 999; // crystals to boost chest opening by 30 min
+const BOOST_COST = 1; // gold to boost chest opening by 30 min
 
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
   const [crystals, setCrystals] = useState(0);
+  const [gold, setGold] = useState(0);
   const [chests, setChests] = useState<Chest[]>([]);
   const [lootStats, setLootStats] = useState<LootStats>({
     totalGoldEarned: 0,
@@ -135,13 +136,13 @@ export default function TreasuryTab() {
     });
 
     // Chest boosted (30 min acceleration)
-    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; ancientCoin?: number; gold?: number }) => {
+    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; gold?: number }) => {
       setChests(prev => prev.map(c =>
         c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
       ));
-      // Update crystals if provided (normal users pay crystals)
-      if (data.ancientCoin !== undefined) {
-        setCrystals(data.ancientCoin);
+      // Update gold after boost
+      if (data.gold !== undefined) {
+        setGold(data.gold);
       }
       // Update selected chest if it's the one being boosted
       setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
@@ -192,14 +193,16 @@ export default function TreasuryTab() {
       setClaimingRewardId(null);
     });
 
-    // Get player data for crystals
+    // Get player data for crystals and gold
     socket.on('auth:success', (data: any) => {
       setCrystals(data.ancientCoin || 0);
+      setGold(data.gold || 0);
     });
 
     socket.on('player:data', (data: any) => {
       if (data) {
         setCrystals(data.ancientCoin || 0);
+        setGold(data.gold || 0);
       }
     });
 
@@ -631,9 +634,9 @@ export default function TreasuryTab() {
                       {/* Boost button */}
                       <button
                         onClick={() => boostChest(selectedChest.id)}
-                        disabled={crystals < BOOST_COST}
+                        disabled={gold < BOOST_COST}
                         className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
-                          crystals >= BOOST_COST
+                          gold >= BOOST_COST
                             ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 border border-purple-500/50'
                             : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
                         }`}
@@ -641,7 +644,7 @@ export default function TreasuryTab() {
                         <span>⚡</span>
                         <span>Ускорить 30 мин</span>
                         <span className="flex items-center gap-1">
-                          <Gem size={14} />
+                          <Coins size={14} className="text-l2-gold" />
                           {BOOST_COST}
                         </span>
                       </button>
