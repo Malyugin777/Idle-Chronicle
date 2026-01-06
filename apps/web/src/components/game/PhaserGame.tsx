@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.19';
+const APP_VERSION = 'v1.0.20';
 
 interface BossState {
   name: string;
@@ -302,7 +302,7 @@ export default function PhaserGame() {
       }
     });
 
-    // Player state
+    // Player state (stamina/mana regen from server)
     socket.on('player:state', (data: any) => {
       setPlayerState(p => ({
         ...p,
@@ -311,6 +311,16 @@ export default function PhaserGame() {
         mana: data.mana ?? p.mana,
         maxMana: data.maxMana ?? p.maxMana,
         exhaustedUntil: data.exhaustedUntil ?? p.exhaustedUntil,
+      }));
+    });
+
+    // Skill result (update mana after skill use)
+    socket.on('skill:result', (data: any) => {
+      setPlayerState(p => ({
+        ...p,
+        mana: data.mana ?? p.mana,
+        maxMana: data.maxMana ?? p.maxMana,
+        gold: data.gold ?? p.gold,
       }));
     });
 
@@ -406,6 +416,7 @@ export default function PhaserGame() {
       socket.off('boss:state');
       socket.off('tap:result');
       socket.off('player:state');
+      socket.off('skill:result');
       socket.off('auth:success');
       socket.off('hero:exhausted');
       socket.off('damage:feed');

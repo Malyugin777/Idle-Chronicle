@@ -235,7 +235,7 @@ const STAT_EFFECTS = { str: 0.08, dex: 0.05, luck: 0.03 };
 const BASE_CRIT_CHANCE = 0.05;
 const BASE_CRIT_DAMAGE = 2.0;
 const MANA_COST_PER_TAP = 1;
-const BASE_MANA_REGEN = 0.2; // 1 per 5 seconds = 0.2/sec
+const BASE_MANA_REGEN = 5; // 5 mana per second (100 MP за 20 сек)
 const MAX_TAPS_PER_BATCH = 50;
 const BASE_TAPS_PER_SECOND = 3;
 const MAX_TAPS_PER_SECOND = 10;
