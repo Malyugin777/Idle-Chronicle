@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.2';
+const APP_VERSION = 'v1.0.3';
 
 interface BossState {
   name: string;
@@ -282,6 +282,18 @@ export default function PhaserGame() {
       setStarterOpening(false);
     });
 
+    // Starter chest error
+    socket.on('starter:error', (data: { message: string }) => {
+      console.error('[Starter] Error:', data.message);
+      setStarterOpening(false);
+      // If already has starter, show fake items to proceed
+      if (data.message.includes('Already')) {
+        setStarterItems([
+          { name: 'Уже получено', icon: '✅', slot: 'INFO' }
+        ]);
+      }
+    });
+
     // Tap result
     socket.on('tap:result', (data: any) => {
       setSessionDamage(data.sessionDamage || 0);
@@ -396,6 +408,7 @@ export default function PhaserGame() {
       socket.off('boss:killed');
       socket.off('boss:respawn');
       socket.off('starter:opened');
+      socket.off('starter:error');
 
       if (gameRef.current) {
         gameRef.current.destroy(true);

@@ -2897,12 +2897,21 @@ app.prepare().then(async () => {
         return;
       }
 
-      if (!player.isFirstLogin) {
-        socket.emit('starter:error', { message: 'Already opened' });
-        return;
-      }
-
       try {
+        // Check if user already has starter equipment
+        const existingStarter = await prisma.userEquipment.findFirst({
+          where: {
+            userId: player.odamage,
+            equipment: { code: 'starter-sword' }
+          }
+        });
+
+        if (existingStarter) {
+          console.log(`[Starter] User ${player.odamage} already has starter equipment`);
+          socket.emit('starter:error', { message: 'Already received starter pack' });
+          return;
+        }
+
         const givenEquipment = [];
 
         // Give all starter equipment
