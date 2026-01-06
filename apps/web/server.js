@@ -2649,22 +2649,13 @@ app.prepare().then(async () => {
       }
 
       const { chestId } = data;
-      const isDebugUser = DEBUG_FAST_CHEST_USERNAMES.includes(player.username);
-      console.log(`[Chest:Boost] username="${player.username}", isDebugUser=${isDebugUser}, gold=${player.gold}`);
       const BOOST_TIME = 30 * 60 * 1000; // 30 минут в мс
+      const BOOST_COST = 1; // 1 золотая монета для всех
 
       try {
-        // Debug: 1 золотая монета, остальные: 999 кристаллов
-        if (isDebugUser) {
-          if ((player.gold || 0) < 1) {
-            socket.emit('chest:error', { message: 'Not enough gold' });
-            return;
-          }
-        } else {
-          if ((player.ancientCoin || 0) < 999) {
-            socket.emit('chest:error', { message: 'Not enough crystals' });
-            return;
-          }
+        if ((player.gold || 0) < BOOST_COST) {
+          socket.emit('chest:error', { message: 'Not enough gold' });
+          return;
         }
 
         const chest = await prisma.chest.findUnique({
@@ -2684,39 +2675,23 @@ app.prepare().then(async () => {
         // Уменьшаем openingDuration на 30 минут
         const newDuration = Math.max(0, chest.openingDuration - BOOST_TIME);
 
-        // Списываем валюту в зависимости от типа пользователя
-        if (isDebugUser) {
-          player.gold -= 1;
-          await prisma.$transaction([
-            prisma.chest.update({
-              where: { id: chestId },
-              data: { openingDuration: newDuration },
-            }),
-            prisma.user.update({
-              where: { id: player.odamage },
-              data: { gold: BigInt(player.gold) },
-            }),
-          ]);
-          console.log(`[Chest] Boosted chest ${chestId} by 30min, cost 1 gold (debug)`);
-        } else {
-          player.ancientCoin -= 999;
-          await prisma.$transaction([
-            prisma.chest.update({
-              where: { id: chestId },
-              data: { openingDuration: newDuration },
-            }),
-            prisma.user.update({
-              where: { id: player.odamage },
-              data: { ancientCoin: player.ancientCoin },
-            }),
-          ]);
-          console.log(`[Chest] Boosted chest ${chestId} by 30min, cost 999 crystals`);
-        }
+        // Списываем золото
+        player.gold -= BOOST_COST;
+        await prisma.$transaction([
+          prisma.chest.update({
+            where: { id: chestId },
+            data: { openingDuration: newDuration },
+          }),
+          prisma.user.update({
+            where: { id: player.odamage },
+            data: { gold: BigInt(player.gold) },
+          }),
+        ]);
+        console.log(`[Chest] Boosted chest ${chestId} by 30min, cost ${BOOST_COST} gold`);
 
         socket.emit('chest:boosted', {
           chestId,
           newDuration,
-          ancientCoin: player.ancientCoin,
           gold: player.gold,
         });
       } catch (err) {
