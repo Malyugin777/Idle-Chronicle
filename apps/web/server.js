@@ -3077,6 +3077,52 @@ app.prepare().then(async () => {
       socket.emit('shop:success', { activeSoulshot: grade });
     });
 
+    // USER EQUIPMENT (armor, weapons from UserEquipment table)
+    socket.on('equipment:get', async () => {
+      if (!player.odamage) {
+        socket.emit('equipment:data', { equipped: [], inventory: [] });
+        return;
+      }
+
+      try {
+        const userEquipment = await prisma.userEquipment.findMany({
+          where: { userId: player.odamage },
+          include: { equipment: true },
+        });
+
+        const equipped = [];
+        const inventory = [];
+
+        for (const ue of userEquipment) {
+          const item = {
+            id: ue.id,
+            code: ue.equipment.code,
+            name: ue.equipment.name,
+            nameRu: ue.equipment.nameRu,
+            icon: ue.equipment.icon,
+            slot: ue.equipment.slot.toLowerCase(),
+            rarity: ue.equipment.rarity.toLowerCase(),
+            pAtk: ue.pAtk,
+            pDef: ue.pDef,
+            enchant: ue.enchant,
+            isEquipped: ue.isEquipped,
+          };
+
+          if (ue.isEquipped) {
+            equipped.push(item);
+          } else {
+            inventory.push(item);
+          }
+        }
+
+        console.log(`[Equipment] User ${player.odamage} has ${equipped.length} equipped, ${inventory.length} in bag`);
+        socket.emit('equipment:data', { equipped, inventory });
+      } catch (err) {
+        console.error('[Equipment] Error:', err.message);
+        socket.emit('equipment:data', { equipped: [], inventory: [] });
+      }
+    });
+
     // INVENTORY
     socket.on('inventory:get', async () => {
       if (!player.odamage) {

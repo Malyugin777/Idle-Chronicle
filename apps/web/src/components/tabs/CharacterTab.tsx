@@ -109,18 +109,21 @@ const RARITY_STYLES: Record<Rarity, { border: string; glow: string; text: string
   },
 };
 
-// Starter items for new players - simple common items with +1 stats
-const STARTER_ITEMS: Item[] = [
-  { id: 'starter-sword', name: 'Wooden Sword', slotType: 'weapon', rarity: 'common', icon: '🗡️', stats: { pAtkFlat: 1 } },
-  { id: 'starter-shield', name: 'Wooden Shield', slotType: 'shield', rarity: 'common', icon: '🛡️', stats: { pDefFlat: 1 } },
-  { id: 'starter-helmet', name: 'Leather Cap', slotType: 'helmet', rarity: 'common', icon: '🪖', stats: { pDefFlat: 1 } },
-  { id: 'starter-armor', name: 'Cloth Tunic', slotType: 'armor', rarity: 'common', icon: '👕', stats: { pDefFlat: 1 } },
-  { id: 'starter-gloves', name: 'Cloth Gloves', slotType: 'gloves', rarity: 'common', icon: '🧤', stats: { atkSpdFlat: 1 } },
-  { id: 'starter-boots', name: 'Leather Boots', slotType: 'boots', rarity: 'common', icon: '👢', stats: { pDefFlat: 1 } },
-  { id: 'starter-ring1', name: 'Copper Ring', slotType: 'ring1', rarity: 'common', icon: '💍', stats: { critFlat: 0.01 } },
-  { id: 'starter-ring2', name: 'Iron Ring', slotType: 'ring2', rarity: 'common', icon: '💍', stats: { pAtkFlat: 1 } },
-  { id: 'starter-necklace', name: 'Bead Necklace', slotType: 'necklace', rarity: 'common', icon: '📿', stats: { mDefFlat: 1 } },
-];
+// Map server slot names to client slot types
+const SLOT_MAP: Record<string, SlotType> = {
+  weapon: 'weapon',
+  shield: 'shield',
+  helmet: 'helmet',
+  chest: 'armor',
+  armor: 'armor',
+  gloves: 'gloves',
+  legs: 'boots',
+  boots: 'boots',
+  ring: 'ring1',
+  ring1: 'ring1',
+  ring2: 'ring2',
+  necklace: 'necklace',
+};
 
 // ═══════════════════════════════════════════════════════════
 // STAT SYSTEM (local recalculation)
@@ -344,7 +347,7 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 export default function CharacterTab() {
   const [heroState, setHeroState] = useState<HeroState>({
     equipment: {},
-    inventory: [...STARTER_ITEMS], // Give all players starter items
+    inventory: [], // Load from server
     baseStats: null,
     derivedStats: { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 },
   });
@@ -361,10 +364,11 @@ export default function CharacterTab() {
     { id: 'lightning', icon: '⚡', level: 1 },
   ];
 
-  // Load player data
+  // Load player data and equipment
   useEffect(() => {
     const socket = getSocket();
     socket.emit('player:get');
+    socket.emit('equipment:get');
 
     const handlePlayerData = (data: PlayerStats) => {
       const baseStats = {
@@ -389,12 +393,51 @@ export default function CharacterTab() {
       });
     };
 
+    // Handle equipment data from server
+    const handleEquipmentData = (data: { equipped: any[]; inventory: any[] }) => {
+      console.log('[Equipment] Received:', data);
+
+      const serverToItem = (item: any): Item => ({
+        id: item.id,
+        name: item.name || item.nameRu || 'Unknown',
+        slotType: SLOT_MAP[item.slot] || 'weapon',
+        rarity: (item.rarity || 'common') as Rarity,
+        icon: item.icon || '📦',
+        stats: {
+          pAtkFlat: item.pAtk || 0,
+          pDefFlat: item.pDef || 0,
+        },
+      });
+
+      const newEquipment: Partial<Record<SlotType, Item | null>> = {};
+      const newInventory: Item[] = [];
+
+      // Process equipped items
+      for (const item of data.equipped) {
+        const clientItem = serverToItem(item);
+        newEquipment[clientItem.slotType] = clientItem;
+      }
+
+      // Process inventory items
+      for (const item of data.inventory) {
+        newInventory.push(serverToItem(item));
+      }
+
+      setHeroState(prev => {
+        const newState = { ...prev, equipment: newEquipment, inventory: newInventory };
+        newState.derivedStats = recalculateDerivedStats(newState);
+        return newState;
+      });
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
+    socket.on('equipment:data', handleEquipmentData);
 
     return () => {
       socket.off('player:data');
       socket.off('auth:success');
+      socket.off('equipment:data');
     };
   }, []);
 
