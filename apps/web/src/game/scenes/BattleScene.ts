@@ -64,8 +64,8 @@ export class BattleScene extends Phaser.Scene {
 
   // Player
   private playerState: PlayerState = {
-    stamina: 30,
-    maxStamina: 30,
+    stamina: 100,
+    maxStamina: 100,
     staminaRegen: 1,
     mana: 1000,
     maxMana: 1000,
