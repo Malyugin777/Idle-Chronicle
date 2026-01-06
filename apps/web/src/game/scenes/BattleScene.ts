@@ -638,23 +638,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateHpBar() {
-    if (!this.hpBar) return;  // Guard against early calls before create()
-
-    const { width } = this.scale;
-    const barWidth = width - 40;
-    const barHeight = 16;
-    const hpPercent = this.bossState.hp / this.bossState.maxHp;
-
-    this.hpBar.clear();
-
-    // Color based on HP
-    let color = 0x22c55e; // Green
-    if (hpPercent <= 0.25) color = 0xef4444; // Red
-    else if (hpPercent <= 0.5) color = 0xf97316; // Orange
-    else if (hpPercent <= 0.75) color = 0xeab308; // Yellow
-
-    this.hpBar.fillStyle(color, 1);
-    this.hpBar.fillRoundedRect(20, 80, barWidth * hpPercent, barHeight, 8);
+    // HP bar is now handled by React overlay - do nothing here
   }
 
   private updateHpText() {
@@ -921,16 +905,7 @@ export class BattleScene extends Phaser.Scene {
     this.bossSprite?.setPosition(this.originalBossX, this.originalBossY);
     this.updateBossScale();
 
-    // Recreate UI elements with new dimensions
-    this.hpBarBg?.clear();
-    this.hpBarBg?.fillStyle(0x000000, 0.5);
-    this.hpBarBg?.fillRoundedRect(20, 80, width - 40, 16, 8);
-
-    this.updateHpBar();
-    this.hpText?.setPosition(width - 20, 50);
-
-    // Online indicator
-    this.onlineText?.setPosition(width - 20, 20);
+    // HP bar is handled by React overlay - no need to draw here
 
     // Damage feed (below React header ~120px)
     this.damageFeedTexts.forEach((text, i) => {

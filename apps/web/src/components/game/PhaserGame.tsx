@@ -247,9 +247,6 @@ export default function PhaserGame() {
           <span className="text-xs text-white">
             {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
           </span>
-          {bossState.defense && bossState.defense > 0 && (
-            <span className="text-xs text-blue-400">🛡️ {bossState.defense}</span>
-          )}
         </div>
         <div className="h-3 bg-black/50 rounded-full overflow-hidden">
           <div

@@ -348,8 +348,8 @@ export default function CharacterTab() {
     baseStats: null,
     derivedStats: { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 },
   });
-  const [showStats, setShowStats] = useState(false);
-  const [showSkills, setShowSkills] = useState(false);
+  const [showStatsPopup, setShowStatsPopup] = useState(false);
+  const [showSkillsPopup, setShowSkillsPopup] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
@@ -535,120 +535,20 @@ export default function CharacterTab() {
         </div>
       </div>
 
-      {/* Stats Section - Collapsible */}
-      <div className="px-2 mb-2">
+      {/* Stats & Skills Buttons */}
+      <div className="px-2 mb-2 flex gap-2">
         <button
-          onClick={() => setShowStats(!showStats)}
-          className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
-            showStats
-              ? 'bg-l2-gold text-black'
-              : 'bg-black/30 text-gray-400 hover:text-white'
-          }`}
+          onClick={() => setShowStatsPopup(true)}
+          className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-black/30 text-gray-400 hover:text-white hover:bg-black/40 transition-all"
         >
-          <span>📊 {t.character.stats}</span>
-          <span>{showStats ? '▲' : '▼'}</span>
+          📊 {t.character.stats}
         </button>
-        {showStats && (
-          <div className="mt-2">
-            {/* Combat Stats */}
-            <div className="bg-l2-panel rounded-lg p-2 mb-2">
-              <div className="text-[10px] text-gray-400 mb-1">{t.character.combatStats}</div>
-              <div className="grid grid-cols-3 gap-1">
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
-                  <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
-                  <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
-                  <div className="text-xs font-bold text-yellow-400">{(derived.critChance * 100).toFixed(0)}%</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
-                  <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
-                  <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
-                  <div className="text-xs font-bold text-green-400">{derived.attackSpeed}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Base Stats */}
-            <div className="bg-l2-panel rounded-lg p-2">
-              <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
-              <div className="grid grid-cols-5 gap-1">
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[8px] text-gray-500">{t.character.power}</div>
-                  <div className="text-xs font-bold text-white">{stats.power}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
-                  <div className="text-xs font-bold text-white">{stats.vitality}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[8px] text-gray-500">{t.character.agility}</div>
-                  <div className="text-xs font-bold text-white">{stats.agility}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
-                  <div className="text-xs font-bold text-white">{stats.intellect}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
-                  <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
-                  <div className="text-xs font-bold text-white">{stats.spirit}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Skills Section - Collapsible */}
-      <div className="px-2 mb-2">
         <button
-          onClick={() => setShowSkills(!showSkills)}
-          className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
-            showSkills
-              ? 'bg-l2-gold text-black'
-              : 'bg-black/30 text-gray-400 hover:text-white'
-          }`}
+          onClick={() => setShowSkillsPopup(true)}
+          className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-black/30 text-gray-400 hover:text-white hover:bg-black/40 transition-all"
         >
-          <span>✨ {t.character.skills}</span>
-          <span>{showSkills ? '▲' : '▼'}</span>
+          ✨ {t.character.skills}
         </button>
-        {showSkills && (
-          <div className="mt-2 space-y-2">
-            {skills.map((skill) => {
-              const skillName = skill.id === 'fireball' ? t.character.skillFireball
-                : skill.id === 'iceball' ? t.character.skillIceball
-                : t.character.skillLightning;
-              const skillDesc = skill.id === 'fireball' ? t.character.skillFireballDesc
-                : skill.id === 'iceball' ? t.character.skillIceballDesc
-                : t.character.skillLightningDesc;
-
-              return (
-                <div key={skill.id} className="flex items-center gap-3 bg-l2-panel rounded-lg p-2">
-                  <div className="w-10 h-10 bg-black/50 rounded-lg flex items-center justify-center text-2xl">
-                    {skill.icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-bold text-white">{skillName}</div>
-                    <div className="text-[10px] text-gray-500">{skillDesc}</div>
-                    <div className="text-[10px] text-l2-gold">Lv.{skill.level}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Inventory */}
@@ -695,6 +595,134 @@ export default function CharacterTab() {
           onClose={() => setSelectedItem(null)}
           t={t}
         />
+      )}
+
+      {/* Stats Popup */}
+      {showStatsPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowStatsPopup(false)}>
+          <div
+            className="bg-l2-panel rounded-lg w-full max-w-xs border border-white/20"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-3 border-b border-white/10">
+              <span className="font-bold text-l2-gold">📊 {t.character.stats}</span>
+              <button onClick={() => setShowStatsPopup(false)} className="text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-3">
+              {/* Combat Stats */}
+              <div className="text-[10px] text-gray-400 mb-1">{t.character.combatStats}</div>
+              <div className="grid grid-cols-3 gap-1 mb-3">
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
+                  <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
+                  <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
+                  <div className="text-xs font-bold text-yellow-400">{(derived.critChance * 100).toFixed(0)}%</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
+                  <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
+                  <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
+                  <div className="text-xs font-bold text-green-400">{derived.attackSpeed}</div>
+                </div>
+              </div>
+
+              {/* Base Stats */}
+              <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
+              <div className="grid grid-cols-5 gap-1">
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.power}</div>
+                  <div className="text-xs font-bold text-white">{stats.power}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
+                  <div className="text-xs font-bold text-white">{stats.vitality}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.agility}</div>
+                  <div className="text-xs font-bold text-white">{stats.agility}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
+                  <div className="text-xs font-bold text-white">{stats.intellect}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
+                  <div className="text-xs font-bold text-white">{stats.spirit}</div>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 pt-0">
+              <button
+                onClick={() => setShowStatsPopup(false)}
+                className="w-full py-2 bg-black/30 text-gray-400 rounded font-bold text-sm hover:bg-black/40"
+              >
+                {t.character.close}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Skills Popup */}
+      {showSkillsPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowSkillsPopup(false)}>
+          <div
+            className="bg-l2-panel rounded-lg w-full max-w-xs border border-white/20"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-3 border-b border-white/10">
+              <span className="font-bold text-l2-gold">✨ {t.character.skills}</span>
+              <button onClick={() => setShowSkillsPopup(false)} className="text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-3 space-y-2">
+              {skills.map((skill) => {
+                const skillName = skill.id === 'fireball' ? t.character.skillFireball
+                  : skill.id === 'iceball' ? t.character.skillIceball
+                  : t.character.skillLightning;
+                const skillDesc = skill.id === 'fireball' ? t.character.skillFireballDesc
+                  : skill.id === 'iceball' ? t.character.skillIceballDesc
+                  : t.character.skillLightningDesc;
+
+                return (
+                  <div key={skill.id} className="flex items-center gap-3 bg-black/30 rounded-lg p-2">
+                    <div className="w-10 h-10 bg-black/50 rounded-lg flex items-center justify-center text-2xl">
+                      {skill.icon}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-white">{skillName}</div>
+                      <div className="text-[10px] text-gray-500">{skillDesc}</div>
+                      <div className="text-[10px] text-l2-gold">Lv.{skill.level}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-3 pt-0">
+              <button
+                onClick={() => setShowSkillsPopup(false)}
+                className="w-full py-2 bg-black/30 text-gray-400 rounded font-bold text-sm hover:bg-black/40"
+              >
+                {t.character.close}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
