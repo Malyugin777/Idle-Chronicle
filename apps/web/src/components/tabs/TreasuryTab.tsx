@@ -103,10 +103,11 @@ export default function TreasuryTab() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Request chest data
+    // Request chest data and player gold
     socket.emit('chest:get');
     socket.emit('loot:stats:get');
     socket.emit('rewards:get'); // TZ Этап 2: Request pending rewards
+    socket.emit('player:get'); // Для получения gold
 
     // Listen for chest data
     socket.on('chest:data', (data: { chests: Chest[] }) => {
