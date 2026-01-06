@@ -16,7 +16,13 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(npx tsc:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(npx prisma db execute:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:tnsb.fun)",
+      "Bash(gh run list:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

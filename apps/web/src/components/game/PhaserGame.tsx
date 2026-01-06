@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.22';
+const APP_VERSION = 'v1.0.23';
 
 interface BossState {
   name: string;
@@ -41,6 +41,7 @@ interface PlayerState {
   mana: number;
   maxMana: number;
   exhaustedUntil: number | null;
+  gold: number;
 }
 
 interface Skill {
@@ -107,6 +108,7 @@ export default function PhaserGame() {
     mana: 0,
     maxMana: 1,
     exhaustedUntil: null,
+    gold: 0,
   });
 
   // Skills
@@ -339,6 +341,7 @@ export default function PhaserGame() {
         mana: data.mana ?? 1000,
         maxMana: data.maxMana ?? 1000,
         exhaustedUntil: data.exhaustedUntil ?? null,
+        gold: data.gold ?? 0,
       });
     });
 
