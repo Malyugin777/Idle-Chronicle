@@ -124,9 +124,71 @@ model User {
   buffs           ActiveBuff[]
   tasks           UserTask[]
   chests          Chest[]
+  pendingRewards  PendingReward[]
+  badges          UserBadge[]
 
   @@index([telegramId])
   @@index([totalDamage])
+}
+
+// ═══════════════════════════════════════════════════════════
+// PENDING REWARDS (Boss kill rewards waiting to be claimed)
+// ═══════════════════════════════════════════════════════════
+
+model PendingReward {
+  id            String   @id @default(cuid())
+  userId        String
+
+  bossSessionId String   // Which boss kill this is for
+  bossName      String   // Cached boss name for display
+  bossIcon      String   @default("👹")
+
+  // Reward breakdown
+  rank          Int?     // Player's rank (1-100+), null if not in top
+  wasEligible   Boolean  @default(true) // Had 30sec activity
+
+  // Chest rewards (stored as JSON for flexibility)
+  chestsWooden  Int      @default(0)
+  chestsBronze  Int      @default(0)
+  chestsSilver  Int      @default(0)
+  chestsGold    Int      @default(0)
+
+  // Badge reward (if top-3)
+  badgeId       String?  // "slayer" or "elite"
+  badgeDuration Int?     // Duration in days (7 or 3)
+
+  claimed       Boolean  @default(false)
+  claimedAt     DateTime?
+
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bossSessionId])
+  @@unique([userId, bossSessionId]) // One reward per boss per user
+}
+
+// ═══════════════════════════════════════════════════════════
+// USER BADGES (Cosmetic badges with expiration)
+// ═══════════════════════════════════════════════════════════
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+
+  badgeId   String   // "slayer", "elite", etc.
+  name      String   // Display name
+  icon      String   // Emoji or icon
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ═══════════════════════════════════════════════════════════

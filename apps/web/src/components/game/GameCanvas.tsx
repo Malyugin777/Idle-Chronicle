@@ -401,10 +401,16 @@ export default function GameCanvas() {
       }
     }, 100);
 
+    // TZ Этап 2: Activity ping every 5 seconds for boss reward eligibility
+    const activityPingInterval = setInterval(() => {
+      socket.emit('activity:ping');
+    }, 5000);
+
     return () => {
       if (tapFlushIntervalRef.current) {
         clearInterval(tapFlushIntervalRef.current);
       }
+      clearInterval(activityPingInterval);
       socket.off('connect');
       socket.off('reconnect');
       socket.off('disconnect');

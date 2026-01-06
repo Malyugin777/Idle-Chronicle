@@ -591,72 +591,118 @@ async function respawnBoss(prisma, forceNext = true) {
 
 // ═══════════════════════════════════════════════════════════
 // BOSS KILL HANDLER (shared between tap and auto-attack)
+// TZ Этап 2: New reward system based on activity and ranking
 // ═══════════════════════════════════════════════════════════
 
 async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   console.log(`[Boss] ${bossState.name} killed by ${killerPlayer.odamageN}!`);
 
-  // Build leaderboard with photoUrl
+  // Build leaderboard with photoUrl and activity status
   const leaderboard = Array.from(sessionLeaderboard.entries())
-    .map(([id, data]) => ({
-      odamage: id,
-      visitorId: id,
-      visitorName: data.odamageN,
-      photoUrl: data.photoUrl,
-      damage: data.odamage,
-    }))
+    .map(([id, data]) => {
+      // Find online player to get activity status
+      let isEligible = false;
+      for (const [sid, p] of onlineUsers.entries()) {
+        if (p.odamage === id) {
+          isEligible = p.isEligible && p.activityBossSession === bossState.sessionId;
+          break;
+        }
+      }
+      return {
+        odamage: id,
+        visitorId: id,
+        visitorName: data.odamageN,
+        photoUrl: data.photoUrl,
+        damage: data.odamage,
+        isEligible,
+      };
+    })
     .sort((a, b) => b.damage - a.damage);
 
   const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
   const topDamagePlayer = leaderboard[0];
   const finalBlowPlayer = killerPlayer;
 
-  // Prize pool from boss config
-  const diamondPool = bossState.tonReward || 10; // Using tonReward field for diamonds (Ancient Coins)
-  const chestsPool = bossState.chestsReward || 10;
+  // Prize pool from boss config (for adena/exp distribution)
   const expPool = bossState.expReward || 1000000;
   const adenaPool = bossState.adenaReward || 5000;
 
-  // Diamonds and Chests: 50% to final blow, 50% to top damage
-  const diamondsForFinalBlow = Math.floor(diamondPool / 2);
-  const diamondsForTopDamage = Math.ceil(diamondPool / 2);
-  const chestsForFinalBlow = Math.floor(chestsPool / 2);
-  const chestsForTopDamage = Math.ceil(chestsPool / 2);
+  // ═══════════════════════════════════════════════════════════
+  // TZ ЭТАП 2: NEW REWARD SYSTEM
+  // A) Base: 2 Wooden if eligible (30 sec activity)
+  // B) Top-100 rewards by rank
+  // C) Top-3 special rewards with badges
+  // ═══════════════════════════════════════════════════════════
 
-  // Helper: generate random chest TYPE (based on boss index)
-  const getRandomChestType = () => {
-    const roll = Math.random();
-    // Higher boss index = better chest chances
-    const bossBonus = Math.min(currentBossIndex * 0.02, 0.3); // Max 30% bonus
+  // Helper: Calculate chest rewards based on rank (per TZ)
+  const getChestRewardsByRank = (rank, isEligible) => {
+    if (!isEligible) return { wooden: 0, bronze: 0, silver: 0, gold: 0, badge: null, badgeDays: null };
 
-    if (roll < 0.50 - bossBonus) return 'WOODEN';
-    if (roll < 0.80 - bossBonus / 2) return 'BRONZE';
-    if (roll < 0.95) return 'SILVER';
-    return 'GOLD';
+    let wooden = 2; // Base reward for all eligible players
+    let bronze = 0;
+    let silver = 0;
+    let gold = 0;
+    let badge = null;
+    let badgeDays = null;
+
+    if (rank === 1) {
+      // #1: 1 Gold + 2 Silver + 2 Bronze + "Slayer" badge (7 days)
+      gold += 1;
+      silver += 2;
+      bronze += 2;
+      badge = 'slayer';
+      badgeDays = 7;
+    } else if (rank === 2) {
+      // #2: 1 Gold + 1 Silver + 2 Bronze + "Elite" badge (7 days)
+      gold += 1;
+      silver += 1;
+      bronze += 2;
+      badge = 'elite';
+      badgeDays = 7;
+    } else if (rank === 3) {
+      // #3: 1 Gold + 1 Silver + 1 Bronze + "Elite" badge (3 days)
+      gold += 1;
+      silver += 1;
+      bronze += 1;
+      badge = 'elite';
+      badgeDays = 3;
+    } else if (rank >= 4 && rank <= 10) {
+      // Top 4-10: 1 Silver + 1 Bronze
+      silver += 1;
+      bronze += 1;
+    } else if (rank >= 11 && rank <= 25) {
+      // Top 11-25: 1 Silver
+      silver += 1;
+    } else if (rank >= 26 && rank <= 50) {
+      // Top 26-50: 1 Bronze + 1 Wooden
+      bronze += 1;
+      wooden += 1;
+    } else if (rank >= 51 && rank <= 100) {
+      // Top 51-100: 1 Bronze
+      bronze += 1;
+    }
+    // 101+: only base reward (2 wooden)
+
+    return { wooden, bronze, silver, gold, badge, badgeDays };
   };
 
   // Distribute rewards to all participants
   const rewards = [];
-  for (const entry of leaderboard) {
-    const damagePercent = entry.damage / totalDamageDealt;
-    let adenaReward = Math.floor(adenaPool * damagePercent);
-    let expReward = Math.floor(expPool * damagePercent);
-    let diamondReward = 0; // Ancient Coins (Алмазики)
-    let chestsReward = 0;
 
-    // Final blow gets 50% Diamonds and chests
+  for (let i = 0; i < leaderboard.length; i++) {
+    const entry = leaderboard[i];
+    const rank = i + 1;
+    const damagePercent = totalDamageDealt > 0 ? entry.damage / totalDamageDealt : 0;
+
+    // Adena and EXP still distributed by damage %
+    const adenaReward = Math.floor(adenaPool * damagePercent);
+    const expReward = Math.floor(expPool * damagePercent);
+
     const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
-    if (isFinalBlow) {
-      diamondReward += diamondsForFinalBlow;
-      chestsReward += chestsForFinalBlow;
-    }
-
-    // Top damage gets 50% Diamonds and chests
     const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
-    if (isTopDamage) {
-      diamondReward += diamondsForTopDamage;
-      chestsReward += chestsForTopDamage;
-    }
+
+    // Calculate chest rewards (TZ Этап 2)
+    const chestRewards = getChestRewardsByRank(rank, entry.isEligible);
 
     rewards.push({
       odamage: entry.odamage,
@@ -664,55 +710,55 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       photoUrl: entry.photoUrl,
       damage: entry.damage,
       damagePercent: Math.round(damagePercent * 100),
+      rank,
+      isEligible: entry.isEligible,
       adenaReward,
       expReward,
-      diamondReward, // Ancient Coins (Алмазики)
-      chestsReward,
+      chestRewards,
       isFinalBlow,
       isTopDamage,
     });
 
-    // Update player in DB
+    // Update player stats in DB (adena, exp, totalDamage)
     try {
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
           adena: { increment: BigInt(adenaReward) },
           exp: { increment: BigInt(expReward) },
-          ancientCoin: { increment: diamondReward }, // Ancient Coins (Алмазики)
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: isFinalBlow ? 1 : 0 },
         },
       });
 
-      // Create chests for winners (check available slots)
-      if (chestsReward > 0) {
-        // Get user's slot info
-        const userSlotInfo = await prisma.user.findUnique({
-          where: { id: entry.odamage },
-          select: { chestSlots: true },
-        });
-        const currentChestCount = await prisma.chest.count({
-          where: { userId: entry.odamage },
-        });
-        const maxSlots = userSlotInfo?.chestSlots || 5;
-        const freeSlots = Math.max(0, maxSlots - currentChestCount);
-        const chestsToCreate = Math.min(chestsReward, freeSlots);
-
-        if (chestsToCreate > 0) {
-          const chestCreates = [];
-
-          for (let i = 0; i < chestsToCreate; i++) {
-            const chestType = getRandomChestType();
-            chestCreates.push({
-              userId: entry.odamage,
-              chestType: chestType,
-              openingDuration: CHEST_CONFIG[chestType].duration,
-              fromBossId: bossState.id,
-              fromSessionId: bossState.sessionId,
+      // Create PendingReward for eligible players (TZ Этап 2)
+      if (entry.isEligible) {
+        const totalChests = chestRewards.wooden + chestRewards.bronze + chestRewards.silver + chestRewards.gold;
+        if (totalChests > 0 || chestRewards.badge) {
+          try {
+            await prisma.pendingReward.create({
+              data: {
+                userId: entry.odamage,
+                bossSessionId: bossState.sessionId || `session-${Date.now()}`,
+                bossName: bossState.name,
+                bossIcon: bossState.icon || '👹',
+                rank: rank <= 100 ? rank : null,
+                wasEligible: true,
+                chestsWooden: chestRewards.wooden,
+                chestsBronze: chestRewards.bronze,
+                chestsSilver: chestRewards.silver,
+                chestsGold: chestRewards.gold,
+                badgeId: chestRewards.badge,
+                badgeDuration: chestRewards.badgeDays,
+              },
             });
+            console.log(`[Reward] Created pending reward for ${entry.visitorName} (rank ${rank}): ${chestRewards.wooden}W ${chestRewards.bronze}B ${chestRewards.silver}S ${chestRewards.gold}G`);
+          } catch (e) {
+            // Might be duplicate - that's OK
+            if (!e.message.includes('Unique constraint')) {
+              console.error('[Reward] Create pending error:', e.message);
+            }
           }
-          await prisma.chest.createMany({ data: chestCreates });
         }
       }
 
@@ -721,6 +767,10 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
         if (p.odamage === entry.odamage) {
           p.adena += adenaReward;
           p.sessionDamage = 0;
+          // Reset activity for next boss
+          p.activityTime = 0;
+          p.isEligible = false;
+          p.activityBossSession = null;
           break;
         }
       }
@@ -728,6 +778,20 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       console.error('[Reward] Error:', e.message);
     }
   }
+
+  // Notify all online players about pending rewards
+  io.emit('rewards:available');
+
+  // Calculate total chests distributed for stats (TZ Этап 2)
+  const totalChestsDistributed = rewards.reduce((sum, r) => ({
+    wooden: sum.wooden + (r.chestRewards?.wooden || 0),
+    bronze: sum.bronze + (r.chestRewards?.bronze || 0),
+    silver: sum.silver + (r.chestRewards?.silver || 0),
+    gold: sum.gold + (r.chestRewards?.gold || 0),
+  }), { wooden: 0, bronze: 0, silver: 0, gold: 0 });
+
+  const totalChestsCount = totalChestsDistributed.wooden + totalChestsDistributed.bronze +
+                           totalChestsDistributed.silver + totalChestsDistributed.gold;
 
   // Add damagePercent to leaderboard entries
   const leaderboardWithPercent = leaderboard.map(entry => ({
@@ -747,7 +811,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
     topDamagePhoto: topDamagePlayer?.photoUrl,
     topDamage: topDamagePlayer?.damage || 0,
-    prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+    prizePool: { chests: totalChestsDistributed, exp: expPool, adena: adenaPool },
     leaderboard: leaderboardWithPercent.slice(0, 20),
     rewards: rewards.slice(0, 20),
     killedAt: Date.now(),
@@ -768,8 +832,8 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           topDamageBy: topDamagePlayer?.odamage || null,
           topDamageName: topDamagePlayer?.visitorName,
           topDamage: BigInt(topDamagePlayer?.damage || 0),
-          tonPool: tonPool,
-          chestsPool: chestsPool,
+          tonPool: 0,
+          chestsPool: totalChestsCount,
           expPool: BigInt(expPool),
           leaderboardSnapshot: leaderboardWithPercent.slice(0, 20),
         },
@@ -790,14 +854,18 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
     topDamagePhoto: topDamagePlayer?.photoUrl,
     topDamage: topDamagePlayer?.damage || 0,
-    prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+    prizePool: { chests: totalChestsDistributed, exp: expPool, adena: adenaPool },
     leaderboard: leaderboardWithPercent.slice(0, 10),
     rewards: rewards.slice(0, 10),
     respawnAt: bossRespawnAt.getTime(),
     respawnIn: BOSS_RESPAWN_TIME_MS,
   });
 
-  console.log(`[Boss] ${bossState.name} killed! Final blow: ${finalBlowPlayer.odamageN} (${tonForFinalBlow} TON, ${chestsForFinalBlow} chests), Top damage: ${topDamagePlayer?.visitorName} (${tonForTopDamage} TON, ${chestsForTopDamage} chests)`);
+  // Get top 3 rewards for logging
+  const top3Rewards = rewards.slice(0, 3).map(r =>
+    `${r.visitorName}: ${r.chestRewards?.wooden || 0}W ${r.chestRewards?.bronze || 0}B ${r.chestRewards?.silver || 0}S ${r.chestRewards?.gold || 0}G`
+  ).join(', ');
+  console.log(`[Boss] ${bossState.name} killed! Total ${totalChestsCount} chests distributed. Top 3: ${top3Rewards}`);
   console.log(`[Boss] Next boss spawning at ${bossRespawnAt.toISOString()}`);
 
   // Save state immediately after boss kill
@@ -1417,6 +1485,11 @@ app.prepare().then(async () => {
       potionLuck: 0,
       // Active buffs (in-memory)
       activeBuffs: [],
+      // Activity tracking for boss rewards (TZ Этап 2)
+      activityTime: 0,           // Total time active (ms) for current boss
+      lastActivityPing: 0,       // Last activity ping timestamp
+      activityBossSession: null, // Which boss session this activity is for
+      isEligible: false,         // 30+ seconds activity = eligible for rewards
     };
 
     onlineUsers.set(socket.id, player);
@@ -1530,6 +1603,193 @@ app.prepare().then(async () => {
         }
       } catch (err) {
         console.error('[Player] Get error:', err.message);
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // ACTIVITY TRACKING (TZ Этап 2)
+    // Client sends ping every 5 seconds while on battle tab
+    // After 30 seconds total → player becomes eligible for boss rewards
+    // ═══════════════════════════════════════════════════════════
+    socket.on('activity:ping', () => {
+      if (!player.odamage) return;
+
+      const now = Date.now();
+      const currentSession = bossState.sessionId;
+
+      // Reset activity if boss changed
+      if (player.activityBossSession !== currentSession) {
+        player.activityTime = 0;
+        player.lastActivityPing = now;
+        player.activityBossSession = currentSession;
+        player.isEligible = false;
+      }
+
+      // Calculate time since last ping (max 10 seconds to prevent cheating)
+      const timeSinceLastPing = player.lastActivityPing > 0
+        ? Math.min(now - player.lastActivityPing, 10000)
+        : 0;
+
+      player.activityTime += timeSinceLastPing;
+      player.lastActivityPing = now;
+
+      // Check if eligible (30 seconds = 30000ms)
+      if (!player.isEligible && player.activityTime >= 30000) {
+        player.isEligible = true;
+        console.log(`[Activity] ${player.odamageN} is now eligible for boss rewards (${Math.floor(player.activityTime / 1000)}s)`);
+      }
+
+      // Send back activity status
+      socket.emit('activity:status', {
+        activityTime: player.activityTime,
+        isEligible: player.isEligible,
+      });
+    });
+
+    // GET PENDING REWARDS
+    socket.on('rewards:get', async () => {
+      if (!player.odamage) {
+        socket.emit('rewards:data', { rewards: [] });
+        return;
+      }
+
+      try {
+        const pendingRewards = await prisma.pendingReward.findMany({
+          where: {
+            userId: player.odamage,
+            claimed: false,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        socket.emit('rewards:data', {
+          rewards: pendingRewards.map(r => ({
+            id: r.id,
+            bossSessionId: r.bossSessionId,
+            bossName: r.bossName,
+            bossIcon: r.bossIcon,
+            rank: r.rank,
+            wasEligible: r.wasEligible,
+            chestsWooden: r.chestsWooden,
+            chestsBronze: r.chestsBronze,
+            chestsSilver: r.chestsSilver,
+            chestsGold: r.chestsGold,
+            badgeId: r.badgeId,
+            badgeDuration: r.badgeDuration,
+            createdAt: r.createdAt.getTime(),
+          })),
+        });
+      } catch (err) {
+        console.error('[Rewards] Get error:', err.message);
+        socket.emit('rewards:data', { rewards: [] });
+      }
+    });
+
+    // CLAIM PENDING REWARDS
+    socket.on('rewards:claim', async (data) => {
+      if (!player.odamage) {
+        socket.emit('rewards:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { rewardId } = data;
+
+      try {
+        // Get the pending reward
+        const reward = await prisma.pendingReward.findUnique({
+          where: { id: rewardId },
+        });
+
+        if (!reward || reward.userId !== player.odamage) {
+          socket.emit('rewards:error', { message: 'Reward not found' });
+          return;
+        }
+
+        if (reward.claimed) {
+          socket.emit('rewards:error', { message: 'Already claimed' });
+          return;
+        }
+
+        // Get user's chest slot info
+        const userSlotInfo = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { chestSlots: true },
+        });
+        const currentChestCount = await prisma.chest.count({
+          where: { userId: player.odamage },
+        });
+        const maxSlots = userSlotInfo?.chestSlots || 5;
+        let freeSlots = Math.max(0, maxSlots - currentChestCount);
+
+        // Create chests (as many as fit in slots)
+        const chestsToCreate = [];
+        const chestTypes = [
+          { type: 'WOODEN', count: reward.chestsWooden },
+          { type: 'BRONZE', count: reward.chestsBronze },
+          { type: 'SILVER', count: reward.chestsSilver },
+          { type: 'GOLD', count: reward.chestsGold },
+        ];
+
+        let totalChestsCreated = 0;
+        for (const { type, count } of chestTypes) {
+          const toCreate = Math.min(count, freeSlots);
+          for (let i = 0; i < toCreate; i++) {
+            chestsToCreate.push({
+              userId: player.odamage,
+              chestType: type,
+              openingDuration: CHEST_CONFIG[type].duration,
+              fromBossId: null,
+              fromSessionId: reward.bossSessionId,
+            });
+            freeSlots--;
+            totalChestsCreated++;
+          }
+        }
+
+        if (chestsToCreate.length > 0) {
+          await prisma.chest.createMany({ data: chestsToCreate });
+        }
+
+        // Create badge if awarded
+        if (reward.badgeId && reward.badgeDuration) {
+          const badgeConfig = {
+            slayer: { name: 'Slayer', icon: '⚔️' },
+            elite: { name: 'Elite', icon: '🏆' },
+          };
+          const badge = badgeConfig[reward.badgeId] || { name: reward.badgeId, icon: '🎖️' };
+
+          await prisma.userBadge.create({
+            data: {
+              userId: player.odamage,
+              badgeId: reward.badgeId,
+              name: badge.name,
+              icon: badge.icon,
+              expiresAt: new Date(Date.now() + reward.badgeDuration * 24 * 60 * 60 * 1000),
+            },
+          });
+        }
+
+        // Mark reward as claimed
+        await prisma.pendingReward.update({
+          where: { id: rewardId },
+          data: {
+            claimed: true,
+            claimedAt: new Date(),
+          },
+        });
+
+        socket.emit('rewards:claimed', {
+          rewardId,
+          chestsCreated: totalChestsCreated,
+          badgeAwarded: reward.badgeId || null,
+        });
+
+        // Refresh chest data
+        socket.emit('chest:refresh');
+
+      } catch (err) {
+        console.error('[Rewards] Claim error:', err.message);
+        socket.emit('rewards:error', { message: 'Failed to claim reward' });
       }
     });
 

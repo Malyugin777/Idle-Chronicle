@@ -44,6 +44,23 @@ interface LootStats {
   };
 }
 
+// TZ Этап 2: Pending Rewards
+interface PendingReward {
+  id: string;
+  bossSessionId: string;
+  bossName: string;
+  bossIcon: string;
+  rank: number | null;
+  wasEligible: boolean;
+  chestsWooden: number;
+  chestsBronze: number;
+  chestsSilver: number;
+  chestsGold: number;
+  badgeId: string | null;
+  badgeDuration: number | null;
+  createdAt: number;
+}
+
 // Chest config - Types (not rarities!)
 const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: string; color: string; bgColor: string; borderColor: string; duration: number }> = {
   WOODEN: { icon: '🪵', name: 'Wooden', nameRu: 'Деревянный', color: 'text-amber-600', bgColor: 'bg-amber-900/30', borderColor: 'border-amber-700', duration: 5 * 60 * 1000 },
@@ -77,6 +94,8 @@ export default function TreasuryTab() {
   const [claimedReward, setClaimedReward] = useState<ClaimedReward | null>(null);
   const [selectedChest, setSelectedChest] = useState<Chest | null>(null);
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
+  const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
 
   // Update timer every second
   useEffect(() => {
@@ -91,6 +110,7 @@ export default function TreasuryTab() {
     // Request chest data
     socket.emit('chest:get');
     socket.emit('loot:stats:get');
+    socket.emit('rewards:get'); // TZ Этап 2: Request pending rewards
 
     // Listen for chest data
     socket.on('chest:data', (data: { chests: Chest[] }) => {
@@ -140,6 +160,29 @@ export default function TreasuryTab() {
       alert(data.message);
     });
 
+    // TZ Этап 2: Pending rewards listeners
+    socket.on('rewards:data', (data: { rewards: PendingReward[] }) => {
+      setPendingRewards(data.rewards);
+    });
+
+    socket.on('rewards:available', () => {
+      // New rewards available - refresh
+      socket.emit('rewards:get');
+    });
+
+    socket.on('rewards:claimed', (data: { rewardId: string; chestsCreated: number; badgeAwarded: string | null }) => {
+      setPendingRewards(prev => prev.filter(r => r.id !== data.rewardId));
+      setClaimingRewardId(null);
+      // Refresh chest data
+      socket.emit('chest:get');
+      socket.emit('loot:stats:get');
+    });
+
+    socket.on('rewards:error', (data: { message: string }) => {
+      console.error('[Rewards] Error:', data.message);
+      setClaimingRewardId(null);
+    });
+
     // Get player data for crystals
     socket.on('auth:success', (data: any) => {
       setCrystals(data.ancientCoin || 0);
@@ -162,6 +205,10 @@ export default function TreasuryTab() {
       socket.off('slot:error');
       socket.off('auth:success');
       socket.off('player:data');
+      socket.off('rewards:data');
+      socket.off('rewards:available');
+      socket.off('rewards:claimed');
+      socket.off('rewards:error');
     };
   }, []);
 
@@ -200,6 +247,13 @@ export default function TreasuryTab() {
   const unlockSlot = () => {
     if (crystals < SLOT_UNLOCK_COST) return;
     getSocket().emit('slot:unlock');
+  };
+
+  // TZ Этап 2: Claim pending reward
+  const claimReward = (rewardId: string) => {
+    if (claimingRewardId) return;
+    setClaimingRewardId(rewardId);
+    getSocket().emit('rewards:claim', { rewardId });
   };
 
   // Format time remaining
@@ -306,6 +360,90 @@ export default function TreasuryTab() {
           </div>
         </div>
       </div>
+
+      {/* TZ Этап 2: Pending Rewards Block */}
+      {pendingRewards.length > 0 && (
+        <div className="bg-gradient-to-r from-l2-gold/20 to-orange-500/20 p-3 border-y border-l2-gold/30">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🎁</span>
+            <span className="font-bold text-l2-gold">Награды за босса</span>
+            <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+              {pendingRewards.length}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {pendingRewards.map((reward) => {
+              const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
+              const isClaiming = claimingRewardId === reward.id;
+
+              return (
+                <div
+                  key={reward.id}
+                  className="bg-black/40 rounded-lg p-3 border border-l2-gold/20"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{reward.bossIcon}</span>
+                      <div>
+                        <div className="text-white font-bold text-sm">{reward.bossName}</div>
+                        {reward.rank && (
+                          <div className="text-xs text-gray-400">
+                            Ранг: #{reward.rank}
+                            {reward.rank === 1 && <span className="ml-1 text-l2-gold">👑</span>}
+                            {reward.rank === 2 && <span className="ml-1 text-gray-300">🥈</span>}
+                            {reward.rank === 3 && <span className="ml-1 text-orange-400">🥉</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => claimReward(reward.id)}
+                      disabled={isClaiming}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
+                        isClaiming
+                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                          : 'bg-l2-gold text-black hover:brightness-110 active:scale-95'
+                      }`}
+                    >
+                      {isClaiming ? '...' : 'Забрать'}
+                    </button>
+                  </div>
+
+                  {/* Rewards breakdown */}
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    {reward.chestsWooden > 0 && (
+                      <span className="bg-amber-900/40 px-2 py-0.5 rounded text-amber-600">
+                        {reward.chestsWooden}🪵
+                      </span>
+                    )}
+                    {reward.chestsBronze > 0 && (
+                      <span className="bg-orange-900/40 px-2 py-0.5 rounded text-orange-400">
+                        {reward.chestsBronze}🟫
+                      </span>
+                    )}
+                    {reward.chestsSilver > 0 && (
+                      <span className="bg-gray-600/40 px-2 py-0.5 rounded text-gray-300">
+                        {reward.chestsSilver}🪙
+                      </span>
+                    )}
+                    {reward.chestsGold > 0 && (
+                      <span className="bg-yellow-600/40 px-2 py-0.5 rounded text-yellow-400">
+                        {reward.chestsGold}🟨
+                      </span>
+                    )}
+                    {reward.badgeId && (
+                      <span className="bg-purple-500/30 px-2 py-0.5 rounded text-purple-400">
+                        {reward.badgeId === 'slayer' ? '⚔️ Slayer' : '🏆 Elite'} ({reward.badgeDuration}д)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Chest Slots Grid */}
       <div className="p-3">
