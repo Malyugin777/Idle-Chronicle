@@ -97,10 +97,10 @@ export class BattleScene extends Phaser.Scene {
     bg.fillGradientStyle(0x2a313b, 0x2a313b, 0x0e141b, 0x0e141b, 1);
     bg.fillRect(0, 0, width, height);
 
-    // Boss sprite (centered)
+    // Boss sprite (centered, scaled to fit screen)
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
-    this.bossSprite.setScale(0.6);
+    this.updateBossScale();
 
     // Tap handler
     this.bossSprite.on('pointerdown', () => {
@@ -372,11 +372,22 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  private updateBossScale() {
+    if (!this.bossSprite) return;
+    const { width, height } = this.scale;
+    const imgWidth = this.bossSprite.width;
+    const imgHeight = this.bossSprite.height;
+    // Scale to fit: 62% of width, 50% of height (leave room for UI)
+    const scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
+    this.bossSprite.setScale(scaleFit);
+  }
+
   private handleResize(gameSize: Phaser.Structs.Size) {
     const { width, height } = gameSize;
 
-    // Reposition boss
+    // Reposition and rescale boss
     this.bossSprite?.setPosition(width / 2, height / 2);
+    this.updateBossScale();
 
     // Recreate UI elements with new dimensions
     this.hpBarBg?.clear();
