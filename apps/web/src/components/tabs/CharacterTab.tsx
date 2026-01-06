@@ -28,7 +28,39 @@ interface Item {
   rarity: Rarity;
   icon: string;
   stats: ItemStats;
+  setId?: string | null;  // ID сета (например "novice")
 }
+
+// ═══════════════════════════════════════════════════════════
+// SET DEFINITIONS (локальная копия из shared/data/sets.ts)
+// ═══════════════════════════════════════════════════════════
+
+interface SetBonus {
+  pieces: number;
+  bonusPct?: { pAtk?: number; pDef?: number };
+  description: { ru: string; en: string };
+}
+
+interface SetDefinition {
+  id: string;
+  nameRu: string;
+  nameEn: string;
+  totalPieces: number;
+  bonuses: SetBonus[];
+}
+
+const SETS: Record<string, SetDefinition> = {
+  novice: {
+    id: 'novice',
+    nameRu: 'Сет новичка',
+    nameEn: 'Novice Set',
+    totalPieces: 7,
+    bonuses: [
+      { pieces: 3, bonusPct: { pAtk: 0.03 }, description: { ru: '+3% физ. атака', en: '+3% P.Atk' } },
+      { pieces: 6, bonusPct: { pAtk: 0.05, pDef: 0.05 }, description: { ru: '+5% физ. атака, +5% физ. защита', en: '+5% P.Atk, +5% P.Def' } },
+    ],
+  },
+};
 
 interface PlayerStats {
   id: string;
@@ -127,23 +159,44 @@ const SLOT_MAP: Record<string, SlotType> = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// STAT SYSTEM (local recalculation)
+// SET BONUS HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function countSetPieces(equipment: Partial<Record<SlotType, Item | null>>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  Object.values(equipment).forEach(item => {
+    if (item?.setId) {
+      counts[item.setId] = (counts[item.setId] || 0) + 1;
+    }
+  });
+  return counts;
+}
+
+function getActiveSetBonuses(setId: string, count: number): SetBonus[] {
+  const set = SETS[setId];
+  if (!set) return [];
+  return set.bonuses.filter(b => count >= b.pieces);
+}
+
+// ═══════════════════════════════════════════════════════════
+// STAT SYSTEM (local recalculation with set bonuses)
 // ═══════════════════════════════════════════════════════════
 
 function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'] {
   const base = heroState.baseStats;
   if (!base) {
-    return { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 };
+    return { pAtk: 10, pDef: 0, mAtk: 10, mDef: 0, critChance: 0.05, attackSpeed: 300 };
   }
 
-  let pAtk = base.pAtk;
-  let pDef = base.pDef;
+  // Start with base stats (голый персонаж)
+  let pAtk = base.pAtk;  // 10 база
+  let pDef = base.pDef;  // 0 голый
   let mAtk = base.mAtk;
   let mDef = base.mDef;
   let critChance = base.critChance;
   let attackSpeed = base.attackSpeed;
 
-  // Add equipment bonuses
+  // Add equipment flat bonuses
   Object.values(heroState.equipment).forEach(item => {
     if (item?.stats) {
       pAtk += item.stats.pAtkFlat || 0;
@@ -154,6 +207,18 @@ function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'
       attackSpeed += item.stats.atkSpdFlat || 0;
     }
   });
+
+  // Apply set bonuses (percentage bonuses applied AFTER flat bonuses)
+  const setCounts = countSetPieces(heroState.equipment);
+  for (const [setId, count] of Object.entries(setCounts)) {
+    const activeBonuses = getActiveSetBonuses(setId, count);
+    for (const bonus of activeBonuses) {
+      if (bonus.bonusPct) {
+        if (bonus.bonusPct.pAtk) pAtk = Math.floor(pAtk * (1 + bonus.bonusPct.pAtk));
+        if (bonus.bonusPct.pDef) pDef = Math.floor(pDef * (1 + bonus.bonusPct.pDef));
+      }
+    }
+  }
 
   return { pAtk, pDef, mAtk, mDef, critChance, attackSpeed };
 }
@@ -410,6 +475,7 @@ export default function CharacterTab() {
           pAtkFlat: item.pAtk || 0,
           pDefFlat: item.pDef || 0,
         },
+        setId: item.setId || null,  // Set ID for set bonuses
       });
 
       const newEquipment: Partial<Record<SlotType, Item | null>> = {};
@@ -589,6 +655,55 @@ export default function CharacterTab() {
               onClick={() => handleEquippedSlotClick('ring2')}
             />
           </div>
+
+          {/* Set Bonuses Display */}
+          {(() => {
+            const setCounts = countSetPieces(heroState.equipment);
+            const setEntries = Object.entries(setCounts).filter(([_, count]) => count > 0);
+
+            if (setEntries.length === 0) return null;
+
+            return (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                {setEntries.map(([setId, count]) => {
+                  const set = SETS[setId];
+                  if (!set) return null;
+
+                  const setName = lang === 'ru' ? set.nameRu : set.nameEn;
+                  const activeBonuses = getActiveSetBonuses(setId, count);
+                  const nextBonus = set.bonuses.find(b => b.pieces > count);
+
+                  return (
+                    <div key={setId} className="mb-2 last:mb-0">
+                      {/* Set header */}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${activeBonuses.length > 0 ? 'text-l2-gold' : 'text-gray-400'}`}>
+                          {setName}
+                        </span>
+                        <span className={`text-xs ${activeBonuses.length > 0 ? 'text-l2-gold' : 'text-gray-500'}`}>
+                          {count}/{set.totalPieces}
+                        </span>
+                      </div>
+
+                      {/* Active bonuses */}
+                      {activeBonuses.map((bonus, idx) => (
+                        <div key={idx} className="text-[10px] text-green-400 pl-2">
+                          ✓ {bonus.pieces}/{set.totalPieces}: {lang === 'ru' ? bonus.description.ru : bonus.description.en}
+                        </div>
+                      ))}
+
+                      {/* Next bonus hint */}
+                      {nextBonus && (
+                        <div className="text-[10px] text-gray-500 pl-2">
+                          ○ {nextBonus.pieces}/{set.totalPieces}: {lang === 'ru' ? nextBonus.description.ru : nextBonus.description.en}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

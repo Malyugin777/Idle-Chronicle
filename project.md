@@ -254,12 +254,53 @@ Or use Prisma Studio: `pnpm db:studio`
 
 ---
 
+## Equipment System
+
+### Item Database
+Все предметы определены в `packages/shared/src/data/items.ts`:
+```typescript
+interface ItemDefinition {
+  id: string;
+  code: string;        // Совместимость со старым кодом
+  nameRu: string;
+  nameEn: string;
+  icon: string;
+  slot: Slot;
+  rarity: Rarity;
+  stats: ItemStats;
+  setId?: string;      // ID сета
+}
+```
+
+### Set Bonuses
+Сетовые бонусы в `packages/shared/src/data/sets.ts`:
+
+| Сет | Всего | 3/7 бонус | 6/7 бонус |
+|-----|-------|-----------|-----------|
+| Novice | 7 | +3% P.Atk | +5% P.Atk, +5% P.Def |
+| Iron | 7 | +5% P.Def | +10% P.Def, +5% Stamina |
+| Steel | 7 | +5% P.Atk, +1% Crit | +10% P.Atk, +8% P.Def, +2% Crit |
+
+### Stat Formulas (MVP)
+```
+P.Atk = 10 + (СИЛ-10)*1 + equipment
+P.Def = 0 + equipment
+MaxStamina = 800 + (СТОЙ-10)*80
+MaxMana = 100 + (ДУХ-10)*10
+```
+
+Базовые атрибуты: СИЛ=10, ЛОВ=10, СТОЙ=12, ИНТ=10, ДУХ=10
+
+---
+
 ## TODO
 
 - [x] Server-side damage calculation
 - [x] WebSocket real-time sync
 - [x] Rage phases
 - [x] Energy system
+- [x] Equipment system with set bonuses
+- [x] L2-style stat formulas
 - [ ] Telegram authentication verification
 - [ ] Persistent leaderboard (all-time)
 - [ ] Shop tab (soulshots, buffs)

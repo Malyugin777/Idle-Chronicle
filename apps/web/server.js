@@ -308,16 +308,27 @@ const CHEST_DROP_RATES = {
   },
 };
 
-// Starter equipment set codes
+// Starter equipment set (Novice Set)
 const STARTER_EQUIPMENT = [
-  { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 10 },
-  { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2 },
-  { code: 'starter-chest', slot: 'CHEST', name: 'Нагрудник новичка', icon: '🎽', pDef: 3 },
-  { code: 'starter-gloves', slot: 'GLOVES', name: 'Перчатки новичка', icon: '🧤', pDef: 1 },
-  { code: 'starter-legs', slot: 'LEGS', name: 'Поножи новичка', icon: '👖', pDef: 2 },
-  { code: 'starter-boots', slot: 'BOOTS', name: 'Ботинки новичка', icon: '👢', pDef: 1 },
-  { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2 },
+  { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 8, setId: 'novice' },
+  { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2, setId: 'novice' },
+  { code: 'starter-chest', slot: 'CHEST', name: 'Нагрудник новичка', icon: '🎽', pDef: 3, setId: 'novice' },
+  { code: 'starter-gloves', slot: 'GLOVES', name: 'Перчатки новичка', icon: '🧤', pDef: 1, setId: 'novice' },
+  { code: 'starter-legs', slot: 'LEGS', name: 'Поножи новичка', icon: '👖', pDef: 2, setId: 'novice' },
+  { code: 'starter-boots', slot: 'BOOTS', name: 'Ботинки новичка', icon: '👢', pDef: 1, setId: 'novice' },
+  { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2, setId: 'novice' },
 ];
+
+// Map item codes to set IDs
+const ITEM_SET_MAP = {
+  'starter-sword': 'novice',
+  'starter-helmet': 'novice',
+  'starter-chest': 'novice',
+  'starter-gloves': 'novice',
+  'starter-legs': 'novice',
+  'starter-boots': 'novice',
+  'starter-shield': 'novice',
+};
 
 // Stat upgrade cost formula
 function getUpgradeCost(level) {
@@ -3125,6 +3136,7 @@ app.prepare().then(async () => {
             pDef: ue.pDef,
             enchant: ue.enchant,
             isEquipped: ue.isEquipped,
+            setId: ITEM_SET_MAP[ue.equipment.code] || null,  // Set ID for set bonuses
           };
 
           if (ue.isEquipped) {
