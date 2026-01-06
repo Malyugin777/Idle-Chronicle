@@ -940,7 +940,7 @@ export default function GameCanvas() {
                 </div>
                 <div className="text-right">
                   <div className="text-l2-gold font-bold text-sm">
-                    {formatCompact((bossState.bossIndex || 1) * 100000)}
+                    {formatCompact(1000000 * Math.pow(2, (bossState.bossIndex || 1) - 1))}
                   </div>
                   <div className="text-[10px] text-gray-500">100%</div>
                 </div>
@@ -954,7 +954,7 @@ export default function GameCanvas() {
                 </div>
                 <div className="text-right">
                   <div className="text-green-400 font-bold text-sm">
-                    {formatCompact((bossState.bossIndex || 1) * 100000)}
+                    {formatCompact(1000000 * Math.pow(2, (bossState.bossIndex || 1) - 1))}
                   </div>
                   <div className="text-[10px] text-gray-500">100%</div>
                 </div>
@@ -968,7 +968,7 @@ export default function GameCanvas() {
                 </div>
                 <div className="text-right">
                   <div className="text-blue-400 font-bold text-sm">
-                    {(bossState.bossIndex || 1) * 10}
+                    {10 * Math.pow(2, (bossState.bossIndex || 1) - 1)}
                   </div>
                   <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
                 </div>
@@ -982,7 +982,7 @@ export default function GameCanvas() {
                 </div>
                 <div className="text-right">
                   <div className="text-purple-400 font-bold text-sm">
-                    {(bossState.bossIndex || 1) * 10}
+                    {10 * Math.pow(2, (bossState.bossIndex || 1) - 1)}
                   </div>
                   <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
                 </div>

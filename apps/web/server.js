@@ -125,13 +125,22 @@ async function loadBossState(prisma) {
     const boss = DEFAULT_BOSSES[state.currentBossIndex] || DEFAULT_BOSSES[0];
     currentBossIndex = state.currentBossIndex;
 
+    // Check if boss HP is 0 and respawn timer expired - need to spawn next boss
+    const savedHp = Number(state.bossCurrentHp);
+    const needsRespawn = savedHp <= 0 && !bossRespawnAt;
+
+    if (needsRespawn) {
+      console.log('[Boss] Boss HP=0 and respawn timer expired, will respawn on startup');
+      return 'respawn'; // Signal to respawn
+    }
+
     bossState = {
       id: `default-${state.currentBossIndex}`,
       name: state.bossName || boss.name,
-      nameRu: boss.nameRu || boss.name,
+      nameRu: state.bossNameRu || boss.nameRu || boss.name,
       title: 'World Boss',
       maxHp: Number(state.bossMaxHp),
-      currentHp: bossRespawnAt ? Number(state.bossMaxHp) : Number(state.bossCurrentHp),
+      currentHp: bossRespawnAt ? Number(state.bossMaxHp) : savedHp,
       defense: state.bossDefense || boss.defense,
       thornsDamage: state.bossThorns || boss.thornsDamage || 0,
       ragePhase: 0,
@@ -157,7 +166,7 @@ async function loadBossState(prisma) {
       }
     }
 
-    console.log(`[Boss] Loaded state: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp}`);
+    console.log(`[Boss] Loaded state: ${bossState.name} (${bossState.nameRu}) HP=${bossState.currentHp}/${bossState.maxHp}`);
     return true;
   } catch (err) {
     console.error('[Boss] Load state error:', err.message);
@@ -180,10 +189,11 @@ async function saveBossState(prisma) {
         bossCurrentHp: BigInt(Math.max(0, bossState.currentHp)),
         bossMaxHp: BigInt(bossState.maxHp),
         bossName: bossState.name,
+        bossNameRu: bossState.nameRu || bossState.name,
         bossIcon: bossState.icon,
         bossDefense: bossState.defense,
         bossThorns: bossState.thornsDamage,
-        bossAdenaReward: bossState.adenaReward || 1000,
+        bossAdenaReward: bossState.adenaReward || 1000000,
         bossExpReward: BigInt(bossState.expReward || 1000000),
         bossTonReward: bossState.tonReward || 10,
         bossChestsReward: bossState.chestsReward || 10,
@@ -196,10 +206,11 @@ async function saveBossState(prisma) {
         bossCurrentHp: BigInt(Math.max(0, bossState.currentHp)),
         bossMaxHp: BigInt(bossState.maxHp),
         bossName: bossState.name,
+        bossNameRu: bossState.nameRu || bossState.name,
         bossIcon: bossState.icon,
         bossDefense: bossState.defense,
         bossThorns: bossState.thornsDamage,
-        bossAdenaReward: bossState.adenaReward || 1000,
+        bossAdenaReward: bossState.adenaReward || 1000000,
         bossExpReward: BigInt(bossState.expReward || 1000000),
         bossTonReward: bossState.tonReward || 10,
         bossChestsReward: bossState.chestsReward || 10,
@@ -398,7 +409,7 @@ const BOSS_TEMPLATES = [
 ];
 
 // Generate boss stats dynamically (x2 rewards, x3 HP per boss)
-// First boss: 500K HP, 100K adena, 100K exp, 10 TON, 10 chests
+// First boss: 500K HP, 1M adena, 1M exp, 10 TON, 10 chests
 function getBossStats(index) {
   const template = BOSS_TEMPLATES[index % BOSS_TEMPLATES.length];
   const multiplier = Math.pow(2, index); // x2 for each boss
@@ -409,8 +420,8 @@ function getBossStats(index) {
     hp: Math.floor(500000 * hpMultiplier),
     defense: Math.floor(index * 5),
     thornsDamage: Math.floor(index * 2),
-    adenaReward: Math.floor(100000 * multiplier),
-    expReward: Math.floor(100000 * multiplier),
+    adenaReward: Math.floor(1000000 * multiplier),
+    expReward: Math.floor(1000000 * multiplier),
     tonReward: Math.floor(10 * multiplier),
     chestsReward: Math.floor(10 * multiplier),
   };
@@ -743,9 +754,10 @@ app.prepare().then(async () => {
 
   // Try to load saved boss state first
   const loadedState = await loadBossState(prisma);
-  if (!loadedState) {
-    // No saved state, initialize with first boss
-    await respawnBoss(prisma, false);
+  if (!loadedState || loadedState === 'respawn') {
+    // No saved state OR boss HP=0 with expired respawn timer - spawn (next) boss
+    const forceNext = loadedState === 'respawn'; // Move to next boss if HP=0
+    await respawnBoss(prisma, forceNext);
     await saveBossState(prisma);
   }
 

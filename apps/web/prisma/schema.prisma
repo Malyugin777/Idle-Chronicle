@@ -406,13 +406,14 @@ model GameState {
   currentBossIndex Int     @default(0)
   bossCurrentHp    BigInt  @default(500000)
   bossMaxHp        BigInt  @default(500000)
-  bossName         String  @default("Lizard")
-  bossIcon         String  @default("🦎")
+  bossName         String  @default("Serpent")
+  bossNameRu       String  @default("Змей")
+  bossIcon         String  @default("🐍")
   bossDefense      Int     @default(0)
   bossThorns       Int     @default(0)
 
   // Boss rewards
-  bossAdenaReward  Int     @default(1000)
+  bossAdenaReward  Int     @default(1000000)
   bossExpReward    BigInt  @default(1000000)
   bossTonReward    Float   @default(10)
   bossChestsReward Int     @default(10)
