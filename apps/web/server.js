@@ -597,26 +597,16 @@ async function respawnBoss(prisma, forceNext = true) {
 async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   console.log(`[Boss] ${bossState.name} killed by ${killerPlayer.odamageN}!`);
 
-  // Build leaderboard with photoUrl and activity status
+  // Build leaderboard with photoUrl and activity status (from sessionLeaderboard)
   const leaderboard = Array.from(sessionLeaderboard.entries())
-    .map(([id, data]) => {
-      // Find online player to get activity status
-      let isEligible = false;
-      for (const [sid, p] of onlineUsers.entries()) {
-        if (p.odamage === id) {
-          isEligible = p.isEligible && p.activityBossSession === bossState.sessionId;
-          break;
-        }
-      }
-      return {
-        odamage: id,
-        visitorId: id,
-        visitorName: data.odamageN,
-        photoUrl: data.photoUrl,
-        damage: data.odamage,
-        isEligible,
-      };
-    })
+    .map(([id, data]) => ({
+      odamage: id,
+      visitorId: id,
+      visitorName: data.odamageN,
+      photoUrl: data.photoUrl,
+      damage: data.odamage,
+      isEligible: data.isEligible || false, // TZ Этап 2: saved during damage dealing
+    }))
     .sort((a, b) => b.damage - a.damage);
 
   const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
@@ -2079,6 +2069,7 @@ app.prepare().then(async () => {
         odamage: (existing?.odamage || 0) + actualDamage,
         odamageN: player.odamageN,
         photoUrl: player.photoUrl,
+        isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
       });
 
       socket.emit('tap:result', {
@@ -2167,6 +2158,7 @@ app.prepare().then(async () => {
         odamage: (existing?.odamage || 0) + actualDamage,
         odamageN: player.odamageN,
         photoUrl: player.photoUrl,
+        isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
       });
 
       socket.emit('skill:result', {
@@ -3309,6 +3301,7 @@ app.prepare().then(async () => {
             odamage: (existing?.odamage || 0) + actualDamage,
             odamageN: player.odamageN,
             photoUrl: player.photoUrl,
+            isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
           });
 
           player.sessionDamage += actualDamage;

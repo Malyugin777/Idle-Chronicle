@@ -167,14 +167,6 @@ export default function GameCanvas() {
       }
     };
 
-    // Check if already connected (when returning to tab)
-    if (socket.connected) {
-      console.log('[Game] Socket already connected');
-      setConnected(true);
-      // Request current player state
-      socket.emit('player:get');
-    }
-
     socket.on('connect', () => {
       console.log('[Game] Socket connected');
       setConnected(true);
@@ -185,10 +177,6 @@ export default function GameCanvas() {
       console.log('[Game] Socket reconnected');
       setConnected(true);
       doAuth();
-    });
-
-    socket.on('auth:success', (data) => {
-      console.log('[Auth] Success! User:', data.firstName || data.username || data.id);
     });
 
     socket.on('auth:error', (data) => {
@@ -358,7 +346,9 @@ export default function GameCanvas() {
 
     // Auth success - check first login
     socket.on('auth:success', (data: any) => {
+      console.log('[Auth] Success! isFirstLogin:', data.isFirstLogin, 'User:', data.firstName || data.username);
       if (data.isFirstLogin) {
+        console.log('[Welcome] Showing welcome popup for first-time user');
         setShowWelcome(true);
       }
       setMana(data.mana || 1000);
@@ -392,6 +382,15 @@ export default function GameCanvas() {
       setShowWelcome(false);
       setWelcomeStage(1);
     });
+
+    // IMPORTANT: Check if already connected AFTER setting up all listeners
+    // This ensures we don't miss the auth:success event
+    if (socket.connected) {
+      console.log('[Game] Socket already connected, re-authenticating');
+      setConnected(true);
+      // Small delay to ensure React state is ready, then re-auth
+      setTimeout(doAuth, 100);
+    }
 
     // Tap batching - flush every 100ms
     tapFlushIntervalRef.current = setInterval(() => {
