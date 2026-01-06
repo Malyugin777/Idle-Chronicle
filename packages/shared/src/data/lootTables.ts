@@ -1,129 +1,118 @@
 // ═══════════════════════════════════════════════════════════
-// LOOT TABLES - Таблицы дропа для сундуков
+// LOOT TABLES — Таблицы дропа сундуков
 // ═══════════════════════════════════════════════════════════
 
-import { Rarity } from './items';
-
-export type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
+export type ChestType = 'wood' | 'bronze' | 'silver' | 'gold';
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
 
 // ═══════════════════════════════════════════════════════════
-// CHEST DEFINITIONS
+// CHEST DROP CONFIG
 // ═══════════════════════════════════════════════════════════
 
-export interface ChestDefinition {
-  type: ChestType;
+export interface ChestConfig {
+  gold: number;                                  // 100% шанс золота
+  itemChance: number;                            // шанс получить 1 предмет (0-1)
+  rarityWeights: Partial<Record<Rarity, number>>; // веса внутри itemChance
+  scrollChance: number;                          // шанс свитка заточки (0-1)
+  scrollQty: [number, number];                   // [min, max] количество свитков
+}
+
+export const CHESTS: Record<ChestType, ChestConfig> = {
+  // ─────────────────────────────────────────────────────────
+  // WOODEN: 55% шмот (93% Common, 7% Uncommon), 3% свиток
+  // ─────────────────────────────────────────────────────────
+  wood: {
+    gold: 1000,
+    itemChance: 0.55,
+    rarityWeights: { common: 93, uncommon: 7 },
+    scrollChance: 0.03,
+    scrollQty: [1, 1],
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // BRONZE: 80% шмот (70% C, 27% U, 3% R), 15% свиток
+  // ─────────────────────────────────────────────────────────
+  bronze: {
+    gold: 2500,
+    itemChance: 0.80,
+    rarityWeights: { common: 70, uncommon: 27, rare: 3 },
+    scrollChance: 0.15,
+    scrollQty: [1, 1],
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // SILVER: 100% шмот (75% U, 24% R, 1% E), 25% свиток x1-2
+  // ─────────────────────────────────────────────────────────
+  silver: {
+    gold: 7000,
+    itemChance: 1.0,
+    rarityWeights: { uncommon: 75, rare: 24, epic: 1 },
+    scrollChance: 0.25,
+    scrollQty: [1, 2],
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // GOLD: 100% шмот (92% R, 8% E), 45% свиток x1-3
+  // ─────────────────────────────────────────────────────────
+  gold: {
+    gold: 20000,
+    itemChance: 1.0,
+    rarityWeights: { rare: 92, epic: 8 },
+    scrollChance: 0.45,
+    scrollQty: [1, 3],
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+// CHEST UI CONFIG
+// ═══════════════════════════════════════════════════════════
+
+export interface ChestUIConfig {
   nameRu: string;
   nameEn: string;
   icon: string;
-  color: string;           // Tailwind text color
-  bgColor: string;         // Tailwind bg color
-  borderColor: string;     // Tailwind border color
-  openDuration: number;    // Время открытия в ms
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  openDuration: number; // ms
 }
 
-export const CHESTS: Record<ChestType, ChestDefinition> = {
-  WOODEN: {
-    type: 'WOODEN',
-    nameRu: 'Деревянный сундук',
-    nameEn: 'Wooden Chest',
+export const CHEST_UI: Record<ChestType, ChestUIConfig> = {
+  wood: {
+    nameRu: 'Деревянный',
+    nameEn: 'Wooden',
     icon: '🪵',
     color: 'text-amber-600',
     bgColor: 'bg-amber-900/30',
     borderColor: 'border-amber-700',
     openDuration: 5 * 60 * 1000,  // 5 минут
   },
-  BRONZE: {
-    type: 'BRONZE',
-    nameRu: 'Бронзовый сундук',
-    nameEn: 'Bronze Chest',
+  bronze: {
+    nameRu: 'Бронзовый',
+    nameEn: 'Bronze',
     icon: '🟫',
     color: 'text-orange-400',
     bgColor: 'bg-orange-900/30',
     borderColor: 'border-orange-600',
     openDuration: 30 * 60 * 1000,  // 30 минут
   },
-  SILVER: {
-    type: 'SILVER',
-    nameRu: 'Серебряный сундук',
-    nameEn: 'Silver Chest',
+  silver: {
+    nameRu: 'Серебряный',
+    nameEn: 'Silver',
     icon: '🪙',
     color: 'text-gray-300',
     bgColor: 'bg-gray-500/30',
     borderColor: 'border-gray-400',
     openDuration: 4 * 60 * 60 * 1000,  // 4 часа
   },
-  GOLD: {
-    type: 'GOLD',
-    nameRu: 'Золотой сундук',
-    nameEn: 'Gold Chest',
+  gold: {
+    nameRu: 'Золотой',
+    nameEn: 'Gold',
     icon: '🟨',
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-600/30',
     borderColor: 'border-yellow-500',
     openDuration: 8 * 60 * 60 * 1000,  // 8 часов
-  },
-};
-
-// ═══════════════════════════════════════════════════════════
-// DROP RATES (Таблицы дропа по ТЗ)
-// ═══════════════════════════════════════════════════════════
-
-export interface DropRate {
-  // Шанс выпадения предмета по редкости (0-1)
-  // Сумма НЕ должна быть 100% — остаток = "ничего не выпало"
-  items: {
-    common: number;
-    uncommon: number;
-    rare: number;
-    epic: number;
-  };
-  // Фиксированное золото (100% шанс)
-  gold: number;
-  // Шанс свитка заточки (0-1)
-  enchantChance: number;
-  // Количество свитков [min, max]
-  enchantQty: [number, number];
-}
-
-export const DROP_RATES: Record<ChestType, DropRate> = {
-  // ─────────────────────────────────────────────────────────
-  // WOODEN: 1000 золота, 50% Common, 7% Uncommon, 3% свиток
-  // ─────────────────────────────────────────────────────────
-  WOODEN: {
-    items: { common: 0.50, uncommon: 0.07, rare: 0, epic: 0 },
-    gold: 1000,
-    enchantChance: 0.03,
-    enchantQty: [1, 1],
-  },
-
-  // ─────────────────────────────────────────────────────────
-  // BRONZE: 3000 золота, 60% Common, 20% Uncommon, 3% Rare, 15% свиток
-  // ─────────────────────────────────────────────────────────
-  BRONZE: {
-    items: { common: 0.60, uncommon: 0.20, rare: 0.03, epic: 0 },
-    gold: 3000,
-    enchantChance: 0.15,
-    enchantQty: [1, 1],
-  },
-
-  // ─────────────────────────────────────────────────────────
-  // SILVER: 8000 золота, 40% Uncommon, 10% Rare, 1% Epic, 25% свиток x1-5
-  // ─────────────────────────────────────────────────────────
-  SILVER: {
-    items: { common: 0, uncommon: 0.40, rare: 0.10, epic: 0.01 },
-    gold: 8000,
-    enchantChance: 0.25,
-    enchantQty: [1, 5],
-  },
-
-  // ─────────────────────────────────────────────────────────
-  // GOLD: 20000 золота, 15% Rare, 3% Epic, 45% свиток x1-5
-  // ─────────────────────────────────────────────────────────
-  GOLD: {
-    items: { common: 0, uncommon: 0, rare: 0.15, epic: 0.03 },
-    gold: 20000,
-    enchantChance: 0.45,
-    enchantQty: [1, 5],
   },
 };
 
@@ -134,10 +123,10 @@ export const DROP_RATES: Record<ChestType, DropRate> = {
 export interface RarityStyle {
   nameRu: string;
   nameEn: string;
-  color: string;           // text color
-  borderColor: string;     // border color
-  glow: string;            // box-shadow/glow effect
-  dropShadow: string;      // drop-shadow filter
+  color: string;
+  borderColor: string;
+  glow: string;
+  dropShadow: string;
 }
 
 export const RARITY_STYLES: Record<Rarity, RarityStyle> = {
@@ -173,14 +162,6 @@ export const RARITY_STYLES: Record<Rarity, RarityStyle> = {
     glow: 'shadow-[0_0_16px_rgba(192,132,252,0.7)]',
     dropShadow: 'drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]',
   },
-  legendary: {
-    nameRu: 'Легендарный',
-    nameEn: 'Legendary',
-    color: 'text-orange-400',
-    borderColor: 'border-orange-500/70',
-    glow: 'shadow-[0_0_20px_rgba(251,146,60,0.8)] animate-pulse',
-    dropShadow: 'drop-shadow-[0_0_14px_rgba(251,146,60,0.9)]',
-  },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -192,19 +173,28 @@ export const RARITY_STYLES: Record<Rarity, RarityStyle> = {
  * @returns Редкость или null если ничего не выпало
  */
 export function rollItemRarity(chestType: ChestType): Rarity | null {
-  const rates = DROP_RATES[chestType].items;
-  const roll = Math.random();
-  let cumulative = 0;
+  const config = CHESTS[chestType];
 
-  for (const [rarity, chance] of Object.entries(rates)) {
-    if (chance === 0) continue;
-    cumulative += chance;
-    if (roll < cumulative) {
+  // Сначала проверяем шанс выпадения предмета вообще
+  if (Math.random() >= config.itemChance) {
+    return null;
+  }
+
+  // Предмет выпал — теперь определяем редкость по весам
+  const weights = config.rarityWeights;
+  const totalWeight = Object.values(weights).reduce((sum, w) => sum + (w || 0), 0);
+  let roll = Math.random() * totalWeight;
+
+  for (const [rarity, weight] of Object.entries(weights)) {
+    if (!weight) continue;
+    roll -= weight;
+    if (roll <= 0) {
       return rarity as Rarity;
     }
   }
 
-  return null; // Ничего не выпало
+  // Fallback (shouldn't happen)
+  return Object.keys(weights)[0] as Rarity;
 }
 
 /**
@@ -212,13 +202,13 @@ export function rollItemRarity(chestType: ChestType): Rarity | null {
  * @returns Количество свитков или 0 если не выпало
  */
 export function rollEnchantScrolls(chestType: ChestType): number {
-  const rates = DROP_RATES[chestType];
+  const config = CHESTS[chestType];
 
-  if (Math.random() >= rates.enchantChance) {
+  if (Math.random() >= config.scrollChance) {
     return 0;
   }
 
-  const [min, max] = rates.enchantQty;
+  const [min, max] = config.scrollQty;
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
@@ -231,21 +221,22 @@ export function generateChestLoot(chestType: ChestType): {
   enchantScrolls: number;
 } {
   return {
-    gold: DROP_RATES[chestType].gold,
+    gold: CHESTS[chestType].gold,
     itemRarity: rollItemRarity(chestType),
     enchantScrolls: rollEnchantScrolls(chestType),
   };
 }
 
-/**
- * Форматирует время открытия сундука
- */
-export function formatOpenDuration(ms: number): string {
-  const hours = Math.floor(ms / (60 * 60 * 1000));
-  const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+// ═══════════════════════════════════════════════════════════
+// TYPE MAPPING (server uses UPPERCASE)
+// ═══════════════════════════════════════════════════════════
 
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}ч ${minutes}м` : `${hours}ч`;
-  }
-  return `${minutes}м`;
+export function serverChestType(type: string): ChestType {
+  const map: Record<string, ChestType> = {
+    'WOODEN': 'wood',
+    'BRONZE': 'bronze',
+    'SILVER': 'silver',
+    'GOLD': 'gold',
+  };
+  return map[type] || 'wood';
 }

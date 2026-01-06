@@ -274,37 +274,41 @@ const CHEST_CONFIG = {
   GOLD: { duration: 8 * 60 * 60 * 1000, icon: '🟨', name: 'Золотой' },       // 8 hours
 };
 
-// Drop rates for each chest type (matching TZ exactly)
-// Item rarities: COMMON (white), UNCOMMON (green), RARE (purple), EPIC (orange)
-// Gold is FIXED amount, not range per TZ
+// ═══════════════════════════════════════════════════════════
+// CHEST DROP CONFIG — GPT формат (itemChance + rarityWeights)
+// ═══════════════════════════════════════════════════════════
 const CHEST_DROP_RATES = {
   WOODEN: {
-    // TZ: Common 50%, Uncommon 7%, Rare 0%, Epic 0%, Enchant +1 3%, Gold 1000
-    items: { COMMON: 0.50, UNCOMMON: 0.07, RARE: 0, EPIC: 0 },
+    // 55% шмот (93% Common, 7% Uncommon), 3% свиток
     gold: 1000,
+    itemChance: 0.55,
+    rarityWeights: { COMMON: 93, UNCOMMON: 7 },
     enchantChance: 0.03,
     enchantQty: [1, 1],
   },
   BRONZE: {
-    // TZ: Common 60%, Uncommon 20%, Rare 3%, Epic 0%, Enchant +1 15%, Gold 3000
-    items: { COMMON: 0.60, UNCOMMON: 0.20, RARE: 0.03, EPIC: 0 },
-    gold: 3000,
+    // 80% шмот (70% C, 27% U, 3% R), 15% свиток
+    gold: 2500,
+    itemChance: 0.80,
+    rarityWeights: { COMMON: 70, UNCOMMON: 27, RARE: 3 },
     enchantChance: 0.15,
     enchantQty: [1, 1],
   },
   SILVER: {
-    // TZ: Common 0%, Uncommon 40%, Rare 10%, Epic 1%, Enchant +1-5 25%, Gold 8000
-    items: { COMMON: 0, UNCOMMON: 0.40, RARE: 0.10, EPIC: 0.01 },
-    gold: 8000,
+    // 100% шмот (75% U, 24% R, 1% E), 25% свиток x1-2
+    gold: 7000,
+    itemChance: 1.0,
+    rarityWeights: { UNCOMMON: 75, RARE: 24, EPIC: 1 },
     enchantChance: 0.25,
-    enchantQty: [1, 5],
+    enchantQty: [1, 2],
   },
   GOLD: {
-    // TZ: Common 0%, Uncommon 0%, Rare 15%, Epic 3%, Enchant +1-5 45%, Gold 20000
-    items: { COMMON: 0, UNCOMMON: 0, RARE: 0.15, EPIC: 0.03 },
+    // 100% шмот (92% R, 8% E), 45% свиток x1-3
     gold: 20000,
+    itemChance: 1.0,
+    rarityWeights: { RARE: 92, EPIC: 8 },
     enchantChance: 0.45,
-    enchantQty: [1, 5],
+    enchantQty: [1, 3],
   },
 };
 
@@ -1727,32 +1731,50 @@ app.prepare().then(async () => {
         let freeSlots = Math.max(0, maxSlots - currentChestCount);
 
         // Create chests (as many as fit in slots)
+        // Overflow chests are converted to gold
         const chestsToCreate = [];
         const chestTypes = [
-          { type: 'WOODEN', count: reward.chestsWooden },
-          { type: 'BRONZE', count: reward.chestsBronze },
-          { type: 'SILVER', count: reward.chestsSilver },
-          { type: 'GOLD', count: reward.chestsGold },
+          { type: 'WOODEN', count: reward.chestsWooden, goldValue: 500 },   // 50% base gold
+          { type: 'BRONZE', count: reward.chestsBronze, goldValue: 1250 },  // 50% base gold
+          { type: 'SILVER', count: reward.chestsSilver, goldValue: 3500 },  // 50% base gold
+          { type: 'GOLD', count: reward.chestsGold, goldValue: 10000 },     // 50% base gold
         ];
 
         let totalChestsCreated = 0;
-        for (const { type, count } of chestTypes) {
-          const toCreate = Math.min(count, freeSlots);
-          for (let i = 0; i < toCreate; i++) {
-            chestsToCreate.push({
-              userId: player.odamage,
-              chestType: type,
-              openingDuration: CHEST_CONFIG[type].duration,
-              fromBossId: null,
-              fromSessionId: reward.bossSessionId,
-            });
-            freeSlots--;
-            totalChestsCreated++;
+        let overflowGold = 0;
+        let overflowCount = 0;
+
+        for (const { type, count, goldValue } of chestTypes) {
+          for (let i = 0; i < count; i++) {
+            if (freeSlots > 0) {
+              chestsToCreate.push({
+                userId: player.odamage,
+                chestType: type,
+                openingDuration: CHEST_CONFIG[type].duration,
+                fromBossId: null,
+                fromSessionId: reward.bossSessionId,
+              });
+              freeSlots--;
+              totalChestsCreated++;
+            } else {
+              // No room - convert to gold (50% of chest's base gold)
+              overflowGold += goldValue;
+              overflowCount++;
+            }
           }
         }
 
         if (chestsToCreate.length > 0) {
           await prisma.chest.createMany({ data: chestsToCreate });
+        }
+
+        // Give overflow gold if any chests couldn't fit
+        if (overflowGold > 0) {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { gold: { increment: BigInt(overflowGold) } },
+          });
+          console.log(`[Rewards] ${overflowCount} chests converted to ${overflowGold} gold (overflow)`);
         }
 
         // Create badge if awarded
@@ -1786,6 +1808,8 @@ app.prepare().then(async () => {
         socket.emit('rewards:claimed', {
           rewardId,
           chestsCreated: totalChestsCreated,
+          overflowGold: overflowGold,
+          overflowCount: overflowCount,
           badgeAwarded: reward.badgeId || null,
         });
 
@@ -2415,25 +2439,32 @@ app.prepare().then(async () => {
         let currentPity = user?.pityCounter || 0;
         const isSilverOrGold = chestType === 'SILVER' || chestType === 'GOLD';
 
-        // Item drop (roll for rarity with pity system)
+        // Item drop (GPT format: itemChance + rarityWeights)
         let droppedItem = null;
         let droppedItemRarity = null;
-        const itemRoll = Math.random();
-        let cumulative = 0;
 
-        // Apply pity bonus: after 30 silver+gold chests without Epic, add +1% per chest
-        const pityBonus = isSilverOrGold && currentPity >= 30 ? (currentPity - 30 + 1) * 0.01 : 0;
-        const adjustedRates = { ...dropRates.items };
-        if (pityBonus > 0 && (chestType === 'SILVER' || chestType === 'GOLD')) {
-          adjustedRates.EPIC = Math.min(1, adjustedRates.EPIC + pityBonus);
-          console.log(`[Pity] User ${player.odamage} pity=${currentPity}, Epic chance: ${adjustedRates.EPIC * 100}%`);
-        }
+        // Step 1: Check if item drops at all
+        if (Math.random() < dropRates.itemChance) {
+          // Step 2: Roll rarity by weights
+          const weights = { ...dropRates.rarityWeights };
 
-        for (const [rarity, chance] of Object.entries(adjustedRates)) {
-          cumulative += chance;
-          if (itemRoll < cumulative && chance > 0) {
-            droppedItemRarity = rarity;
-            break;
+          // Apply pity bonus for silver+gold: after 30 chests without Epic, +1 weight per chest
+          const pityBonus = isSilverOrGold && currentPity >= 30 ? (currentPity - 30 + 1) : 0;
+          if (pityBonus > 0 && weights.EPIC !== undefined) {
+            weights.EPIC = (weights.EPIC || 0) + pityBonus;
+            console.log(`[Pity] User ${player.odamage} pity=${currentPity}, Epic weight: ${weights.EPIC}`);
+          }
+
+          const totalWeight = Object.values(weights).reduce((sum, w) => sum + (w || 0), 0);
+          let roll = Math.random() * totalWeight;
+
+          for (const [rarity, weight] of Object.entries(weights)) {
+            if (!weight) continue;
+            roll -= weight;
+            if (roll <= 0) {
+              droppedItemRarity = rarity;
+              break;
+            }
           }
         }
 
