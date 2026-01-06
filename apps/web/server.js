@@ -3437,18 +3437,23 @@ app.prepare().then(async () => {
   }, 1000);
 
   // L2: Stamina regen every second (+1 per sec, unless exhausted)
+  // Regen stamina/mana every second and notify clients
   setInterval(() => {
     const now = Date.now();
-    for (const player of onlineUsers.values()) {
+    for (const [socketId, player] of onlineUsers.entries()) {
+      let changed = false;
+
       // Clear exhaustion if expired
       if (player.exhaustedUntil && now >= player.exhaustedUntil) {
         player.exhaustedUntil = null;
+        changed = true;
       }
 
       // Regen stamina only if not exhausted
       if (!StatsService.isExhausted(player.exhaustedUntil)) {
         if (player.stamina < player.maxStamina) {
           player.stamina = Math.min(player.maxStamina, player.stamina + StatsService.STAMINA_REGEN_PER_SEC);
+          changed = true;
         }
       }
 
@@ -3456,6 +3461,21 @@ app.prepare().then(async () => {
       if (player.mana < player.maxMana) {
         const regenAmount = player.manaRegen || BASE_MANA_REGEN;
         player.mana = Math.min(player.maxMana, player.mana + regenAmount);
+        changed = true;
+      }
+
+      // Emit updated state to client
+      if (changed) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.emit('player:state', {
+            stamina: player.stamina,
+            maxStamina: player.maxStamina,
+            mana: player.mana,
+            maxMana: player.maxMana,
+            exhaustedUntil: player.exhaustedUntil,
+          });
+        }
       }
     }
   }, 1000);
