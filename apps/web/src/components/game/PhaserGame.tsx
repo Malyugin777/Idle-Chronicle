@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.8';
+const APP_VERSION = 'v1.0.9';
 
 interface BossState {
   name: string;
@@ -89,23 +89,23 @@ export default function PhaserGame() {
   const [connected, setConnected] = useState(false);
   const [playersOnline, setPlayersOnline] = useState(0);
 
-  // Boss
+  // Boss - initial values 0 so bars show 0% until real data arrives
   const [bossState, setBossState] = useState<BossState>({
     name: 'Loading...',
     nameRu: '',
-    icon: '👹',
-    hp: 1000000,
-    maxHp: 1000000,
-    bossIndex: 1,
+    icon: '⏳',
+    hp: 0,
+    maxHp: 1,
+    bossIndex: 0,
     totalBosses: 100,
   });
 
-  // Player
+  // Player - initial values 0 so bars show 0% until real data arrives
   const [playerState, setPlayerState] = useState<PlayerState>({
-    stamina: 100,
-    maxStamina: 100,
-    mana: 1000,
-    maxMana: 1000,
+    stamina: 0,
+    maxStamina: 1,
+    mana: 0,
+    maxMana: 1,
     exhaustedUntil: null,
   });
 
@@ -385,6 +385,8 @@ export default function PhaserGame() {
     // Regen interval (client-side visual only)
     const regenInterval = setInterval(() => {
       setPlayerState(p => {
+        // Don't regen until we have real data (maxStamina > 1 = real data arrived)
+        if (p.maxStamina <= 1) return p;
         const exhausted = p.exhaustedUntil && Date.now() < p.exhaustedUntil;
         return {
           ...p,
