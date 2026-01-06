@@ -2639,7 +2639,7 @@ app.prepare().then(async () => {
       }
     });
 
-    // BOOST CHEST (ускорить на 30 минут за 999 кристаллов)
+    // BOOST CHEST (ускорить на 30 минут за 999 кристаллов, 1 для debug юзеров)
     socket.on('chest:boost', async (data) => {
       if (!player.odamage) {
         socket.emit('chest:error', { message: 'Not authenticated' });
@@ -2647,7 +2647,8 @@ app.prepare().then(async () => {
       }
 
       const { chestId } = data;
-      const BOOST_COST = 999;       // Кристаллы
+      // Debug: 1 кристалл для тестовых аккаунтов
+      const BOOST_COST = DEBUG_FAST_CHEST_USERNAMES.includes(player.username) ? 1 : 999;
       const BOOST_TIME = 30 * 60 * 1000; // 30 минут в мс
 
       try {
