@@ -46,6 +46,9 @@ interface Skill {
   color: number;
 }
 
+// Storage key for persisting cooldowns across tab switches
+const COOLDOWNS_STORAGE_KEY = 'battle_skill_cooldowns';
+
 export class BattleScene extends Phaser.Scene {
   private socket: Socket | null = null;
 
@@ -137,6 +140,9 @@ export class BattleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
+    // Restore skill cooldowns from storage
+    this.restoreCooldowns();
+
     // Background gradient
     const bg = this.add.graphics();
     bg.fillGradientStyle(0x2a313b, 0x2a313b, 0x0e141b, 0x0e141b, 1);
@@ -146,6 +152,11 @@ export class BattleScene extends Phaser.Scene {
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
     this.updateBossScale();
+
+    // Fix: Recalculate boss scale after a short delay to handle race conditions
+    this.time.delayedCall(100, () => {
+      this.updateBossScale();
+    });
 
     // Tap handler
     this.bossSprite.on('pointerdown', () => {
@@ -340,6 +351,36 @@ export class BattleScene extends Phaser.Scene {
     this.onlineText?.setText(`🟢 ${count} online`);
   }
 
+  // Save cooldowns to sessionStorage so they persist across tab switches
+  private saveCooldowns() {
+    try {
+      const cooldowns: Record<string, number> = {};
+      this.skills.forEach(skill => {
+        cooldowns[skill.id] = skill.lastUsed;
+      });
+      sessionStorage.setItem(COOLDOWNS_STORAGE_KEY, JSON.stringify(cooldowns));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
+  // Restore cooldowns from sessionStorage
+  private restoreCooldowns() {
+    try {
+      const stored = sessionStorage.getItem(COOLDOWNS_STORAGE_KEY);
+      if (stored) {
+        const cooldowns = JSON.parse(stored) as Record<string, number>;
+        this.skills.forEach(skill => {
+          if (cooldowns[skill.id]) {
+            skill.lastUsed = cooldowns[skill.id];
+          }
+        });
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
   private updateManaBar() {
     const { width, height } = this.scale;
     const barWidth = width - 40;
@@ -375,6 +416,9 @@ export class BattleScene extends Phaser.Scene {
     skill.lastUsed = now;
     this.playerState.mana -= skill.manaCost;
     this.updateManaBar();
+
+    // Save cooldowns to persist across tab switches
+    this.saveCooldowns();
 
     // Emit skill to server
     if (this.socket) {

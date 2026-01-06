@@ -87,8 +87,8 @@ function calculateDerived(attributes, level = 1, bonuses = {}) {
   const maxHealth = Math.floor(baseHealth * vitalityMod * (1 + (pct.healthMax || 0))) + (flat.healthMax || 0);
   const maxMana = Math.floor(baseMana * spiritMod * (1 + (pct.manaMax || 0))) + (flat.manaMax || 0);
 
-  // STAMINA: max(30, floor(maxHealth * 10)) - ключевая формула из ТЗ
-  const maxStamina = Math.max(30, Math.floor(maxHealth * 10));
+  // STAMINA: max(100, floor(maxHealth * 10)) - ключевая формула из ТЗ
+  const maxStamina = Math.max(100, Math.floor(maxHealth * 10));
 
   const physicalPower = Math.floor(basePhysicalPower * powerMod * (1 + (pct.physicalPower || 0))) + (flat.physicalPower || 0);
   const magicPower = Math.floor(baseMagicPower * intellectMod * (1 + (pct.magicPower || 0))) + (flat.magicPower || 0);

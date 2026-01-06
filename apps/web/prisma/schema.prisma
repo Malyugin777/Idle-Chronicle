@@ -49,8 +49,8 @@ model User {
   physicalDefense Int      @default(40)    // P.Def for thorns reduction
 
   // Stamina System (NEW - replaces Mana for combat)
-  stamina         Int      @default(30)    // Current stamina
-  maxStamina      Int      @default(30)    // max(30, floor(maxHealth * 10))
+  stamina         Int      @default(100)   // Current stamina
+  maxStamina      Int      @default(100)   // max(100, floor(maxHealth * 10))
   lastStaminaTick DateTime @default(now())
   exhaustedUntil  DateTime?               // null = not exhausted
 

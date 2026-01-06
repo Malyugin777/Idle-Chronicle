@@ -61,8 +61,8 @@ export default function GameCanvas() {
   const [mana, setMana] = useState(1000);
   const [maxMana] = useState(1000);
   // L2 Stamina System (NEW)
-  const [stamina, setStamina] = useState(30);
-  const [maxStamina, setMaxStamina] = useState(30);
+  const [stamina, setStamina] = useState(100);
+  const [maxStamina, setMaxStamina] = useState(100);
   const [exhaustedUntil, setExhaustedUntil] = useState<number | null>(null);
   const [sessionDamage, setSessionDamage] = useState(0);
   const [connected, setConnected] = useState(false);

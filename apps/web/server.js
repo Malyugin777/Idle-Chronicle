@@ -434,8 +434,8 @@ app.prepare().then(async () => {
       physicalDefense: 40,
       attackSpeed: 300,
       // Stamina System (NEW - replaces mana for combat)
-      stamina: 30,
-      maxStamina: 30,
+      stamina: 100,
+      maxStamina: 100,
       exhaustedUntil: null,  // timestamp when exhaustion ends
       // Mana system (kept for skills/magic - future)
       mana: 1000,
@@ -641,8 +641,8 @@ app.prepare().then(async () => {
         player.physicalDefense = user.physicalDefense || 40;
         player.attackSpeed = user.attackSpeed || 300;
         // L2 Stamina (NEW)
-        player.stamina = user.stamina || 30;
-        player.maxStamina = user.maxStamina || 30;
+        player.stamina = user.stamina || 100;
+        player.maxStamina = user.maxStamina || 100;
         player.exhaustedUntil = user.exhaustedUntil ? user.exhaustedUntil.getTime() : null;
         // Mana
         player.mana = user.mana;
