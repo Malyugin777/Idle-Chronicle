@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import * as Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
 
 // Get device pixel ratio for sharp rendering on Retina/high-DPI displays
@@ -26,7 +26,6 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   render: {
     pixelArt: false,
     antialias: true,
-    resolution: dpr,  // Render at native resolution
   },
   audio: {
     disableWebAudio: true,
