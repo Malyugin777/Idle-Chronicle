@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Package, Lock, Gem, Gift, Coins } from 'lucide-react';
+import { Package, Gem, Coins } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 type ChestRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -12,14 +12,6 @@ interface Chest {
   rarity: ChestRarity;
   openingStarted: number | null;
   openingDuration: number;
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  icon: string;
-  quantity: number;
-  rarity: ChestRarity;
 }
 
 interface ClaimedReward {
@@ -41,18 +33,15 @@ const CHEST_CONFIG: Record<ChestRarity, { icon: string; color: string; bgColor: 
   LEGENDARY: { icon: '🏆', color: 'text-orange-400', bgColor: 'bg-orange-500/20', duration: 24 * 60 * 60 * 1000 },
 };
 
-const SLOT_UNLOCK_COST = 50;
-
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
   const [crystals, setCrystals] = useState(0);
-  const [unlockedSlots, setUnlockedSlots] = useState(5);
   const [chests, setChests] = useState<Chest[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [now, setNow] = useState(Date.now());
   const [claimedReward, setClaimedReward] = useState<ClaimedReward | null>(null);
+  const [selectedChest, setSelectedChest] = useState<Chest | null>(null);
 
   // Update timer every second
   useEffect(() => {
@@ -137,12 +126,10 @@ export default function TreasuryTab() {
     getSocket().emit('chest:claim', { chestId });
   };
 
-  // Unlock new slot (TODO: implement on server)
-  const unlockSlot = () => {
-    if (crystals < SLOT_UNLOCK_COST || unlockedSlots >= 10) return;
-    // For now just local state - needs server implementation
-    setCrystals(prev => prev - SLOT_UNLOCK_COST);
-    setUnlockedSlots(prev => prev + 1);
+  // Delete chest
+  const deleteChest = (chestId: string) => {
+    getSocket().emit('chest:delete', { chestId });
+    setChests(prev => prev.filter(c => c.id !== chestId));
   };
 
   // Format time remaining
@@ -228,150 +215,166 @@ export default function TreasuryTab() {
         </div>
       </div>
 
-      {/* Chests Section */}
+      {/* Chests in Inventory Slots */}
       <div className="p-2">
-        <div className="text-xs text-gray-400 mb-2">{t.treasury.chests}</div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-gray-400">{t.treasury.chests}</span>
+          <span className="text-xs text-gray-500">{chests.length}/10</span>
+        </div>
 
         {chests.length === 0 ? (
-          <div className="bg-black/30 rounded p-4 text-center">
-            <Package size={32} className="mx-auto mb-2 opacity-30" />
+          <div className="bg-black/30 rounded-lg p-6 text-center">
+            <Package size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-gray-500 text-sm">{t.treasury.noChests}</p>
-            <p className="text-gray-600 text-xs">{t.treasury.defeatBosses}</p>
+            <p className="text-gray-600 text-xs mt-1">{t.treasury.defeatBosses}</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {chests.map((chest) => {
+          <div className="grid grid-cols-5 gap-2">
+            {chests.slice(0, 10).map((chest) => {
               const config = CHEST_CONFIG[chest.rarity];
               const isOpening = chest.openingStarted !== null;
               const elapsed = isOpening ? now - chest.openingStarted! : 0;
               const remaining = chest.openingDuration - elapsed;
               const isReady = isOpening && remaining <= 0;
               const progress = isOpening ? Math.min(100, (elapsed / chest.openingDuration) * 100) : 0;
-              const canOpen = !openingChest || openingChest.id === chest.id;
 
               return (
-                <div
+                <button
                   key={chest.id}
-                  className={`${config.bgColor} rounded-lg p-3 border border-white/10`}
+                  onClick={() => setSelectedChest(chest)}
+                  className={`aspect-square ${config.bgColor} rounded-lg border-2 ${
+                    isReady ? 'border-l2-gold animate-pulse' : 'border-white/20'
+                  } flex flex-col items-center justify-center relative hover:brightness-110 active:scale-95 transition-all`}
                 >
-                  <div className="flex items-center gap-3">
-                    {/* Chest icon */}
-                    <div className="text-3xl">{config.icon}</div>
-
-                    {/* Info */}
-                    <div className="flex-1">
-                      <div className={`font-bold ${config.color}`}>
-                        {getRarityLabel(chest.rarity)}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {isOpening ? (isReady ? t.treasury.claim : formatTime(remaining)) : formatTime(chest.openingDuration)}
-                      </div>
-                    </div>
-
-                    {/* Action button */}
-                    {isReady ? (
-                      <button
-                        onClick={() => claimChest(chest.id)}
-                        className="px-4 py-2 bg-l2-gold text-black font-bold rounded text-sm animate-pulse"
-                      >
-                        {t.treasury.claim}
-                      </button>
-                    ) : isOpening ? (
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-white">{formatTime(remaining)}</div>
-                        <div className="w-20 h-1 bg-black/50 rounded-full mt-1">
-                          <div
-                            className="h-full bg-l2-gold rounded-full transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => startOpening(chest.id)}
-                        disabled={!canOpen}
-                        className={`px-4 py-2 rounded text-sm font-bold ${
-                          canOpen
-                            ? 'bg-white/10 text-white hover:bg-white/20'
-                            : 'bg-black/30 text-gray-600 cursor-not-allowed'
-                        }`}
-                      >
-                        {t.treasury.openChest}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Opening progress bar */}
+                  <span className="text-2xl">{config.icon}</span>
                   {isOpening && !isReady && (
-                    <div className="mt-2 h-1 bg-black/30 rounded-full overflow-hidden">
+                    <div className="absolute bottom-1 left-1 right-1 h-1 bg-black/50 rounded-full overflow-hidden">
                       <div
-                        className={`h-full ${config.color.replace('text-', 'bg-')} transition-all`}
+                        className="h-full bg-l2-gold rounded-full transition-all"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
                   )}
-                </div>
+                  {isReady && (
+                    <span className="absolute -top-1 -right-1 text-xs">✨</span>
+                  )}
+                </button>
               );
             })}
+            {/* Empty slots */}
+            {Array.from({ length: Math.max(0, 10 - chests.length) }).map((_, i) => (
+              <div
+                key={`empty-${i}`}
+                className="aspect-square bg-black/30 rounded-lg border border-white/5 flex items-center justify-center"
+              >
+                <span className="text-[10px] text-gray-700">-</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Inventory Section */}
-      <div className="p-2">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-400">{t.treasury.inventory}</span>
-          <span className="text-xs text-gray-500">{unlockedSlots}/10 {t.treasury.slots}</span>
-        </div>
-
-        <div className="grid grid-cols-5 gap-1">
-          {Array.from({ length: 10 }).map((_, i) => {
-            const isLocked = i >= unlockedSlots;
-            const item = inventory[i];
-
-            if (isLocked) {
-              return (
-                <button
-                  key={i}
-                  onClick={unlockSlot}
-                  disabled={crystals < SLOT_UNLOCK_COST}
-                  className="aspect-square bg-black/50 rounded border border-white/5 flex flex-col items-center justify-center hover:bg-black/40 transition-colors"
-                  title={`${t.treasury.unlockFor} ${SLOT_UNLOCK_COST} 💎`}
-                >
-                  <Lock size={14} className="text-gray-600" />
-                  <span className="text-[8px] text-gray-600 mt-0.5">{SLOT_UNLOCK_COST}💎</span>
-                </button>
-              );
-            }
-
-            if (item) {
-              const config = CHEST_CONFIG[item.rarity];
-              return (
-                <div
-                  key={i}
-                  className={`aspect-square ${config.bgColor} rounded border border-white/10 flex flex-col items-center justify-center relative`}
-                >
-                  <span className="text-lg">{item.icon}</span>
-                  {item.quantity > 1 && (
-                    <span className="absolute bottom-0.5 right-1 text-[10px] text-white font-bold">
-                      x{item.quantity}
-                    </span>
-                  )}
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={i}
-                className="aspect-square bg-black/30 rounded border border-white/5 flex items-center justify-center"
-              >
-                <span className="text-[10px] text-gray-700">-</span>
+      {/* Chest Action Popup */}
+      {selectedChest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setSelectedChest(null)}>
+          <div
+            className={`${CHEST_CONFIG[selectedChest.rarity].bgColor} rounded-xl p-4 w-full max-w-xs border-2 border-white/20`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center mb-4">
+              <div className="text-5xl mb-2">{CHEST_CONFIG[selectedChest.rarity].icon}</div>
+              <div className={`text-lg font-bold ${CHEST_CONFIG[selectedChest.rarity].color}`}>
+                {getRarityLabel(selectedChest.rarity)}
               </div>
-            );
-          })}
+              {(() => {
+                const isOpening = selectedChest.openingStarted !== null;
+                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const remaining = selectedChest.openingDuration - elapsed;
+                const isReady = isOpening && remaining <= 0;
+
+                if (isReady) {
+                  return <div className="text-l2-gold text-sm mt-1">{t.treasury.claim}!</div>;
+                } else if (isOpening) {
+                  return <div className="text-gray-400 text-sm mt-1">{formatTime(remaining)}</div>;
+                } else {
+                  return <div className="text-gray-500 text-sm mt-1">{formatTime(selectedChest.openingDuration)}</div>;
+                }
+              })()}
+            </div>
+
+            <div className="space-y-2">
+              {(() => {
+                const isOpening = selectedChest.openingStarted !== null;
+                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const remaining = selectedChest.openingDuration - elapsed;
+                const isReady = isOpening && remaining <= 0;
+                const canOpen = !openingChest || openingChest.id === selectedChest.id;
+
+                if (isReady) {
+                  return (
+                    <button
+                      onClick={() => {
+                        claimChest(selectedChest.id);
+                        setSelectedChest(null);
+                      }}
+                      className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg text-sm"
+                    >
+                      {t.treasury.claim}
+                    </button>
+                  );
+                } else if (isOpening) {
+                  return (
+                    <div className="py-3 bg-black/30 rounded-lg text-center">
+                      <div className="text-sm text-gray-400">{t.treasury.opening}</div>
+                      <div className="w-full h-2 bg-black/50 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className="h-full bg-l2-gold rounded-full transition-all"
+                          style={{ width: `${Math.min(100, (elapsed / selectedChest.openingDuration) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <button
+                      onClick={() => {
+                        if (canOpen) {
+                          startOpening(selectedChest.id);
+                        }
+                      }}
+                      disabled={!canOpen}
+                      className={`w-full py-3 rounded-lg text-sm font-bold ${
+                        canOpen
+                          ? 'bg-white/10 text-white hover:bg-white/20'
+                          : 'bg-black/30 text-gray-600 cursor-not-allowed'
+                      }`}
+                    >
+                      {t.treasury.openChest}
+                    </button>
+                  );
+                }
+              })()}
+
+              <button
+                onClick={() => {
+                  deleteChest(selectedChest.id);
+                  setSelectedChest(null);
+                }}
+                className="w-full py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30"
+              >
+                🗑️ Удалить
+              </button>
+
+              <button
+                onClick={() => setSelectedChest(null)}
+                className="w-full py-2 bg-black/30 text-gray-400 rounded-lg text-sm hover:bg-black/40"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

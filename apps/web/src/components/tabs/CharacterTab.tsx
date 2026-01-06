@@ -109,34 +109,6 @@ const RARITY_STYLES: Record<Rarity, { border: string; glow: string; text: string
   },
 };
 
-// Test items for demo
-const TEST_ITEMS: Item[] = [
-  {
-    id: 'test_sword_001',
-    name: 'Ржавый меч',
-    slotType: 'weapon',
-    rarity: 'common',
-    icon: '🗡️',
-    stats: { pAtkFlat: 5 },
-  },
-  {
-    id: 'test_helmet_001',
-    name: 'Кожаный шлем',
-    slotType: 'helmet',
-    rarity: 'uncommon',
-    icon: '🪖',
-    stats: { pDefFlat: 3 },
-  },
-  {
-    id: 'test_ring_001',
-    name: 'Кольцо удачи',
-    slotType: 'ring1',
-    rarity: 'rare',
-    icon: '💍',
-    stats: { critFlat: 0.05 },
-  },
-];
-
 // ═══════════════════════════════════════════════════════════
 // STAT SYSTEM (local recalculation)
 // ═══════════════════════════════════════════════════════════
@@ -397,9 +369,7 @@ export default function CharacterTab() {
       };
 
       setHeroState(prev => {
-        // Add test items to inventory if empty (first load)
-        const inventory = prev.inventory.length === 0 ? [...TEST_ITEMS] : prev.inventory;
-        const newState = { ...prev, baseStats, inventory };
+        const newState = { ...prev, baseStats };
         newState.derivedStats = recalculateDerivedStats(newState);
         return newState;
       });
@@ -433,11 +403,6 @@ export default function CharacterTab() {
       setSelectedItem({ item, isEquipped: true, slotType });
     }
   }, [heroState.equipment]);
-
-  // Click on inventory item
-  const handleInventoryItemClick = useCallback((item: Item) => {
-    setSelectedItem({ item, isEquipped: false });
-  }, []);
 
   if (!heroState.baseStats) {
     return (
@@ -670,36 +635,6 @@ export default function CharacterTab() {
           </div>
         </div>
       )}
-
-      {/* Inventory */}
-      <div className="p-2">
-        <div className="text-xs text-gray-400 mb-1">{t.character.inventory}</div>
-        <div className="grid grid-cols-6 gap-1">
-          {/* Inventory items */}
-          {heroState.inventory.map((item) => {
-            const style = RARITY_STYLES[item.rarity];
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleInventoryItemClick(item)}
-                className={`aspect-square bg-black/60 rounded border-2 ${style.border} ${style.glow}
-                  flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
-              >
-                <span className="text-lg">{item.icon}</span>
-              </button>
-            );
-          })}
-          {/* Empty slots */}
-          {Array.from({ length: Math.max(0, 24 - heroState.inventory.length) }).map((_, i) => (
-            <div
-              key={`empty-${i}`}
-              className="aspect-square bg-black/30 rounded border border-white/5 flex items-center justify-center"
-            >
-              <span className="text-[10px] text-gray-700">-</span>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Item Tooltip */}
       {selectedItem && (

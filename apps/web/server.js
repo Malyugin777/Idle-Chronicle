@@ -383,20 +383,50 @@ function updateRagePhase() {
 // thornsDamage: обратка босса - тратит stamina игрока при каждом тапе
 // tonReward и chestsReward: 50% финальному удару, 50% топ урону
 // expReward: распределяется по всем участникам по % урона
-const DEFAULT_BOSSES = [
-  // Первые 5 боссов с картинками
-  { name: 'Serpent', nameRu: 'Змей', hp: 500000, defense: 0, thornsDamage: 0, icon: '🐍', image: '/assets/bosses/boss_1.png', adenaReward: 1000, expReward: 1000000, tonReward: 10, chestsReward: 10 },
-  { name: 'Plague Rat', nameRu: 'Чумная Крыса', hp: 750000, defense: 5, thornsDamage: 1, icon: '🐀', image: '/assets/bosses/boss_2.png', adenaReward: 2000, expReward: 1500000, tonReward: 15, chestsReward: 12 },
-  { name: 'Lizardman', nameRu: 'Ящер', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🦎', image: '/assets/bosses/boss_3.png', adenaReward: 3500, expReward: 2000000, tonReward: 20, chestsReward: 15 },
-  { name: 'Hell Hound', nameRu: 'Адский Пёс', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐕', image: '/assets/bosses/boss_4.png', adenaReward: 5000, expReward: 3000000, tonReward: 30, chestsReward: 18 },
-  { name: 'Poison Toad', nameRu: 'Ядовитая Жаба', hp: 2000000, defense: 20, thornsDamage: 4, icon: '🐸', image: '/assets/bosses/boss_5.png', adenaReward: 7000, expReward: 4000000, tonReward: 40, chestsReward: 20 },
-  // Будущие боссы (пока без картинок - используют эмодзи)
-  { name: 'Kraken', nameRu: 'Кракен', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000000, tonReward: 50, chestsReward: 25 },
-  { name: 'Dragon', nameRu: 'Дракон', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 7000000, tonReward: 70, chestsReward: 30 },
-  { name: 'Hydra', nameRu: 'Гидра', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 10000000, tonReward: 100, chestsReward: 40 },
-  { name: 'Phoenix', nameRu: 'Феникс', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 15000000, tonReward: 150, chestsReward: 50 },
-  { name: 'Ancient Dragon', nameRu: 'Древний Дракон', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 25000000, tonReward: 250, chestsReward: 75 },
+// Boss templates (names/icons/images)
+const BOSS_TEMPLATES = [
+  { name: 'Serpent', nameRu: 'Змей', icon: '🐍', image: '/assets/bosses/boss_1.png' },
+  { name: 'Plague Rat', nameRu: 'Чумная Крыса', icon: '🐀', image: '/assets/bosses/boss_2.png' },
+  { name: 'Lizardman', nameRu: 'Ящер', icon: '🦎', image: '/assets/bosses/boss_3.png' },
+  { name: 'Hell Hound', nameRu: 'Адский Пёс', icon: '🐕', image: '/assets/bosses/boss_4.png' },
+  { name: 'Poison Toad', nameRu: 'Ядовитая Жаба', icon: '🐸', image: '/assets/bosses/boss_5.png' },
+  { name: 'Kraken', nameRu: 'Кракен', icon: '🐙' },
+  { name: 'Dragon', nameRu: 'Дракон', icon: '🐉' },
+  { name: 'Hydra', nameRu: 'Гидра', icon: '🐍' },
+  { name: 'Phoenix', nameRu: 'Феникс', icon: '🔥' },
+  { name: 'Ancient Dragon', nameRu: 'Древний Дракон', icon: '🏴' },
 ];
+
+// Generate boss stats dynamically (x2 rewards, x3 HP per boss)
+// First boss: 500K HP, 100K adena, 100K exp, 10 TON, 10 chests
+function getBossStats(index) {
+  const template = BOSS_TEMPLATES[index % BOSS_TEMPLATES.length];
+  const multiplier = Math.pow(2, index); // x2 for each boss
+  const hpMultiplier = Math.pow(3, index); // x3 HP for each boss
+
+  return {
+    ...template,
+    hp: Math.floor(500000 * hpMultiplier),
+    defense: Math.floor(index * 5),
+    thornsDamage: Math.floor(index * 2),
+    adenaReward: Math.floor(100000 * multiplier),
+    expReward: Math.floor(100000 * multiplier),
+    tonReward: Math.floor(10 * multiplier),
+    chestsReward: Math.floor(10 * multiplier),
+  };
+}
+
+// Backwards compatibility wrapper
+const DEFAULT_BOSSES = new Proxy([], {
+  get(target, prop) {
+    if (prop === 'length') return 100; // 100 bosses
+    const index = parseInt(prop, 10);
+    if (!isNaN(index) && index >= 0 && index < 100) {
+      return getBossStats(index);
+    }
+    return undefined;
+  }
+});
 
 // Respawn timer (10 minutes = 600000ms)
 // Using BOSS_RESPAWN_TIME_MS (5 min) and bossRespawnAt from line 98-99
@@ -497,6 +527,204 @@ async function respawnBoss(prisma, forceNext = true) {
 
   sessionLeaderboard.clear();
   console.log(`[Boss] Respawned: ${bossState.name} (${bossState.bossIndex}/${bossState.totalBosses}) with ${bossState.maxHp} HP`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOSS KILL HANDLER (shared between tap and auto-attack)
+// ═══════════════════════════════════════════════════════════
+
+async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
+  console.log(`[Boss] ${bossState.name} killed by ${killerPlayer.odamageN}!`);
+
+  // Build leaderboard with photoUrl
+  const leaderboard = Array.from(sessionLeaderboard.entries())
+    .map(([id, data]) => ({
+      odamage: id,
+      visitorId: id,
+      visitorName: data.odamageN,
+      photoUrl: data.photoUrl,
+      damage: data.odamage,
+    }))
+    .sort((a, b) => b.damage - a.damage);
+
+  const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
+  const topDamagePlayer = leaderboard[0];
+  const finalBlowPlayer = killerPlayer;
+
+  // Prize pool from boss config
+  const tonPool = bossState.tonReward || 10;
+  const chestsPool = bossState.chestsReward || 10;
+  const expPool = bossState.expReward || 1000000;
+  const adenaPool = bossState.adenaReward || 5000;
+
+  // TON and Chests: 50% to final blow, 50% to top damage
+  const tonForFinalBlow = tonPool / 2;
+  const tonForTopDamage = tonPool / 2;
+  const chestsForFinalBlow = Math.floor(chestsPool / 2);
+  const chestsForTopDamage = Math.ceil(chestsPool / 2);
+
+  // Helper: generate random chest rarity
+  const getRandomChestRarity = () => {
+    const roll = Math.random();
+    if (roll < 0.50) return 'COMMON';
+    if (roll < 0.80) return 'UNCOMMON';
+    if (roll < 0.95) return 'RARE';
+    if (roll < 0.99) return 'EPIC';
+    return 'LEGENDARY';
+  };
+
+  // Distribute rewards to all participants
+  const rewards = [];
+  for (const entry of leaderboard) {
+    const damagePercent = entry.damage / totalDamageDealt;
+    let adenaReward = Math.floor(adenaPool * damagePercent);
+    let expReward = Math.floor(expPool * damagePercent);
+    let tonReward = 0;
+    let chestsReward = 0;
+
+    // Final blow gets 50% TON and chests
+    const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
+    if (isFinalBlow) {
+      tonReward += tonForFinalBlow;
+      chestsReward += chestsForFinalBlow;
+    }
+
+    // Top damage gets 50% TON and chests
+    const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
+    if (isTopDamage) {
+      tonReward += tonForTopDamage;
+      chestsReward += chestsForTopDamage;
+    }
+
+    rewards.push({
+      odamage: entry.odamage,
+      visitorName: entry.visitorName,
+      photoUrl: entry.photoUrl,
+      damage: entry.damage,
+      damagePercent: Math.round(damagePercent * 100),
+      adenaReward,
+      expReward,
+      tonReward,
+      chestsReward,
+      isFinalBlow,
+      isTopDamage,
+    });
+
+    // Update player in DB
+    try {
+      await prisma.user.update({
+        where: { id: entry.odamage },
+        data: {
+          adena: { increment: BigInt(adenaReward) },
+          exp: { increment: BigInt(expReward) },
+          tonBalance: { increment: tonReward },
+          totalDamage: { increment: BigInt(entry.damage) },
+          bossesKilled: { increment: isFinalBlow ? 1 : 0 },
+        },
+      });
+
+      // Create chests for winners
+      if (chestsReward > 0) {
+        const chestCreates = [];
+        for (let i = 0; i < chestsReward; i++) {
+          const rarity = getRandomChestRarity();
+          chestCreates.push({
+            userId: entry.odamage,
+            rarity: rarity,
+            openingDuration: CHEST_CONFIG[rarity].duration,
+            fromBossId: bossState.id,
+            fromSessionId: bossState.sessionId,
+          });
+        }
+        await prisma.chest.createMany({ data: chestCreates });
+      }
+
+      // Update in-memory player if online
+      for (const [sid, p] of onlineUsers.entries()) {
+        if (p.odamage === entry.odamage) {
+          p.adena += adenaReward;
+          p.sessionDamage = 0;
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('[Reward] Error:', e.message);
+    }
+  }
+
+  // Add damagePercent to leaderboard entries
+  const leaderboardWithPercent = leaderboard.map(entry => ({
+    ...entry,
+    damagePercent: Math.round((entry.damage / totalDamageDealt) * 100),
+  }));
+
+  // Store previous boss session for leaderboard tab
+  previousBossSession = {
+    bossName: bossState.name,
+    bossIcon: bossState.icon,
+    maxHp: bossState.maxHp,
+    totalDamage: totalDamageDealt,
+    finalBlowBy: finalBlowPlayer.odamageN,
+    finalBlowPhoto: finalBlowPlayer.photoUrl,
+    finalBlowDamage: rewards.find(r => r.isFinalBlow)?.damage || 0,
+    topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
+    topDamagePhoto: topDamagePlayer?.photoUrl,
+    topDamage: topDamagePlayer?.damage || 0,
+    prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+    leaderboard: leaderboardWithPercent.slice(0, 20),
+    rewards: rewards.slice(0, 20),
+    killedAt: Date.now(),
+  };
+
+  // Update DB session
+  if (bossState.sessionId) {
+    try {
+      await prisma.bossSession.update({
+        where: { id: bossState.sessionId },
+        data: {
+          endedAt: new Date(),
+          bossName: bossState.name,
+          totalDamage: BigInt(totalDamageDealt),
+          finalBlowBy: finalBlowPlayer.odamage || null,
+          finalBlowName: finalBlowPlayer.odamageN,
+          finalBlowDamage: BigInt(rewards.find(r => r.isFinalBlow)?.damage || 0),
+          topDamageBy: topDamagePlayer?.odamage || null,
+          topDamageName: topDamagePlayer?.visitorName,
+          topDamage: BigInt(topDamagePlayer?.damage || 0),
+          tonPool: tonPool,
+          chestsPool: chestsPool,
+          expPool: BigInt(expPool),
+          leaderboardSnapshot: leaderboardWithPercent.slice(0, 20),
+        },
+      });
+    } catch (e) {
+      console.error('[Boss] Session update error:', e.message);
+    }
+  }
+
+  // Set respawn timer (5 minutes)
+  bossRespawnAt = new Date(Date.now() + BOSS_RESPAWN_TIME_MS);
+
+  io.emit('boss:killed', {
+    bossName: bossState.name,
+    bossIcon: bossState.icon,
+    finalBlowBy: finalBlowPlayer.odamageN,
+    finalBlowPhoto: finalBlowPlayer.photoUrl,
+    topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
+    topDamagePhoto: topDamagePlayer?.photoUrl,
+    topDamage: topDamagePlayer?.damage || 0,
+    prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+    leaderboard: leaderboardWithPercent.slice(0, 10),
+    rewards: rewards.slice(0, 10),
+    respawnAt: bossRespawnAt.getTime(),
+    respawnIn: BOSS_RESPAWN_TIME_MS,
+  });
+
+  console.log(`[Boss] ${bossState.name} killed! Final blow: ${finalBlowPlayer.odamageN} (${tonForFinalBlow} TON, ${chestsForFinalBlow} chests), Top damage: ${topDamagePlayer?.visitorName} (${tonForTopDamage} TON, ${chestsForTopDamage} chests)`);
+  console.log(`[Boss] Next boss spawning at ${bossRespawnAt.toISOString()}`);
+
+  // Save state immediately after boss kill
+  await saveBossState(prisma);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1046,197 +1274,7 @@ app.prepare().then(async () => {
 
       // Boss killed
       if (bossState.currentHp <= 0) {
-        console.log(`[Boss] ${bossState.name} killed by ${player.odamageN}!`);
-
-        // Build leaderboard with photoUrl
-        const leaderboard = Array.from(sessionLeaderboard.entries())
-          .map(([id, data]) => ({
-            odamage: id,
-            visitorId: id,
-            visitorName: data.odamageN,
-            photoUrl: data.photoUrl,
-            damage: data.odamage,
-          }))
-          .sort((a, b) => b.damage - a.damage);
-
-        const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
-        const topDamagePlayer = leaderboard[0];
-        const finalBlowPlayer = player;
-
-        // Prize pool from boss config
-        const tonPool = bossState.tonReward || 10;
-        const chestsPool = bossState.chestsReward || 10;
-        const expPool = bossState.expReward || 1000000;
-        const adenaPool = bossState.adenaReward || 5000;
-
-        // TON and Chests: 50% to final blow, 50% to top damage
-        const tonForFinalBlow = tonPool / 2;
-        const tonForTopDamage = tonPool / 2;
-        const chestsForFinalBlow = Math.floor(chestsPool / 2);
-        const chestsForTopDamage = Math.ceil(chestsPool / 2);
-
-        // Helper: generate random chest rarity
-        const getRandomChestRarity = () => {
-          const roll = Math.random();
-          if (roll < 0.50) return 'COMMON';
-          if (roll < 0.80) return 'UNCOMMON';
-          if (roll < 0.95) return 'RARE';
-          if (roll < 0.99) return 'EPIC';
-          return 'LEGENDARY';
-        };
-
-        // Distribute rewards to all participants
-        const rewards = [];
-        for (const entry of leaderboard) {
-          const damagePercent = entry.damage / totalDamageDealt;
-          let adenaReward = Math.floor(adenaPool * damagePercent);
-          let expReward = Math.floor(expPool * damagePercent);
-          let tonReward = 0;
-          let chestsReward = 0;
-
-          // Final blow gets 50% TON and chests
-          const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
-          if (isFinalBlow) {
-            tonReward += tonForFinalBlow;
-            chestsReward += chestsForFinalBlow;
-          }
-
-          // Top damage gets 50% TON and chests
-          const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
-          if (isTopDamage) {
-            tonReward += tonForTopDamage;
-            chestsReward += chestsForTopDamage;
-          }
-
-          rewards.push({
-            odamage: entry.odamage,
-            visitorName: entry.visitorName,
-            photoUrl: entry.photoUrl,
-            damage: entry.damage,
-            damagePercent: Math.round(damagePercent * 100),
-            adenaReward,
-            expReward,
-            tonReward,
-            chestsReward,
-            isFinalBlow,
-            isTopDamage,
-          });
-
-          // Update player in DB
-          try {
-            await prisma.user.update({
-              where: { id: entry.odamage },
-              data: {
-                adena: { increment: BigInt(adenaReward) },
-                exp: { increment: BigInt(expReward) },
-                tonBalance: { increment: tonReward },
-                totalDamage: { increment: BigInt(entry.damage) },
-                bossesKilled: { increment: isFinalBlow ? 1 : 0 },
-              },
-            });
-
-            // Create chests for winners
-            if (chestsReward > 0) {
-              const chestCreates = [];
-              for (let i = 0; i < chestsReward; i++) {
-                const rarity = getRandomChestRarity();
-                chestCreates.push({
-                  userId: entry.odamage,
-                  rarity: rarity,
-                  openingDuration: CHEST_CONFIG[rarity].duration,
-                  fromBossId: bossState.id,
-                  fromSessionId: bossState.sessionId,
-                });
-              }
-              await prisma.chest.createMany({ data: chestCreates });
-            }
-
-            // Update in-memory player if online
-            for (const [sid, p] of onlineUsers.entries()) {
-              if (p.odamage === entry.odamage) {
-                p.adena += adenaReward;
-                p.sessionDamage = 0;
-                break;
-              }
-            }
-          } catch (e) {
-            console.error('[Reward] Error:', e.message);
-          }
-        }
-
-        // Add damagePercent to leaderboard entries
-        const leaderboardWithPercent = leaderboard.map(entry => ({
-          ...entry,
-          damagePercent: Math.round((entry.damage / totalDamageDealt) * 100),
-        }));
-
-        // Store previous boss session for leaderboard tab
-        previousBossSession = {
-          bossName: bossState.name,
-          bossIcon: bossState.icon,
-          maxHp: bossState.maxHp,
-          totalDamage: totalDamageDealt,
-          finalBlowBy: finalBlowPlayer.odamageN,
-          finalBlowPhoto: finalBlowPlayer.photoUrl,
-          finalBlowDamage: rewards.find(r => r.isFinalBlow)?.damage || 0,
-          topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
-          topDamagePhoto: topDamagePlayer?.photoUrl,
-          topDamage: topDamagePlayer?.damage || 0,
-          prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
-          leaderboard: leaderboardWithPercent.slice(0, 20),
-          rewards: rewards.slice(0, 20),
-          killedAt: Date.now(),
-        };
-
-        // Update DB session
-        if (bossState.sessionId) {
-          try {
-            await prisma.bossSession.update({
-              where: { id: bossState.sessionId },
-              data: {
-                endedAt: new Date(),
-                bossName: bossState.name,
-                totalDamage: BigInt(totalDamageDealt),
-                finalBlowBy: finalBlowPlayer.odamage || null,
-                finalBlowName: finalBlowPlayer.odamageN,
-                finalBlowDamage: BigInt(rewards.find(r => r.isFinalBlow)?.damage || 0),
-                topDamageBy: topDamagePlayer?.odamage || null,
-                topDamageName: topDamagePlayer?.visitorName,
-                topDamage: BigInt(topDamagePlayer?.damage || 0),
-                tonPool: tonPool,
-                chestsPool: chestsPool,
-                expPool: BigInt(expPool),
-                leaderboardSnapshot: leaderboardWithPercent.slice(0, 20),
-              },
-            });
-          } catch (e) {
-            console.error('[Boss] Session update error:', e.message);
-          }
-        }
-
-        // Set respawn timer (5 minutes)
-        bossRespawnAt = new Date(Date.now() + BOSS_RESPAWN_TIME_MS);
-
-        io.emit('boss:killed', {
-          bossName: bossState.name,
-          bossIcon: bossState.icon,
-          finalBlowBy: finalBlowPlayer.odamageN,
-          finalBlowPhoto: finalBlowPlayer.photoUrl,
-          topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
-          topDamagePhoto: topDamagePlayer?.photoUrl,
-          topDamage: topDamagePlayer?.damage || 0,
-          prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
-          leaderboard: leaderboardWithPercent.slice(0, 10),
-          rewards: rewards.slice(0, 10),
-          respawnAt: bossRespawnAt.getTime(),
-          respawnIn: BOSS_RESPAWN_TIME_MS,
-        });
-
-        console.log(`[Boss] ${bossState.name} killed! Final blow: ${finalBlowPlayer.odamageN} (${tonForFinalBlow} TON, ${chestsForFinalBlow} chests), Top damage: ${topDamagePlayer?.visitorName} (${tonForTopDamage} TON, ${chestsForTopDamage} chests)`);
-        console.log(`[Boss] Next boss spawning at ${bossRespawnAt.toISOString()}`);
-
-        // Save state immediately after boss kill
-        await saveBossState(prisma);
+        await handleBossKill(io, prisma, player, socket.id);
       }
     });
 
@@ -1537,6 +1575,36 @@ app.prepare().then(async () => {
       } catch (err) {
         console.error('[Chest] Claim error:', err.message);
         socket.emit('chest:error', { message: 'Failed to claim chest' });
+      }
+    });
+
+    // DELETE CHEST
+    socket.on('chest:delete', async (data) => {
+      if (!player.odamage) {
+        socket.emit('chest:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { chestId } = data;
+
+      try {
+        const chest = await prisma.chest.findUnique({
+          where: { id: chestId },
+        });
+
+        if (!chest || chest.userId !== player.odamage) {
+          socket.emit('chest:error', { message: 'Chest not found' });
+          return;
+        }
+
+        await prisma.chest.delete({
+          where: { id: chestId },
+        });
+
+        socket.emit('chest:deleted', { chestId });
+      } catch (err) {
+        console.error('[Chest] Delete error:', err.message);
+        socket.emit('chest:error', { message: 'Failed to delete chest' });
       }
     });
 
@@ -2043,20 +2111,29 @@ app.prepare().then(async () => {
   }, 1000);
 
   // Auto-attack every second (for players with autoAttackSpeed > 0)
-  setInterval(() => {
+  setInterval(async () => {
     if (bossState.currentHp <= 0) return; // Boss is dead
 
     for (const [socketId, player] of onlineUsers.entries()) {
-      if (player.autoAttackSpeed > 0 && player.odamage) {
+      if (player.autoAttackSpeed > 0 && player.odamage && bossState.currentHp > 0) {
         // Calculate auto damage (same as regular damage but weaker)
         const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
         let totalAutoDamage = 0;
+        let crits = 0;
+        const critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
 
         // Number of auto attacks per second
         for (let i = 0; i < player.autoAttackSpeed; i++) {
           let dmg = baseDamage * (0.8 + Math.random() * 0.2); // Slightly lower variance
           const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
           dmg *= rageMultiplier;
+
+          // Check for crit
+          if (Math.random() < critChance) {
+            dmg *= BASE_CRIT_DAMAGE;
+            crits++;
+          }
+
           dmg = Math.max(1, dmg - bossState.defense);
           totalAutoDamage += Math.floor(dmg);
         }
@@ -2071,6 +2148,7 @@ app.prepare().then(async () => {
           sessionLeaderboard.set(key, {
             odamage: (existing?.odamage || 0) + actualDamage,
             odamageN: player.odamageN,
+            photoUrl: player.photoUrl,
           });
 
           player.sessionDamage += actualDamage;
@@ -2079,25 +2157,34 @@ app.prepare().then(async () => {
           const adenaGained = Math.floor(actualDamage / 200);
           player.adena += adenaGained;
 
-          // Send auto-attack result to player
+          // Send auto-attack result to player with hit animation trigger
           const socket = io.sockets.sockets.get(socketId);
           if (socket) {
             socket.emit('autoAttack:result', {
               damage: actualDamage,
+              crits,
               sessionDamage: player.sessionDamage,
               adena: player.adena,
+              showHitEffect: true, // Trigger hit animation on client
             });
           }
 
-          // Broadcast to damage feed
+          // Broadcast to damage feed (without "Auto" suffix for cleaner UI)
           io.emit('damage:feed', {
-            playerName: player.odamageN + ' (Auto)',
+            playerName: player.odamageN,
             damage: actualDamage,
-            isCrit: false,
+            isCrit: crits > 0,
+            isAuto: true,
           });
 
           // Check rage phase
           updateRagePhase();
+
+          // Check if boss was killed by auto-attack
+          if (bossState.currentHp <= 0) {
+            await handleBossKill(io, prisma, player, socketId);
+            return; // Exit the loop since boss is dead
+          }
         }
       }
     }

@@ -882,6 +882,18 @@ export class BattleScene extends Phaser.Scene {
       if (data.exhaustedUntil !== undefined) this.playerState.exhaustedUntil = data.exhaustedUntil;
       this.updateStaminaBar();
     });
+
+    // Auto-attack result - show hit animation same as manual tap
+    this.socket.on('autoAttack:result', (data: {
+      damage: number;
+      crits: number;
+      showHitEffect?: boolean;
+    }) => {
+      if (data.showHitEffect) {
+        this.showDamageNumber(data.damage, data.crits > 0);
+        this.playHitAnimation(); // Boss shake effect
+      }
+    });
   }
 
   private updateBossScale() {

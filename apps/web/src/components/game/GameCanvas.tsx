@@ -78,7 +78,15 @@ export default function GameCanvas() {
   const [showWelcome, setShowWelcome] = useState(false);
   const [autoAttackDamage, setAutoAttackDamage] = useState(0);
   const [lang, setLang] = useState<Language>('en');
+  const [showDropTable, setShowDropTable] = useState(false);
   const t = useTranslation(lang);
+
+  // Helper to format large numbers
+  const formatCompact = (num: number) => {
+    if (num >= 1000000) return Math.floor(num / 1000000) + 'M';
+    if (num >= 1000) return Math.floor(num / 1000) + 'K';
+    return num.toString();
+  };
 
   // Boss image
   const bossImgRef = useRef<HTMLImageElement | null>(null);
@@ -893,7 +901,139 @@ export default function GameCanvas() {
             style={{ width: `${hpPercent}%` }}
           />
         </div>
+        {/* Drop Button */}
+        <button
+          onClick={() => setShowDropTable(true)}
+          className="mt-2 px-3 py-1 bg-purple-500/20 text-purple-300 text-xs rounded-lg border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+        >
+          🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
+        </button>
       </div>
+
+      {/* Drop Table Popup */}
+      {showDropTable && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setShowDropTable(false)}
+        >
+          <div
+            className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-4">
+              <div className="text-2xl mb-1">🎁</div>
+              <div className="text-lg font-bold text-purple-400">
+                {lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}
+              </div>
+              <div className="text-xs text-gray-500">
+                {lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name}
+                {bossState.bossIndex && ` (${bossState.bossIndex}/${bossState.totalBosses})`}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {/* Adena */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🪙</span>
+                  <span className="text-sm text-gray-300">Adena</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-l2-gold font-bold text-sm">
+                    {formatCompact((bossState.bossIndex || 1) * 100000)}
+                  </div>
+                  <div className="text-[10px] text-gray-500">100%</div>
+                </div>
+              </div>
+
+              {/* EXP */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⭐</span>
+                  <span className="text-sm text-gray-300">EXP</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-green-400 font-bold text-sm">
+                    {formatCompact((bossState.bossIndex || 1) * 100000)}
+                  </div>
+                  <div className="text-[10px] text-gray-500">100%</div>
+                </div>
+              </div>
+
+              {/* TON */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💎</span>
+                  <span className="text-sm text-gray-300">TON</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-blue-400 font-bold text-sm">
+                    {(bossState.bossIndex || 1) * 10}
+                  </div>
+                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
+                </div>
+              </div>
+
+              {/* Chests */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📦</span>
+                  <span className="text-sm text-gray-300">{lang === 'ru' ? 'Сундуки' : 'Chests'}</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-purple-400 font-bold text-sm">
+                    {(bossState.bossIndex || 1) * 10}
+                  </div>
+                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Chest Rarity */}
+            <div className="mt-3 p-2 bg-black/20 rounded-lg">
+              <div className="text-xs text-gray-400 mb-2 text-center">
+                {lang === 'ru' ? 'Шанс редкости сундука' : 'Chest Rarity Chances'}
+              </div>
+              <div className="grid grid-cols-5 gap-1 text-center text-[9px]">
+                <div>
+                  <div className="text-gray-300">📦</div>
+                  <div className="text-gray-400">50%</div>
+                </div>
+                <div>
+                  <div className="text-green-400">🎁</div>
+                  <div className="text-gray-400">30%</div>
+                </div>
+                <div>
+                  <div className="text-blue-400">💎</div>
+                  <div className="text-gray-400">15%</div>
+                </div>
+                <div>
+                  <div className="text-purple-400">👑</div>
+                  <div className="text-gray-400">4%</div>
+                </div>
+                <div>
+                  <div className="text-orange-400">🏆</div>
+                  <div className="text-gray-400">1%</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="mt-3 text-center text-[10px] text-gray-500">
+              {lang === 'ru'
+                ? 'Награды делятся по % нанесённого урона. FB = Добивание, TD = Топ урон'
+                : 'Rewards split by damage %. FB = Final Blow, TD = Top Damage'}
+            </div>
+
+            <button
+              onClick={() => setShowDropTable(false)}
+              className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg font-bold text-sm hover:bg-purple-500/30 transition-colors"
+            >
+              {lang === 'ru' ? 'Закрыть' : 'Close'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Canvas */}
       <div className="flex-1 relative">
