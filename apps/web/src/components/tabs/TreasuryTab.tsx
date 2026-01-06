@@ -70,14 +70,6 @@ const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: stri
   GOLD: { icon: '🟨', name: 'Gold', nameRu: 'Золотой', color: 'text-yellow-400', bgColor: 'bg-yellow-600/30', borderColor: 'border-yellow-500', duration: 8 * 60 * 60 * 1000 },
 };
 
-// Item rarity colors for equipment rewards
-const RARITY_COLORS: Record<string, { color: string; glow: string }> = {
-  COMMON: { color: 'text-gray-300', glow: '' },
-  UNCOMMON: { color: 'text-green-400', glow: 'drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]' },
-  RARE: { color: 'text-purple-400', glow: 'drop-shadow-[0_0_8px_rgba(192,132,252,0.5)]' },
-  EPIC: { color: 'text-orange-400', glow: 'drop-shadow-[0_0_8px_rgba(251,146,60,0.5)]' },
-};
-
 const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
 
 export default function TreasuryTab() {
