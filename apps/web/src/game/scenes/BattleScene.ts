@@ -204,8 +204,11 @@ export class BattleScene extends Phaser.Scene {
       }
     });
 
-    // Flash
-    this.cameras.main.flash(80, 255, 255, 255, false);
+    // Tint flash on boss sprite (instead of full screen flash)
+    this.bossSprite.setTint(0xffffff);
+    this.time.delayedCall(80, () => {
+      this.bossSprite?.clearTint();
+    });
   }
 
   // ─────────────────────────────────────────────────────────
@@ -269,7 +272,10 @@ export class BattleScene extends Phaser.Scene {
       onComplete: () => flash.destroy(),
     });
 
-    this.cameras.main.shake(200, 0.01);
+    // Fire tint on boss + reduced shake
+    this.bossSprite.setTint(0xff6600);
+    this.time.delayedCall(150, () => this.bossSprite?.clearTint());
+    this.cameras.main.shake(150, 0.008);
   }
 
   private playIceballEffect(targetX: number, targetY: number) {
@@ -310,7 +316,9 @@ export class BattleScene extends Phaser.Scene {
       onComplete: () => frost.destroy(),
     });
 
-    this.cameras.main.flash(150, 100, 200, 255, false);
+    // Ice tint on boss
+    this.bossSprite.setTint(0x88ddff);
+    this.time.delayedCall(150, () => this.bossSprite?.clearTint());
   }
 
   private playLightningEffect(targetX: number, targetY: number) {
@@ -376,8 +384,10 @@ export class BattleScene extends Phaser.Scene {
       });
     }
 
-    this.cameras.main.flash(100, 255, 255, 100, false);
-    this.cameras.main.shake(150, 0.015);
+    // Lightning tint on boss + shake
+    this.bossSprite.setTint(0xffff88);
+    this.time.delayedCall(100, () => this.bossSprite?.clearTint());
+    this.cameras.main.shake(150, 0.01);
   }
 
   // ─────────────────────────────────────────────────────────

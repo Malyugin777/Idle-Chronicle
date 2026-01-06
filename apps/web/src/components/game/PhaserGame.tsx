@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.4';
+const APP_VERSION = 'v1.0.5';
 
 interface BossState {
   name: string;
@@ -472,18 +472,20 @@ export default function PhaserGame() {
       <div ref={containerRef} id="game-container" className="flex-1 w-full" />
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* DAMAGE FEED - Top right */}
+      {/* DAMAGE FEED - Right side, between HP bar and Mana bar */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-28 right-3 z-10 text-right space-y-1">
-        {damageFeed.map((item, i) => (
-          <div
-            key={item.timestamp}
-            className={`text-xs ${item.isCrit ? 'text-red-400' : 'text-gray-400'}`}
-            style={{ opacity: 1 - i * 0.2 }}
-          >
-            {item.playerName}: -{item.damage.toLocaleString()}
-          </div>
-        ))}
+      <div className="absolute top-28 bottom-48 right-3 z-10 text-right overflow-hidden flex flex-col justify-start">
+        <div className="space-y-1">
+          {damageFeed.map((item, i) => (
+            <div
+              key={item.timestamp}
+              className={`text-xs ${item.isCrit ? 'text-red-400' : 'text-gray-400'}`}
+              style={{ opacity: 1 - i * 0.2 }}
+            >
+              {item.playerName}: -{item.damage.toLocaleString()}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
