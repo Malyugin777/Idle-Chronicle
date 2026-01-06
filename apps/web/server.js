@@ -3576,7 +3576,8 @@ app.prepare().then(async () => {
 
       // Also regen mana (for future skills)
       if (player.mana < player.maxMana) {
-        const regenAmount = player.manaRegen || BASE_MANA_REGEN;
+        // Минимум BASE_MANA_REGEN (5), даже если в БД меньше
+        const regenAmount = Math.max(player.manaRegen || 0, BASE_MANA_REGEN);
         player.mana = Math.min(player.maxMana, player.mana + regenAmount);
         changed = true;
       }

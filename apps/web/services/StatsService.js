@@ -97,8 +97,8 @@ function calculateDerived(attributes, level = 1, bonuses = {}) {
   // При СТОЙ 12 → 960, при СТОЙ 20 → 1600
   const maxStamina = 800 + (vitality - 10) * 80;
 
-  // MaxMana = 100 + (ДУХ - 10) * 10
-  const baseMana = 100 + (spirit - 10) * 10;
+  // MaxMana = 400 + (ДУХ - 10) * 40 (хватает на 4 скилла базово)
+  const baseMana = 400 + (spirit - 10) * 40;
   const maxMana = Math.floor(baseMana * (1 + (pct.manaMax || 0))) + (flat.manaMax || 0);
 
   // MaxHealth (для отображения, пока не используется в бою)
