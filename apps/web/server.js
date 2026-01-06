@@ -2008,10 +2008,10 @@ app.prepare().then(async () => {
           // Currency
           gold: Number(user.gold),
           ancientCoin: user.ancientCoin || 0,
-          // Mana
-          mana: user.mana,
-          maxMana: user.maxMana,
-          manaRegen: user.manaRegen,
+          // Mana (из памяти, не из БД — избегаем рассинхронизации)
+          mana: player.mana,
+          maxMana: player.maxMana,
+          manaRegen: player.manaRegen,
           tapsPerSecond: user.tapsPerSecond,
           autoAttackSpeed: user.autoAttackSpeed,
           isFirstLogin: user.isFirstLogin,

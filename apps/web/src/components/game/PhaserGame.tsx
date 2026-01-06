@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.16';
+const APP_VERSION = 'v1.0.17';
 
 interface BossState {
   name: string;
@@ -397,22 +397,10 @@ export default function PhaserGame() {
       socket.emit('player:get');
     }
 
-    // Regen interval (client-side visual only)
-    const regenInterval = setInterval(() => {
-      setPlayerState(p => {
-        // Don't regen until we have real data (maxStamina > 1 = real data arrived)
-        if (p.maxStamina <= 1) return p;
-        const exhausted = p.exhaustedUntil && Date.now() < p.exhaustedUntil;
-        return {
-          ...p,
-          stamina: exhausted ? p.stamina : Math.min(p.maxStamina, p.stamina + 1),
-          mana: Math.min(p.maxMana, p.mana + 5),
-        };
-      });
-    }, 1000);
+    // Регенерация теперь только на сервере (player:state каждую секунду)
+    // Клиентский интервал убран чтобы избежать двойной регенерации и скачков
 
     return () => {
-      clearInterval(regenInterval);
       socket.off('connect');
       socket.off('disconnect');
       socket.off('boss:state');
