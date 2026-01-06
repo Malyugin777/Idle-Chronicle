@@ -2128,9 +2128,7 @@ app.prepare().then(async () => {
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
 
-      // Adena reward: 1 adena per 100 damage
-      const goldGained = Math.floor(actualDamage / 100);
-      player.gold += goldGained;
+      // Gold убран из тапов - только из сундуков
 
       player.sessionDamage += actualDamage;
       player.sessionClicks += tapCount;
@@ -2155,8 +2153,6 @@ app.prepare().then(async () => {
         // Legacy mana
         mana: player.mana,
         sessionDamage: player.sessionDamage,
-        gold: player.gold,
-        goldGained,
         soulshotUsed,
         activeSoulshot: player.activeSoulshot,
         [`soulshot${player.activeSoulshot}`]: player.activeSoulshot ? player[`soulshot${player.activeSoulshot}`] : undefined,
@@ -2219,9 +2215,7 @@ app.prepare().then(async () => {
       const actualDamage = Math.min(damage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
 
-      // Adena reward
-      const goldGained = Math.floor(actualDamage / 50); // More adena for skills
-      player.gold += goldGained;
+      // Gold убран - только из сундуков
       player.sessionDamage += actualDamage;
 
       // Update leaderboard
@@ -2239,8 +2233,6 @@ app.prepare().then(async () => {
         damage: actualDamage,
         mana: player.mana,
         maxMana: player.maxMana,
-        gold: player.gold,
-        goldGained,
         sessionDamage: player.sessionDamage,
       });
 
@@ -3618,9 +3610,7 @@ app.prepare().then(async () => {
 
           player.sessionDamage += actualDamage;
 
-          // Adena from auto-attack (lower rate)
-          const goldGained = Math.floor(actualDamage / 200);
-          player.gold += goldGained;
+          // Gold убран - только из сундуков
 
           // Send auto-attack result to player with hit animation trigger
           const socket = io.sockets.sockets.get(socketId);
@@ -3629,7 +3619,6 @@ app.prepare().then(async () => {
               damage: actualDamage,
               crits,
               sessionDamage: player.sessionDamage,
-              gold: player.gold,
               showHitEffect: true, // Trigger hit animation on client
             });
           }
