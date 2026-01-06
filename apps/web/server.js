@@ -744,7 +744,6 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           exp: { increment: BigInt(expReward) },
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: isFinalBlow ? 1 : 0 },
-          bossesParticipated: { increment: entry.isEligible ? 1 : 0 }, // Участие в убийстве босса
         },
       });
 
@@ -2320,7 +2319,6 @@ app.prepare().then(async () => {
             photoUrl: true,
             totalDamage: true,
             bossesKilled: true,
-            bossesParticipated: true,
             tonBalance: true,
           },
         });
@@ -2330,7 +2328,6 @@ app.prepare().then(async () => {
           photoUrl: u.photoUrl,
           damage: Number(u.totalDamage),
           bossesKilled: u.bossesKilled,
-          bossesParticipated: u.bossesParticipated,
           tonBalance: u.tonBalance,
         }));
         socket.emit('leaderboard:alltime', leaderboard);

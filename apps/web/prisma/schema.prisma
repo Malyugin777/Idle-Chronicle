@@ -106,11 +106,10 @@ model User {
   weaponEnchant   Int      @default(0)
 
   // Progression
-  totalDamage        BigInt   @default(0)
-  totalClicks        BigInt   @default(0)
-  bossesKilled       Int      @default(0)
-  bossesParticipated Int      @default(0) // Количество боссов в которых участвовал
-  highestDps         Int      @default(0)
+  totalDamage     BigInt   @default(0)
+  totalClicks     BigInt   @default(0)
+  bossesKilled    Int      @default(0)
+  highestDps      Int      @default(0)
 
   // Offline
   lastOnline      DateTime @default(now())
