@@ -15,6 +15,10 @@ const StatsService = require('./services/StatsService');
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const SKIP_TELEGRAM_AUTH = process.env.NODE_ENV === 'development';
 
+// Admin password
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const RESET_PASSWORD = '1993';
+
 function verifyTelegramAuth(initData) {
   if (!initData || !TELEGRAM_BOT_TOKEN) return false;
   if (SKIP_TELEGRAM_AUTH) return true; // Skip in dev mode
@@ -782,6 +786,381 @@ app.prepare().then(async () => {
         return;
       }
 
+      // ═══════════════════════════════════════════════════════════
+      // ADMIN API ENDPOINTS
+      // ═══════════════════════════════════════════════════════════
+
+      // Helper to parse JSON body
+      const parseBody = () => new Promise((resolve) => {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          try { resolve(JSON.parse(body)); }
+          catch { resolve({}); }
+        });
+      });
+
+      // Helper to check admin auth
+      const checkAdminAuth = () => {
+        const password = req.headers['x-admin-password'];
+        return password === ADMIN_PASSWORD;
+      };
+
+      // Helper to send JSON response
+      const sendJson = (data, status = 200) => {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      };
+
+      // Admin auth
+      if (parsedUrl.pathname === '/api/admin/auth' && req.method === 'POST') {
+        const body = await parseBody();
+        if (body.password === ADMIN_PASSWORD) {
+          sendJson({ success: true });
+        } else {
+          sendJson({ success: false, error: 'Invalid password' }, 401);
+        }
+        return;
+      }
+
+      // Check auth for all admin endpoints
+      if (parsedUrl.pathname.startsWith('/api/admin/')) {
+        if (!checkAdminAuth()) {
+          sendJson({ success: false, error: 'Unauthorized' }, 401);
+          return;
+        }
+
+        // Boss info
+        if (parsedUrl.pathname === '/api/admin/boss' && req.method === 'GET') {
+          sendJson({
+            success: true,
+            boss: bossState,
+            playersOnline: onlineUsers.size,
+          });
+          return;
+        }
+
+        // Change boss
+        if (parsedUrl.pathname === '/api/admin/boss/change' && req.method === 'POST') {
+          const body = await parseBody();
+          const newIndex = Math.max(0, Math.min(99, body.bossIndex || 0));
+          currentBossIndex = newIndex;
+          await respawnBoss(prisma, false);
+          await saveBossState(prisma);
+          sendJson({ success: true, boss: bossState });
+          return;
+        }
+
+        // Force respawn
+        if (parsedUrl.pathname === '/api/admin/boss/respawn' && req.method === 'POST') {
+          await respawnBoss(prisma, true);
+          await saveBossState(prisma);
+          sendJson({ success: true, boss: bossState });
+          return;
+        }
+
+        // Update boss stats
+        if (parsedUrl.pathname === '/api/admin/boss/update' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.name) bossState.name = body.name;
+          if (body.nameRu) bossState.nameRu = body.nameRu;
+          if (body.icon) bossState.icon = body.icon;
+          if (body.currentHp !== undefined) bossState.currentHp = Math.max(0, body.currentHp);
+          if (body.maxHp !== undefined) bossState.maxHp = Math.max(1, body.maxHp);
+          if (body.defense !== undefined) bossState.defense = Math.max(0, body.defense);
+          await saveBossState(prisma);
+          sendJson({ success: true, boss: bossState });
+          return;
+        }
+
+        // Update boss rewards
+        if (parsedUrl.pathname === '/api/admin/boss/rewards' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.adenaReward !== undefined) bossState.adenaReward = body.adenaReward;
+          if (body.expReward !== undefined) bossState.expReward = body.expReward;
+          if (body.tonReward !== undefined) bossState.tonReward = body.tonReward;
+          if (body.chestsReward !== undefined) bossState.chestsReward = body.chestsReward;
+          await saveBossState(prisma);
+          sendJson({ success: true, boss: bossState });
+          return;
+        }
+
+        // List users
+        if (parsedUrl.pathname === '/api/admin/users' && req.method === 'GET') {
+          const search = parsedUrl.query.search || '';
+          const offset = parseInt(parsedUrl.query.offset) || 0;
+          const limit = 50;
+
+          let where = {};
+          if (search) {
+            where = {
+              OR: [
+                { firstName: { contains: search, mode: 'insensitive' } },
+                { username: { contains: search, mode: 'insensitive' } },
+                { telegramId: isNaN(search) ? undefined : BigInt(search) },
+              ].filter(Boolean),
+            };
+          }
+
+          const users = await prisma.user.findMany({
+            where,
+            skip: offset,
+            take: limit,
+            orderBy: { totalDamage: 'desc' },
+            select: {
+              id: true,
+              telegramId: true,
+              username: true,
+              firstName: true,
+              photoUrl: true,
+              level: true,
+              adena: true,
+              totalDamage: true,
+            },
+          });
+
+          sendJson({
+            success: true,
+            users: users.map(u => ({
+              ...u,
+              telegramId: u.telegramId.toString(),
+              adena: u.adena.toString(),
+              totalDamage: u.totalDamage.toString(),
+            })),
+          });
+          return;
+        }
+
+        // Get single user
+        if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+$/) && req.method === 'GET') {
+          const userId = parsedUrl.pathname.split('/').pop();
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+          sendJson({
+            success: true,
+            user: {
+              ...user,
+              telegramId: user.telegramId.toString(),
+              adena: user.adena.toString(),
+              exp: user.exp.toString(),
+              totalDamage: user.totalDamage.toString(),
+            },
+          });
+          return;
+        }
+
+        // Update user
+        if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+$/) && req.method === 'POST') {
+          const userId = parsedUrl.pathname.split('/').pop();
+          const body = await parseBody();
+
+          const updateData = {};
+          if (body.level !== undefined) updateData.level = body.level;
+          if (body.adena !== undefined) updateData.adena = BigInt(body.adena);
+          if (body.exp !== undefined) updateData.exp = BigInt(body.exp);
+          if (body.stamina !== undefined) updateData.stamina = body.stamina;
+          if (body.mana !== undefined) updateData.mana = body.mana;
+          if (body.maxMana !== undefined) updateData.maxMana = body.maxMana;
+          if (body.power !== undefined) updateData.power = body.power;
+          if (body.agility !== undefined) updateData.agility = body.agility;
+          if (body.vitality !== undefined) updateData.vitality = body.vitality;
+          if (body.intellect !== undefined) updateData.intellect = body.intellect;
+          if (body.spirit !== undefined) updateData.spirit = body.spirit;
+          if (body.totalDamage !== undefined) updateData.totalDamage = BigInt(body.totalDamage);
+          if (body.tonBalance !== undefined) updateData.tonBalance = body.tonBalance;
+
+          await prisma.user.update({ where: { id: userId }, data: updateData });
+          sendJson({ success: true });
+          return;
+        }
+
+        // Give chests
+        if (parsedUrl.pathname === '/api/admin/chests/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { userId, rarity, quantity } = body;
+
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+
+          const chestCreates = [];
+          for (let i = 0; i < (quantity || 1); i++) {
+            chestCreates.push({
+              userId: userId,
+              rarity: rarity || 'COMMON',
+              openingDuration: CHEST_CONFIG[rarity || 'COMMON'].duration,
+            });
+          }
+          await prisma.chest.createMany({ data: chestCreates });
+          sendJson({ success: true, quantity: chestCreates.length });
+          return;
+        }
+
+        // Broadcast message
+        if (parsedUrl.pathname === '/api/admin/broadcast' && req.method === 'POST') {
+          const body = await parseBody();
+          const { messageRu, messageEn, buttonTextRu, buttonTextEn, buttonUrl, imageUrl, speed } = body;
+
+          if (!TELEGRAM_BOT_TOKEN) {
+            sendJson({ success: false, error: 'Bot token not configured' });
+            return;
+          }
+
+          // Get all users with telegramId
+          const users = await prisma.user.findMany({
+            select: { telegramId: true, language: true },
+          });
+
+          if (users.length === 0) {
+            sendJson({ success: false, error: 'No users to broadcast to' });
+            return;
+          }
+
+          // Start broadcast in background
+          const sendRate = Math.min(30, Math.max(1, speed || 30));
+          const delayMs = 1000 / sendRate;
+
+          (async () => {
+            let sent = 0;
+            let failed = 0;
+            for (const user of users) {
+              const lang = user.language || 'en';
+              const message = lang === 'ru' ? messageRu : messageEn;
+              const buttonText = lang === 'ru' ? buttonTextRu : buttonTextEn;
+
+              try {
+                const payload = {
+                  chat_id: user.telegramId.toString(),
+                  text: message,
+                  parse_mode: 'HTML',
+                };
+
+                if (buttonText && buttonUrl) {
+                  payload.reply_markup = {
+                    inline_keyboard: [[{ text: buttonText, url: buttonUrl }]],
+                  };
+                }
+
+                // If image provided, use sendPhoto instead
+                if (imageUrl) {
+                  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      chat_id: user.telegramId.toString(),
+                      photo: imageUrl,
+                      caption: message,
+                      parse_mode: 'HTML',
+                      reply_markup: buttonText && buttonUrl ? {
+                        inline_keyboard: [[{ text: buttonText, url: buttonUrl }]],
+                      } : undefined,
+                    }),
+                  });
+                } else {
+                  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                }
+                sent++;
+              } catch (e) {
+                failed++;
+              }
+
+              // Rate limit
+              await new Promise(r => setTimeout(r, delayMs));
+            }
+            console.log(`[Broadcast] Done: ${sent} sent, ${failed} failed`);
+          })();
+
+          sendJson({ success: true, totalUsers: users.length });
+          return;
+        }
+
+        // Test broadcast (to admin/first user)
+        if (parsedUrl.pathname === '/api/admin/broadcast/test' && req.method === 'POST') {
+          const body = await parseBody();
+          // Just log it for now
+          console.log('[Broadcast Test]', body);
+          sendJson({ success: true, message: 'Test logged to console' });
+          return;
+        }
+
+        // Danger zone: Reset all
+        if (parsedUrl.pathname === '/api/admin/danger/reset-all' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.confirmPassword !== RESET_PASSWORD) {
+            sendJson({ success: false, error: 'Invalid reset password' }, 403);
+            return;
+          }
+
+          // Delete everything
+          await prisma.activeBuff.deleteMany({});
+          await prisma.chest.deleteMany({});
+          await prisma.inventoryItem.deleteMany({});
+          await prisma.bossSession.deleteMany({});
+          await prisma.user.deleteMany({});
+          await prisma.gameState.deleteMany({});
+
+          // Reset boss
+          currentBossIndex = 0;
+          await respawnBoss(prisma, false);
+          await saveBossState(prisma);
+
+          sendJson({ success: true });
+          return;
+        }
+
+        // Danger zone: Reset users
+        if (parsedUrl.pathname === '/api/admin/danger/reset-users' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.confirmPassword !== RESET_PASSWORD) {
+            sendJson({ success: false, error: 'Invalid reset password' }, 403);
+            return;
+          }
+
+          await prisma.user.updateMany({
+            data: {
+              level: 1,
+              exp: BigInt(0),
+              adena: BigInt(0),
+              totalDamage: BigInt(0),
+              bossesKilled: 0,
+              tonBalance: 0,
+              stamina: 100,
+              mana: 1000,
+            },
+          });
+
+          sendJson({ success: true });
+          return;
+        }
+
+        // Danger zone: Reset boss
+        if (parsedUrl.pathname === '/api/admin/danger/reset-boss' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.confirmPassword !== RESET_PASSWORD) {
+            sendJson({ success: false, error: 'Invalid reset password' }, 403);
+            return;
+          }
+
+          currentBossIndex = 0;
+          bossRespawnAt = null;
+          await respawnBoss(prisma, false);
+          await saveBossState(prisma);
+          sessionLeaderboard.clear();
+
+          sendJson({ success: true });
+          return;
+        }
+      }
+
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error handling request:', err);
@@ -1200,10 +1579,8 @@ app.prepare().then(async () => {
         return;
       }
 
-      // L2: Calculate thorns damage and stamina cost
-      const thornsTaken = StatsService.calculateThorns(bossState.thornsDamage, player.physicalDefense);
-      const staminaCostPerTap = StatsService.getStaminaCost(thornsTaken);
-      const totalStaminaCost = tapCount * staminaCostPerTap;
+      // Stamina cost: always 1 per tap
+      const staminaCostPerTap = 1;
 
       // Check stamina
       if (player.stamina < staminaCostPerTap) {
@@ -1256,11 +1633,10 @@ app.prepare().then(async () => {
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
-        // L2 Stamina (NEW)
+        // L2 Stamina
         stamina: player.stamina,
         maxStamina: player.maxStamina,
-        thornsTaken,
-        staminaCost: tapCount * staminaCostPerTap,
+        staminaCost: tapCount, // Always 1 per tap
         // Legacy mana
         mana: player.mana,
         sessionDamage: player.sessionDamage,

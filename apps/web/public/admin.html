@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Idle Chronicle</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .header {
+      background: rgba(0,0,0,0.3);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { color: #f7b731; font-size: 24px; }
+    .status { display: flex; gap: 15px; align-items: center; }
+    .status-item { font-size: 12px; color: #888; }
+    .status-item.online { color: #2ed573; }
+
+    .tabs {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 8px 8px 0 0;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .tab:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .tab.active { background: rgba(247,183,49,0.2); color: #f7b731; }
+
+    .panel {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 20px;
+      display: none;
+    }
+    .panel.active { display: block; }
+
+    .section {
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .section h3 {
+      color: #f7b731;
+      font-size: 14px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 5px;
+    }
+
+    .form-group {
+      margin-bottom: 10px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 14px;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: #f7b731;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #f7b731; color: #000; }
+    .btn-primary:hover { background: #f5a623; }
+    .btn-danger { background: #e74c3c; color: #fff; }
+    .btn-danger:hover { background: #c0392b; }
+    .btn-success { background: #2ed573; color: #000; }
+    .btn-success:hover { background: #26c064; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+
+    .btn-group { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    th { color: #888; font-weight: 600; }
+    tr:hover { background: rgba(255,255,255,0.05); }
+
+    .user-photo {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: #1a1a2e;
+      border-radius: 10px;
+      padding: 20px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .modal-header h2 { color: #f7b731; font-size: 18px; }
+    .modal-close {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .alert {
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+    .alert-success { background: rgba(46,213,115,0.2); color: #2ed573; }
+    .alert-error { background: rgba(231,76,60,0.2); color: #e74c3c; }
+    .alert-info { background: rgba(52,152,219,0.2); color: #3498db; }
+
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #f7b731;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .boss-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .boss-card.active { border: 2px solid #f7b731; }
+    .boss-icon { font-size: 40px; }
+    .boss-info { flex: 1; }
+    .boss-name { font-weight: 600; color: #fff; }
+    .boss-stats { font-size: 12px; color: #888; }
+
+    .search-box {
+      margin-bottom: 15px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 10px 15px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .broadcast-preview {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 10px;
+    }
+    .broadcast-preview h4 { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .broadcast-msg {
+      background: rgba(255,255,255,0.05);
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .auth-box {
+      background: rgba(0,0,0,0.3);
+      padding: 30px;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 400px;
+    }
+    .auth-box h2 { color: #f7b731; margin-bottom: 20px; }
+    .auth-box input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+    .auth-error { color: #e74c3c; font-size: 14px; margin-bottom: 10px; }
+
+    .domain-error {
+      text-align: center;
+      padding: 50px;
+    }
+    .domain-error h1 { color: #e74c3c; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <!-- Domain Check Error -->
+  <div id="domainError" style="display:none" class="domain-error">
+    <h1>Access Denied</h1>
+    <p>This admin panel can only be accessed from tnsb.fun domain.</p>
+  </div>
+
+  <!-- Auth Overlay -->
+  <div id="authOverlay">
+    <div class="auth-box">
+      <h2>Admin Panel</h2>
+      <p style="color:#888;margin-bottom:20px">Enter admin password</p>
+      <input type="password" id="adminPassword" placeholder="Password" onkeypress="if(event.key==='Enter')checkAuth()">
+      <div id="authError" class="auth-error" style="display:none"></div>
+      <button class="btn btn-primary" onclick="checkAuth()" style="width:100%">Login</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="mainContent" style="display:none">
+    <div class="container">
+      <div class="header">
+        <h1>Idle Chronicle Admin</h1>
+        <div class="status">
+          <span class="status-item" id="serverStatus">Server: Connecting...</span>
+          <span class="status-item" id="playersOnline">Players: 0</span>
+          <span class="status-item" id="currentBoss">Boss: Loading...</span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('boss')">Boss</button>
+        <button class="tab" onclick="showTab('users')">Users</button>
+        <button class="tab" onclick="showTab('broadcast')">Broadcast</button>
+        <button class="tab" onclick="showTab('drops')">Drops</button>
+        <button class="tab" onclick="showTab('chests')">Chests</button>
+        <button class="tab" onclick="showTab('danger')">Danger Zone</button>
+      </div>
+
+      <!-- Boss Panel -->
+      <div id="bossPanel" class="panel active">
+        <div class="section">
+          <h3>Current Boss</h3>
+          <div id="currentBossInfo">Loading...</div>
+        </div>
+
+        <div class="section">
+          <h3>Change Active Boss</h3>
+          <div class="form-group">
+            <label>Select Boss Index (1-100)</label>
+            <input type="number" id="bossIndex" min="1" max="100" value="1">
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="changeBoss()">Set as Active Boss</button>
+            <button class="btn btn-secondary" onclick="respawnBoss()">Force Respawn Current</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Edit Current Boss Stats</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Name (EN)</label>
+              <input type="text" id="bossName" placeholder="Serpent">
+            </div>
+            <div class="form-group">
+              <label>Name (RU)</label>
+              <input type="text" id="bossNameRu" placeholder="Zmey">
+            </div>
+            <div class="form-group">
+              <label>Icon</label>
+              <input type="text" id="bossIcon" placeholder="emoji">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Current HP</label>
+              <input type="number" id="bossHp">
+            </div>
+            <div class="form-group">
+              <label>Max HP</label>
+              <input type="number" id="bossMaxHp">
+            </div>
+            <div class="form-group">
+              <label>Defense</label>
+              <input type="number" id="bossDefense">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="updateBossStats()">Save Boss Stats</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Boss Rewards</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Adena Reward</label>
+              <input type="number" id="bossAdenaReward">
+            </div>
+            <div class="form-group">
+              <label>EXP Reward</label>
+              <input type="number" id="bossExpReward">
+            </div>
+            <div class="form-group">
+              <label>TON Reward</label>
+              <input type="number" id="bossTonReward">
+            </div>
+            <div class="form-group">
+              <label>Chests Reward</label>
+              <input type="number" id="bossChestsReward">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="updateBossRewards()">Save Rewards</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Panel -->
+      <div id="usersPanel" class="panel">
+        <div class="section">
+          <h3>Search Users</h3>
+          <div class="search-box">
+            <input type="text" id="userSearch" placeholder="Search by name, username, or telegramId..." oninput="searchUsers()">
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Photo</th>
+                <th>Name</th>
+                <th>Level</th>
+                <th>Adena</th>
+                <th>Total Damage</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTable">
+              <tr><td colspan="6" style="text-align:center">Loading...</td></tr>
+            </tbody>
+          </table>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="loadMoreUsers()">Load More</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Broadcast Panel -->
+      <div id="broadcastPanel" class="panel">
+        <div class="section">
+          <h3>Send Broadcast Message</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Message (Russian)</label>
+              <textarea id="broadcastRu" rows="4" placeholder="Message in Russian..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Message (English)</label>
+              <textarea id="broadcastEn" rows="4" placeholder="Message in English..."></textarea>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Button Text (RU)</label>
+              <input type="text" id="buttonTextRu" placeholder="Play">
+            </div>
+            <div class="form-group">
+              <label>Button Text (EN)</label>
+              <input type="text" id="buttonTextEn" placeholder="Play">
+            </div>
+            <div class="form-group">
+              <label>Button URL</label>
+              <input type="text" id="buttonUrl" placeholder="https://t.me/your_bot/app">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Image URL (optional)</label>
+            <input type="text" id="broadcastImage" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label>Send Speed: <span id="speedValue">30</span> msg/sec</label>
+            <input type="range" id="sendSpeed" min="1" max="30" value="30" oninput="document.getElementById('speedValue').textContent=this.value">
+          </div>
+
+          <div class="broadcast-preview">
+            <h4>Preview (Russian)</h4>
+            <div class="broadcast-msg" id="previewRu">Enter message above</div>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="sendBroadcast()">Send to All Users</button>
+            <button class="btn btn-secondary" onclick="sendTestBroadcast()">Send Test (to Admin)</button>
+          </div>
+          <div id="broadcastStatus" style="margin-top:15px"></div>
+        </div>
+      </div>
+
+      <!-- Drops Panel -->
+      <div id="dropsPanel" class="panel">
+        <div class="section">
+          <h3>Boss Drop Tables</h3>
+          <p style="color:#888;font-size:13px;margin-bottom:15px">
+            Drop rates are calculated dynamically based on boss index:
+            <br>Rewards multiply by x2 each boss (starting from 1M adena, 1M exp, 10 TON, 10 chests)
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Base Adena (Boss 1)</label>
+              <input type="number" id="baseAdena" value="1000000">
+            </div>
+            <div class="form-group">
+              <label>Base EXP (Boss 1)</label>
+              <input type="number" id="baseExp" value="1000000">
+            </div>
+            <div class="form-group">
+              <label>Base TON (Boss 1)</label>
+              <input type="number" id="baseTon" value="10">
+            </div>
+            <div class="form-group">
+              <label>Base Chests (Boss 1)</label>
+              <input type="number" id="baseChests" value="10">
+            </div>
+          </div>
+          <div class="alert alert-info">
+            Boss 1: 1M adena | Boss 2: 2M | Boss 3: 4M | Boss 10: 512M | etc.
+          </div>
+        </div>
+      </div>
+
+      <!-- Chests Panel -->
+      <div id="chestsPanel" class="panel">
+        <div class="section">
+          <h3>Give Chests to User</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="chestUserId" placeholder="User ID from users table">
+            </div>
+            <div class="form-group">
+              <label>Rarity</label>
+              <select id="chestRarity">
+                <option value="COMMON">Common (5 min)</option>
+                <option value="UNCOMMON">Uncommon (30 min)</option>
+                <option value="RARE">Rare (4 hours)</option>
+                <option value="EPIC">Epic (8 hours)</option>
+                <option value="LEGENDARY">Legendary (24 hours)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="chestQuantity" value="1" min="1" max="100">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveChests()">Give Chests</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Chest Opening Times</h3>
+          <table>
+            <tr><th>Rarity</th><th>Time</th><th>Adena</th><th>EXP</th><th>TON</th></tr>
+            <tr><td>Common</td><td>5 min</td><td>100-500</td><td>1K-5K</td><td>-</td></tr>
+            <tr><td>Uncommon</td><td>30 min</td><td>500-2K</td><td>5K-20K</td><td>-</td></tr>
+            <tr><td>Rare</td><td>4 hours</td><td>2K-10K</td><td>20K-100K</td><td>-</td></tr>
+            <tr><td>Epic</td><td>8 hours</td><td>10K-50K</td><td>100K-500K</td><td>-</td></tr>
+            <tr><td style="color:#f7b731">Legendary</td><td>24 hours</td><td>50K-200K</td><td>500K-2M</td><td>0.1-1</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Danger Zone Panel -->
+      <div id="dangerPanel" class="panel">
+        <div class="section" style="border: 2px solid #e74c3c;">
+          <h3 style="color:#e74c3c">Danger Zone</h3>
+          <p style="color:#888;font-size:13px;margin-bottom:15px">
+            These actions are irreversible. Use with caution.
+          </p>
+
+          <div class="form-group">
+            <label>Enter Password to Enable Reset: 1993</label>
+            <input type="password" id="resetPassword" placeholder="Enter 1993 to confirm">
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-danger" onclick="resetDatabase()">Reset Entire Database</button>
+            <button class="btn btn-danger" onclick="resetAllUsers()">Reset All Users Progress</button>
+            <button class="btn btn-danger" onclick="resetBossToFirst()">Reset Boss to #1</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Edit Modal -->
+  <div id="userModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Edit User</h2>
+        <button class="modal-close" onclick="closeUserModal()">&times;</button>
+      </div>
+      <div id="userModalContent">Loading...</div>
+    </div>
+  </div>
+
+  <script>
+    // Domain protection - only allow tnsb.fun
+    const ALLOWED_DOMAINS = ['tnsb.fun', 'www.tnsb.fun', 'localhost', '127.0.0.1'];
+    const ADMIN_PASSWORD = 'admin123'; // Will be checked server-side
+
+    let isAuthed = false;
+    let socket = null;
+    let users = [];
+    let usersOffset = 0;
+
+    // Check domain
+    function checkDomain() {
+      const hostname = window.location.hostname;
+      if (!ALLOWED_DOMAINS.includes(hostname)) {
+        document.getElementById('authOverlay').style.display = 'none';
+        document.getElementById('domainError').style.display = 'block';
+        return false;
+      }
+      return true;
+    }
+
+    // Auth check
+    function checkAuth() {
+      const password = document.getElementById('adminPassword').value;
+
+      fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          isAuthed = true;
+          document.getElementById('authOverlay').style.display = 'none';
+          document.getElementById('mainContent').style.display = 'block';
+          sessionStorage.setItem('adminAuth', password);
+          initAdmin();
+        } else {
+          document.getElementById('authError').textContent = 'Invalid password';
+          document.getElementById('authError').style.display = 'block';
+        }
+      })
+      .catch(err => {
+        document.getElementById('authError').textContent = 'Connection error';
+        document.getElementById('authError').style.display = 'block';
+      });
+    }
+
+    // Check saved auth
+    function checkSavedAuth() {
+      const savedPass = sessionStorage.getItem('adminAuth');
+      if (savedPass) {
+        fetch('/api/admin/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: savedPass })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            isAuthed = true;
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            initAdmin();
+          }
+        });
+      }
+    }
+
+    // Init admin panel
+    function initAdmin() {
+      loadBossInfo();
+      loadUsers();
+
+      // Update preview on input
+      document.getElementById('broadcastRu').addEventListener('input', updatePreview);
+      document.getElementById('broadcastEn').addEventListener('input', updatePreview);
+    }
+
+    // Tab switching
+    function showTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+      document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
+      document.getElementById(tab + 'Panel').classList.add('active');
+    }
+
+    // API helper
+    async function api(endpoint, method = 'GET', body = null) {
+      const password = sessionStorage.getItem('adminAuth');
+      const opts = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password': password
+        }
+      };
+      if (body) opts.body = JSON.stringify(body);
+
+      const res = await fetch('/api/admin/' + endpoint, opts);
+      return res.json();
+    }
+
+    // Load boss info
+    async function loadBossInfo() {
+      const data = await api('boss');
+      if (data.success) {
+        const boss = data.boss;
+        document.getElementById('currentBossInfo').innerHTML = `
+          <div class="boss-card active">
+            <span class="boss-icon">${boss.icon}</span>
+            <div class="boss-info">
+              <div class="boss-name">${boss.name} / ${boss.nameRu}</div>
+              <div class="boss-stats">
+                HP: ${boss.currentHp.toLocaleString()} / ${boss.maxHp.toLocaleString()} |
+                Index: ${boss.bossIndex}/${boss.totalBosses} |
+                Defense: ${boss.defense}
+              </div>
+              <div class="boss-stats">
+                Rewards: ${boss.adenaReward?.toLocaleString()} Adena, ${boss.expReward?.toLocaleString()} EXP,
+                ${boss.tonReward} TON, ${boss.chestsReward} Chests
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Fill form
+        document.getElementById('bossIndex').value = boss.bossIndex;
+        document.getElementById('bossName').value = boss.name;
+        document.getElementById('bossNameRu').value = boss.nameRu || '';
+        document.getElementById('bossIcon').value = boss.icon;
+        document.getElementById('bossHp').value = boss.currentHp;
+        document.getElementById('bossMaxHp').value = boss.maxHp;
+        document.getElementById('bossDefense').value = boss.defense;
+        document.getElementById('bossAdenaReward').value = boss.adenaReward;
+        document.getElementById('bossExpReward').value = boss.expReward;
+        document.getElementById('bossTonReward').value = boss.tonReward;
+        document.getElementById('bossChestsReward').value = boss.chestsReward;
+
+        // Update header
+        document.getElementById('currentBoss').textContent = `Boss: ${boss.name}`;
+        document.getElementById('playersOnline').textContent = `Players: ${data.playersOnline}`;
+        document.getElementById('serverStatus').classList.add('online');
+        document.getElementById('serverStatus').textContent = 'Server: Online';
+      }
+    }
+
+    // Change boss
+    async function changeBoss() {
+      const index = parseInt(document.getElementById('bossIndex').value) - 1;
+      const data = await api('boss/change', 'POST', { bossIndex: index });
+      if (data.success) {
+        alert('Boss changed to #' + (index + 1));
+        loadBossInfo();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Respawn boss
+    async function respawnBoss() {
+      const data = await api('boss/respawn', 'POST');
+      if (data.success) {
+        alert('Boss respawned');
+        loadBossInfo();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Update boss stats
+    async function updateBossStats() {
+      const data = await api('boss/update', 'POST', {
+        name: document.getElementById('bossName').value,
+        nameRu: document.getElementById('bossNameRu').value,
+        icon: document.getElementById('bossIcon').value,
+        currentHp: parseInt(document.getElementById('bossHp').value),
+        maxHp: parseInt(document.getElementById('bossMaxHp').value),
+        defense: parseInt(document.getElementById('bossDefense').value),
+      });
+      if (data.success) {
+        alert('Boss stats updated');
+        loadBossInfo();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Update boss rewards
+    async function updateBossRewards() {
+      const data = await api('boss/rewards', 'POST', {
+        adenaReward: parseInt(document.getElementById('bossAdenaReward').value),
+        expReward: parseInt(document.getElementById('bossExpReward').value),
+        tonReward: parseInt(document.getElementById('bossTonReward').value),
+        chestsReward: parseInt(document.getElementById('bossChestsReward').value),
+      });
+      if (data.success) {
+        alert('Boss rewards updated');
+        loadBossInfo();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Load users
+    async function loadUsers(search = '') {
+      const data = await api('users?search=' + encodeURIComponent(search) + '&offset=' + usersOffset);
+      if (data.success) {
+        users = data.users;
+        renderUsers();
+      }
+    }
+
+    // Search users
+    let searchTimeout;
+    function searchUsers() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        usersOffset = 0;
+        loadUsers(document.getElementById('userSearch').value);
+      }, 300);
+    }
+
+    // Load more users
+    function loadMoreUsers() {
+      usersOffset += 50;
+      loadUsers(document.getElementById('userSearch').value);
+    }
+
+    // Render users table
+    function renderUsers() {
+      const tbody = document.getElementById('usersTable');
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No users found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>${u.photoUrl ? `<img src="${u.photoUrl}" class="user-photo">` : '-'}</td>
+          <td>${u.firstName || u.username || 'Anonymous'}</td>
+          <td>${u.level}</td>
+          <td>${Number(u.adena).toLocaleString()}</td>
+          <td>${Number(u.totalDamage).toLocaleString()}</td>
+          <td>
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="editUser('${u.id}')">Edit</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Edit user
+    async function editUser(userId) {
+      const data = await api('users/' + userId);
+      if (!data.success) {
+        alert('User not found');
+        return;
+      }
+
+      const u = data.user;
+      document.getElementById('userModalContent').innerHTML = `
+        <input type="hidden" id="editUserId" value="${u.id}">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="editName" value="${u.firstName || ''}" readonly>
+          </div>
+          <div class="form-group">
+            <label>Level</label>
+            <input type="number" id="editLevel" value="${u.level}" min="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Adena</label>
+            <input type="number" id="editAdena" value="${u.adena}">
+          </div>
+          <div class="form-group">
+            <label>EXP</label>
+            <input type="number" id="editExp" value="${u.exp}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Stamina</label>
+            <input type="number" id="editStamina" value="${u.stamina}">
+          </div>
+          <div class="form-group">
+            <label>Max Stamina</label>
+            <input type="number" id="editMaxStamina" value="${u.maxStamina}" readonly>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Mana</label>
+            <input type="number" id="editMana" value="${u.mana}">
+          </div>
+          <div class="form-group">
+            <label>Max Mana</label>
+            <input type="number" id="editMaxMana" value="${u.maxMana}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Power</label>
+            <input type="number" id="editPower" value="${u.power}" min="1" max="99">
+          </div>
+          <div class="form-group">
+            <label>Agility</label>
+            <input type="number" id="editAgility" value="${u.agility}" min="1" max="99">
+          </div>
+          <div class="form-group">
+            <label>Vitality</label>
+            <input type="number" id="editVitality" value="${u.vitality}" min="1" max="99">
+          </div>
+          <div class="form-group">
+            <label>Intellect</label>
+            <input type="number" id="editIntellect" value="${u.intellect}" min="1" max="99">
+          </div>
+          <div class="form-group">
+            <label>Spirit</label>
+            <input type="number" id="editSpirit" value="${u.spirit}" min="1" max="99">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Total Damage</label>
+            <input type="number" id="editTotalDamage" value="${u.totalDamage}">
+          </div>
+          <div class="form-group">
+            <label>TON Balance</label>
+            <input type="number" id="editTonBalance" value="${u.tonBalance}" step="0.01">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="saveUser()">Save Changes</button>
+          <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+        </div>
+      `;
+
+      document.getElementById('userModal').classList.add('active');
+    }
+
+    // Save user
+    async function saveUser() {
+      const userId = document.getElementById('editUserId').value;
+      const data = await api('users/' + userId, 'POST', {
+        level: parseInt(document.getElementById('editLevel').value),
+        adena: parseInt(document.getElementById('editAdena').value),
+        exp: parseInt(document.getElementById('editExp').value),
+        stamina: parseInt(document.getElementById('editStamina').value),
+        mana: parseInt(document.getElementById('editMana').value),
+        maxMana: parseInt(document.getElementById('editMaxMana').value),
+        power: parseInt(document.getElementById('editPower').value),
+        agility: parseInt(document.getElementById('editAgility').value),
+        vitality: parseInt(document.getElementById('editVitality').value),
+        intellect: parseInt(document.getElementById('editIntellect').value),
+        spirit: parseInt(document.getElementById('editSpirit').value),
+        totalDamage: parseInt(document.getElementById('editTotalDamage').value),
+        tonBalance: parseFloat(document.getElementById('editTonBalance').value),
+      });
+
+      if (data.success) {
+        alert('User saved');
+        closeUserModal();
+        loadUsers(document.getElementById('userSearch').value);
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    function closeUserModal() {
+      document.getElementById('userModal').classList.remove('active');
+    }
+
+    // Update preview
+    function updatePreview() {
+      document.getElementById('previewRu').textContent = document.getElementById('broadcastRu').value || 'Enter message above';
+    }
+
+    // Send broadcast
+    async function sendBroadcast() {
+      if (!confirm('Send broadcast to ALL users? This cannot be undone.')) return;
+
+      const data = await api('broadcast', 'POST', {
+        messageRu: document.getElementById('broadcastRu').value,
+        messageEn: document.getElementById('broadcastEn').value,
+        buttonTextRu: document.getElementById('buttonTextRu').value,
+        buttonTextEn: document.getElementById('buttonTextEn').value,
+        buttonUrl: document.getElementById('buttonUrl').value,
+        imageUrl: document.getElementById('broadcastImage').value,
+        speed: parseInt(document.getElementById('sendSpeed').value),
+      });
+
+      document.getElementById('broadcastStatus').innerHTML = data.success
+        ? `<div class="alert alert-success">Broadcast started! Sending to ${data.totalUsers} users...</div>`
+        : `<div class="alert alert-error">Error: ${data.error}</div>`;
+    }
+
+    // Send test broadcast
+    async function sendTestBroadcast() {
+      const data = await api('broadcast/test', 'POST', {
+        messageRu: document.getElementById('broadcastRu').value,
+        messageEn: document.getElementById('broadcastEn').value,
+        buttonTextRu: document.getElementById('buttonTextRu').value,
+        buttonTextEn: document.getElementById('buttonTextEn').value,
+        buttonUrl: document.getElementById('buttonUrl').value,
+        imageUrl: document.getElementById('broadcastImage').value,
+      });
+
+      document.getElementById('broadcastStatus').innerHTML = data.success
+        ? `<div class="alert alert-success">Test message sent!</div>`
+        : `<div class="alert alert-error">Error: ${data.error}</div>`;
+    }
+
+    // Give chests
+    async function giveChests() {
+      const data = await api('chests/give', 'POST', {
+        userId: document.getElementById('chestUserId').value,
+        rarity: document.getElementById('chestRarity').value,
+        quantity: parseInt(document.getElementById('chestQuantity').value),
+      });
+
+      if (data.success) {
+        alert(`${data.quantity} chests given to user`);
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Danger zone
+    async function resetDatabase() {
+      const pass = document.getElementById('resetPassword').value;
+      if (pass !== '1993') {
+        alert('Invalid reset password');
+        return;
+      }
+      if (!confirm('This will DELETE ALL DATA. Are you absolutely sure?')) return;
+      if (!confirm('LAST WARNING: All users, bosses, chests will be deleted. Continue?')) return;
+
+      const data = await api('danger/reset-all', 'POST', { confirmPassword: '1993' });
+      if (data.success) {
+        alert('Database reset complete');
+        location.reload();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    async function resetAllUsers() {
+      const pass = document.getElementById('resetPassword').value;
+      if (pass !== '1993') {
+        alert('Invalid reset password');
+        return;
+      }
+      if (!confirm('Reset all user progress? Users will keep accounts but lose stats.')) return;
+
+      const data = await api('danger/reset-users', 'POST', { confirmPassword: '1993' });
+      if (data.success) {
+        alert('All users reset');
+        loadUsers();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    async function resetBossToFirst() {
+      const pass = document.getElementById('resetPassword').value;
+      if (pass !== '1993') {
+        alert('Invalid reset password');
+        return;
+      }
+      if (!confirm('Reset boss to #1?')) return;
+
+      const data = await api('danger/reset-boss', 'POST', { confirmPassword: '1993' });
+      if (data.success) {
+        alert('Boss reset to #1');
+        loadBossInfo();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    }
+
+    // Init
+    if (checkDomain()) {
+      checkSavedAuth();
+    }
+  </script>
+</body>
+</html>
