@@ -21,6 +21,7 @@ interface BossState {
 interface PlayerState {
   stamina: number;
   maxStamina: number;
+  staminaRegen: number;  // per second
   exhaustedUntil: number | null;
   sessionDamage: number;
 }
@@ -45,9 +46,13 @@ export class BattleScene extends Phaser.Scene {
   private playerState: PlayerState = {
     stamina: 30,
     maxStamina: 30,
+    staminaRegen: 1,  // 1 per second default
     exhaustedUntil: null,
     sessionDamage: 0,
   };
+
+  // Stamina regen timer
+  private lastStaminaUpdate = 0;
 
   // UI elements
   private hpBar!: Phaser.GameObjects.Graphics;
@@ -223,6 +228,19 @@ export class BattleScene extends Phaser.Scene {
 
     this.staminaBar.fillStyle(color, 1);
     this.staminaBar.fillRoundedRect(20, staminaY, barWidth * staminaPercent, barHeight, 8);
+
+    // Update stamina text with current/max values
+    if (this.staminaText) {
+      const current = Math.floor(this.playerState.stamina);
+      const max = this.playerState.maxStamina;
+      if (isExhausted) {
+        this.staminaText.setText('EXHAUSTED');
+        this.staminaText.setColor('#ef4444');
+      } else {
+        this.staminaText.setText(`⚡ ${current} / ${max}`);
+        this.staminaText.setColor('#22c55e');
+      }
+    }
   }
 
   private isExhausted(): boolean {
@@ -334,39 +352,48 @@ export class BattleScene extends Phaser.Scene {
       crits: number;
       stamina?: number;
       maxStamina?: number;
+      staminaRegen?: number;
     }) => {
       this.showDamageNumber(data.damage, data.crits > 0);
       if (data.stamina !== undefined) {
         this.playerState.stamina = data.stamina;
+        this.lastStaminaUpdate = 0; // Reset regen timer on server update
         this.updateStaminaBar();
       }
       if (data.maxStamina !== undefined) {
         this.playerState.maxStamina = data.maxStamina;
       }
+      if (data.staminaRegen !== undefined) {
+        this.playerState.staminaRegen = data.staminaRegen;
+      }
     });
 
     this.socket.on('hero:exhausted', (data: { until: number; duration: number }) => {
       this.playerState.exhaustedUntil = data.until;
+      this.playerState.stamina = 0;
       this.showExhaustedOverlay(true);
-      this.staminaText?.setColor('#ef4444');
-      this.staminaText?.setText('EXHAUSTED');
+      this.updateStaminaBar();
 
       // Auto-clear
       this.time.delayedCall(data.duration, () => {
         this.playerState.exhaustedUntil = null;
         this.showExhaustedOverlay(false);
-        this.staminaText?.setColor('#22c55e');
-        this.staminaText?.setText('Stamina');
+        this.updateStaminaBar();
       });
     });
 
     this.socket.on('player:state', (data: {
       stamina?: number;
       maxStamina?: number;
+      staminaRegen?: number;
       exhaustedUntil?: number | null;
     }) => {
-      if (data.stamina !== undefined) this.playerState.stamina = data.stamina;
+      if (data.stamina !== undefined) {
+        this.playerState.stamina = data.stamina;
+        this.lastStaminaUpdate = 0; // Reset regen timer
+      }
       if (data.maxStamina !== undefined) this.playerState.maxStamina = data.maxStamina;
+      if (data.staminaRegen !== undefined) this.playerState.staminaRegen = data.staminaRegen;
       if (data.exhaustedUntil !== undefined) this.playerState.exhaustedUntil = data.exhaustedUntil;
       this.updateStaminaBar();
     });
@@ -412,6 +439,27 @@ export class BattleScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     // Stamina regen simulation (visual only, server is authoritative)
-    // This makes the UI feel more responsive
+    const isExhausted = this.playerState.exhaustedUntil !== null &&
+                        Date.now() < this.playerState.exhaustedUntil;
+
+    // Only regen if not exhausted and not at max
+    if (!isExhausted && this.playerState.stamina < this.playerState.maxStamina) {
+      // Accumulate time (delta is in ms)
+      this.lastStaminaUpdate += delta;
+
+      // Regen rate per second, so check every 1000ms / regenRate
+      const msPerRegen = 1000 / this.playerState.staminaRegen;
+
+      if (this.lastStaminaUpdate >= msPerRegen) {
+        // Add stamina (fractional for smooth bar)
+        const regenAmount = Math.floor(this.lastStaminaUpdate / msPerRegen);
+        this.playerState.stamina = Math.min(
+          this.playerState.maxStamina,
+          this.playerState.stamina + regenAmount
+        );
+        this.lastStaminaUpdate = this.lastStaminaUpdate % msPerRegen;
+        this.updateStaminaBar();
+      }
+    }
   }
 }
