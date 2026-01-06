@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Package, Lock, Gem } from 'lucide-react';
+import { Package, Lock, Gem, Gift, Coins } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 type ChestRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -10,8 +10,8 @@ type ChestRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 interface Chest {
   id: string;
   rarity: ChestRarity;
-  openingStarted: number | null; // timestamp when opening started
-  openingDuration: number; // ms to open
+  openingStarted: number | null;
+  openingDuration: number;
 }
 
 interface InventoryItem {
@@ -22,31 +22,37 @@ interface InventoryItem {
   rarity: ChestRarity;
 }
 
+interface ClaimedReward {
+  chestId: string;
+  rarity: ChestRarity;
+  rewards: {
+    adena: number;
+    exp: number;
+    ton: number;
+  };
+}
+
 // Chest config
 const CHEST_CONFIG: Record<ChestRarity, { icon: string; color: string; bgColor: string; duration: number }> = {
-  COMMON: { icon: '📦', color: 'text-gray-300', bgColor: 'bg-gray-500/20', duration: 5 * 60 * 1000 }, // 5 min
-  UNCOMMON: { icon: '🎁', color: 'text-green-400', bgColor: 'bg-green-500/20', duration: 30 * 60 * 1000 }, // 30 min
-  RARE: { icon: '💎', color: 'text-blue-400', bgColor: 'bg-blue-500/20', duration: 4 * 60 * 60 * 1000 }, // 4h
-  EPIC: { icon: '👑', color: 'text-purple-400', bgColor: 'bg-purple-500/20', duration: 8 * 60 * 60 * 1000 }, // 8h
-  LEGENDARY: { icon: '🏆', color: 'text-orange-400', bgColor: 'bg-orange-500/20', duration: 24 * 60 * 60 * 1000 }, // 24h
+  COMMON: { icon: '📦', color: 'text-gray-300', bgColor: 'bg-gray-500/20', duration: 5 * 60 * 1000 },
+  UNCOMMON: { icon: '🎁', color: 'text-green-400', bgColor: 'bg-green-500/20', duration: 30 * 60 * 1000 },
+  RARE: { icon: '💎', color: 'text-blue-400', bgColor: 'bg-blue-500/20', duration: 4 * 60 * 60 * 1000 },
+  EPIC: { icon: '👑', color: 'text-purple-400', bgColor: 'bg-purple-500/20', duration: 8 * 60 * 60 * 1000 },
+  LEGENDARY: { icon: '🏆', color: 'text-orange-400', bgColor: 'bg-orange-500/20', duration: 24 * 60 * 60 * 1000 },
 };
 
-const SLOT_UNLOCK_COST = 50; // crystals per slot
+const SLOT_UNLOCK_COST = 50;
 
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
-  // Mock data - in real app this comes from server
-  const [crystals, setCrystals] = useState(120);
+  const [crystals, setCrystals] = useState(0);
   const [unlockedSlots, setUnlockedSlots] = useState(5);
-  const [chests, setChests] = useState<Chest[]>([
-    { id: '1', rarity: 'COMMON', openingStarted: null, openingDuration: CHEST_CONFIG.COMMON.duration },
-    { id: '2', rarity: 'UNCOMMON', openingStarted: null, openingDuration: CHEST_CONFIG.UNCOMMON.duration },
-    { id: '3', rarity: 'RARE', openingStarted: null, openingDuration: CHEST_CONFIG.RARE.duration },
-  ]);
+  const [chests, setChests] = useState<Chest[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [now, setNow] = useState(Date.now());
+  const [claimedReward, setClaimedReward] = useState<ClaimedReward | null>(null);
 
   // Update timer every second
   useEffect(() => {
@@ -54,18 +60,70 @@ export default function TreasuryTab() {
     return () => clearInterval(interval);
   }, []);
 
+  // Socket connection
+  useEffect(() => {
+    const socket = getSocket();
+
+    // Request chest data
+    socket.emit('chest:get');
+
+    // Listen for chest data
+    socket.on('chest:data', (data: { chests: Chest[] }) => {
+      setChests(data.chests);
+    });
+
+    // Chest opened (timer started)
+    socket.on('chest:opened', (chest: Chest) => {
+      setChests(prev => prev.map(c =>
+        c.id === chest.id ? { ...c, openingStarted: chest.openingStarted } : c
+      ));
+    });
+
+    // Chest claimed (rewards received)
+    socket.on('chest:claimed', (data: ClaimedReward) => {
+      setChests(prev => prev.filter(c => c.id !== data.chestId));
+      setClaimedReward(data);
+      // Auto-hide reward popup after 3 seconds
+      setTimeout(() => setClaimedReward(null), 3000);
+    });
+
+    // Error handling
+    socket.on('chest:error', (data: { message: string }) => {
+      console.error('[Chest] Error:', data.message);
+    });
+
+    // Get player data for crystals
+    socket.on('auth:success', (data: any) => {
+      setCrystals(data.ancientCoin || 0);
+    });
+
+    socket.on('player:data', (data: any) => {
+      if (data) {
+        setCrystals(data.ancientCoin || 0);
+      }
+    });
+
+    return () => {
+      socket.off('chest:data');
+      socket.off('chest:opened');
+      socket.off('chest:claimed');
+      socket.off('chest:error');
+      socket.off('auth:success');
+      socket.off('player:data');
+    };
+  }, []);
+
   // Check if any chest is currently opening
-  const openingChest = chests.find(c => c.openingStarted !== null);
+  const openingChest = chests.find(c => {
+    if (!c.openingStarted) return false;
+    const elapsed = now - c.openingStarted;
+    return elapsed < c.openingDuration;
+  });
 
   // Start opening a chest
   const startOpening = (chestId: string) => {
-    if (openingChest) return; // Already opening one
-
-    setChests(prev => prev.map(c =>
-      c.id === chestId ? { ...c, openingStarted: Date.now() } : c
-    ));
-
-    // In real app: socket.emit('chest:open', { chestId })
+    if (openingChest) return;
+    getSocket().emit('chest:open', { chestId });
   };
 
   // Claim opened chest
@@ -74,24 +132,17 @@ export default function TreasuryTab() {
     if (!chest || !chest.openingStarted) return;
 
     const elapsed = now - chest.openingStarted;
-    if (elapsed < chest.openingDuration) return; // Not ready
+    if (elapsed < chest.openingDuration) return;
 
-    // Remove chest and add random loot
-    setChests(prev => prev.filter(c => c.id !== chestId));
-
-    // Mock loot based on rarity
-    const lootCount = chest.rarity === 'LEGENDARY' ? 5 : chest.rarity === 'EPIC' ? 4 : chest.rarity === 'RARE' ? 3 : 2;
-    // In real app: server sends actual loot
-
-    // In real app: socket.emit('chest:claim', { chestId })
+    getSocket().emit('chest:claim', { chestId });
   };
 
-  // Unlock new slot
+  // Unlock new slot (TODO: implement on server)
   const unlockSlot = () => {
     if (crystals < SLOT_UNLOCK_COST || unlockedSlots >= 10) return;
+    // For now just local state - needs server implementation
     setCrystals(prev => prev - SLOT_UNLOCK_COST);
     setUnlockedSlots(prev => prev + 1);
-    // In real app: socket.emit('slot:unlock')
   };
 
   // Format time remaining
@@ -122,8 +173,47 @@ export default function TreasuryTab() {
     }
   };
 
+  // Format number
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toLocaleString();
+  };
+
   return (
-    <div className="flex-1 overflow-auto bg-l2-dark">
+    <div className="flex-1 overflow-auto bg-l2-dark relative">
+      {/* Claimed Reward Popup */}
+      {claimedReward && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className={`${CHEST_CONFIG[claimedReward.rarity].bgColor} rounded-xl p-6 text-center mx-4 animate-bounce`}>
+            <div className="text-5xl mb-3">{CHEST_CONFIG[claimedReward.rarity].icon}</div>
+            <div className={`text-lg font-bold ${CHEST_CONFIG[claimedReward.rarity].color} mb-4`}>
+              {getRarityLabel(claimedReward.rarity)} {t.treasury.claim}!
+            </div>
+            <div className="space-y-2">
+              {claimedReward.rewards.adena > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <Coins className="text-l2-gold" size={18} />
+                  <span className="text-l2-gold font-bold">+{formatNumber(claimedReward.rewards.adena)}</span>
+                </div>
+              )}
+              {claimedReward.rewards.exp > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-green-400">⭐</span>
+                  <span className="text-green-400 font-bold">+{formatNumber(claimedReward.rewards.exp)} EXP</span>
+                </div>
+              )}
+              {claimedReward.rewards.ton > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <Gem className="text-blue-400" size={18} />
+                  <span className="text-blue-400 font-bold">+{claimedReward.rewards.ton} TON</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header with crystals */}
       <div className="bg-l2-panel p-2 border-b border-white/10">
         <div className="flex items-center justify-between">
@@ -174,7 +264,7 @@ export default function TreasuryTab() {
                         {getRarityLabel(chest.rarity)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {formatTime(chest.openingDuration)}
+                        {isOpening ? (isReady ? t.treasury.claim : formatTime(remaining)) : formatTime(chest.openingDuration)}
                       </div>
                     </div>
 
@@ -182,7 +272,7 @@ export default function TreasuryTab() {
                     {isReady ? (
                       <button
                         onClick={() => claimChest(chest.id)}
-                        className="px-4 py-2 bg-l2-gold text-black font-bold rounded text-sm"
+                        className="px-4 py-2 bg-l2-gold text-black font-bold rounded text-sm animate-pulse"
                       >
                         {t.treasury.claim}
                       </button>

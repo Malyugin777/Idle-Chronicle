@@ -70,6 +70,7 @@ model User {
   // Currencies
   adena           BigInt   @default(0)
   ancientCoin     Int      @default(0)
+  tonBalance      Float    @default(0)    // TON cryptocurrency balance
 
   // Consumables
   soulshotNG      Int      @default(100)
@@ -104,6 +105,7 @@ model User {
   damageLog       DamageLog[]
   buffs           ActiveBuff[]
   tasks           UserTask[]
+  chests          Chest[]
 
   @@index([telegramId])
   @@index([totalDamage])
@@ -161,6 +163,36 @@ enum BuffType {
   HASTE
   ACUMEN
   LUCK
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHESTS (LOOT BOXES)
+// ═══════════════════════════════════════════════════════════
+
+model Chest {
+  id              String      @id @default(cuid())
+  userId          String
+  rarity          ChestRarity @default(COMMON)
+
+  openingStarted  DateTime?   // null = not opening, set = timer started
+  openingDuration Int         // Duration in ms to open
+
+  fromBossId      String?     // Which boss dropped this chest
+  fromSessionId   String?     // Which session
+
+  createdAt       DateTime    @default(now())
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum ChestRarity {
+  COMMON      // 5 min
+  UNCOMMON    // 30 min
+  RARE        // 4 hours
+  EPIC        // 8 hours
+  LEGENDARY   // 24 hours
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -261,17 +293,36 @@ model BossLoot {
 model BossSession {
   id          String   @id @default(cuid())
   bossId      String
+  bossName    String?    // Cached boss name
 
   startedAt   DateTime @default(now())
   endedAt     DateTime?
 
   maxHp       BigInt
-  finalBlowBy String?
+  totalDamage BigInt   @default(0)
+
+  // Winners
+  finalBlowBy     String?
+  finalBlowName   String?
+  finalBlowDamage BigInt?
+
+  topDamageBy     String?
+  topDamageName   String?
+  topDamage       BigInt?
+
+  // Prize pool
+  tonPool         Float    @default(0)
+  chestsPool      Int      @default(0)
+  expPool         BigInt   @default(0)
+
+  // Leaderboard snapshot (JSON array of top 20)
+  leaderboardSnapshot Json?
 
   boss        Boss     @relation(fields: [bossId], references: [id])
   damageLog   DamageLog[]
 
   @@index([bossId])
+  @@index([endedAt])
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -282,11 +333,16 @@ model DamageLog {
   id        String   @id @default(cuid())
 
   sessionId String
-  odamage    String
+  odamage   String
 
   damage    BigInt
   clicks    Int
   crits     Int
+
+  // Cached for leaderboard display
+  playerName  String?
+  playerPhoto String?
+  damagePercent Float?   // % of total boss damage
 
   timestamp DateTime @default(now())
 

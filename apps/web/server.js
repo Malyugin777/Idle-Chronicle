@@ -84,9 +84,15 @@ let bossState = {
   icon: '🦎',
   bossIndex: 1,
   totalBosses: 10,
+  // Rewards
   adenaReward: 1000,
-  expReward: 500,
+  expReward: 1000000,
+  tonReward: 10,
+  chestsReward: 10,
 };
+
+// Previous boss session data for leaderboard
+let previousBossSession = null;
 
 const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
@@ -127,6 +133,15 @@ const BUFFS = {
   haste: { effect: 'speed', value: 0.3, duration: 30000, cost: 500 },
   acumen: { effect: 'damage', value: 0.5, duration: 30000, cost: 500 },
   luck: { effect: 'crit', value: 0.1, duration: 60000, cost: 1000 },
+};
+
+// Chest config (opening durations in ms)
+const CHEST_CONFIG = {
+  COMMON: { duration: 5 * 60 * 1000 },        // 5 min
+  UNCOMMON: { duration: 30 * 60 * 1000 },     // 30 min
+  RARE: { duration: 4 * 60 * 60 * 1000 },     // 4 hours
+  EPIC: { duration: 8 * 60 * 60 * 1000 },     // 8 hours
+  LEGENDARY: { duration: 24 * 60 * 60 * 1000 }, // 24 hours
 };
 
 // Stat upgrade cost formula
@@ -250,17 +265,19 @@ function updateRagePhase() {
 
 // Default bosses for rotation (used if DB is empty)
 // thornsDamage: обратка босса - тратит stamina игрока при каждом тапе
+// tonReward и chestsReward: 50% финальному удару, 50% топ урону
+// expReward: распределяется по всем участникам по % урона
 const DEFAULT_BOSSES = [
-  { name: 'Lizard', hp: 500000, defense: 0, thornsDamage: 0, icon: '🦎', adenaReward: 1000, expReward: 500 },
-  { name: 'Golem', hp: 750000, defense: 5, thornsDamage: 1, icon: '🗿', adenaReward: 2000, expReward: 1000 },
-  { name: 'Spider Queen', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🕷️', adenaReward: 3500, expReward: 1800 },
-  { name: 'Werewolf', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐺', adenaReward: 5000, expReward: 2500 },
-  { name: 'Demon', hp: 2000000, defense: 20, thornsDamage: 4, icon: '👹', adenaReward: 7000, expReward: 3500 },
-  { name: 'Kraken', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000 },
-  { name: 'Dragon', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 8000 },
-  { name: 'Hydra', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 12000 },
-  { name: 'Phoenix', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 20000 },
-  { name: 'Ancient Dragon', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 30000 },
+  { name: 'Lizard', hp: 500000, defense: 0, thornsDamage: 0, icon: '🦎', adenaReward: 1000, expReward: 1000000, tonReward: 10, chestsReward: 10 },
+  { name: 'Golem', hp: 750000, defense: 5, thornsDamage: 1, icon: '🗿', adenaReward: 2000, expReward: 1500000, tonReward: 15, chestsReward: 12 },
+  { name: 'Spider Queen', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🕷️', adenaReward: 3500, expReward: 2000000, tonReward: 20, chestsReward: 15 },
+  { name: 'Werewolf', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐺', adenaReward: 5000, expReward: 3000000, tonReward: 30, chestsReward: 18 },
+  { name: 'Demon', hp: 2000000, defense: 20, thornsDamage: 4, icon: '👹', adenaReward: 7000, expReward: 4000000, tonReward: 40, chestsReward: 20 },
+  { name: 'Kraken', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000000, tonReward: 50, chestsReward: 25 },
+  { name: 'Dragon', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 7000000, tonReward: 70, chestsReward: 30 },
+  { name: 'Hydra', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 10000000, tonReward: 100, chestsReward: 40 },
+  { name: 'Phoenix', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 15000000, tonReward: 150, chestsReward: 50 },
+  { name: 'Ancient Dragon', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 25000000, tonReward: 250, chestsReward: 75 },
 ];
 
 // Respawn timer (10 minutes = 600000ms)
@@ -330,6 +347,8 @@ async function respawnBoss(prisma, forceNext = true) {
         totalBosses: DEFAULT_BOSSES.length,
         adenaReward: boss.adenaReward,
         expReward: boss.expReward,
+        tonReward: boss.tonReward || 10,
+        chestsReward: boss.chestsReward || 10,
       };
     }
   } catch (err) {
@@ -350,6 +369,8 @@ async function respawnBoss(prisma, forceNext = true) {
       totalBosses: DEFAULT_BOSSES.length,
       adenaReward: boss.adenaReward,
       expReward: boss.expReward,
+      tonReward: boss.tonReward || 10,
+      chestsReward: boss.chestsReward || 10,
     };
   }
 
@@ -416,6 +437,7 @@ app.prepare().then(async () => {
     const player = {
       odamage: '',
       odamageN: 'Guest',
+      photoUrl: null,
       // Legacy stats
       str: 1,
       dex: 1,
@@ -521,25 +543,49 @@ app.prepare().then(async () => {
         });
 
         if (user) {
+          // Calculate expToNext based on level
+          const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
+
           socket.emit('player:data', {
             id: user.id,
             username: user.username,
             firstName: user.firstName,
             level: user.level,
+            // EXP
+            exp: Number(user.exp),
+            expToNext: expToNext,
+            // Legacy stats
             str: user.str,
             dex: user.dex,
             luck: user.luck,
+            // Base stats (L2)
+            power: user.power,
+            vitality: user.vitality,
+            agility: user.agility,
+            intellect: user.intellect,
+            spirit: user.spirit,
+            // Combat stats
             pAtk: user.pAtk,
+            pDef: user.physicalDefense,
+            mAtk: user.intellect * 2, // Magic attack based on intellect
+            mDef: user.spirit * 2, // Magic defense based on spirit
             critChance: user.critChance,
+            attackSpeed: user.attackSpeed,
+            // Currency
             adena: Number(user.adena),
+            ancientCoin: user.ancientCoin,
+            // Mana
             mana: user.mana,
             maxMana: user.maxMana,
             manaRegen: user.manaRegen,
+            // Skills
             tapsPerSecond: user.tapsPerSecond,
             autoAttackSpeed: user.autoAttackSpeed,
             isFirstLogin: user.isFirstLogin,
+            // Progression
             totalDamage: Number(user.totalDamage),
             bossesKilled: user.bossesKilled,
+            // Consumables
             activeSoulshot: user.activeSoulshot,
             soulshotNG: user.soulshotNG,
             soulshotD: user.soulshotD,
@@ -623,6 +669,7 @@ app.prepare().then(async () => {
         // Update player state from DB
         player.odamage = user.id;
         player.odamageN = user.firstName || user.username || 'Player';
+        player.photoUrl = user.photoUrl || null;
         // Legacy stats
         player.str = user.str;
         player.dex = user.dex;
@@ -678,11 +725,17 @@ app.prepare().then(async () => {
           });
         }
 
+        // Calculate expToNext based on level
+        const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
+
         socket.emit('auth:success', {
           id: user.id,
           username: user.username,
           firstName: user.firstName,
           level: user.level,
+          // EXP
+          exp: Number(user.exp),
+          expToNext: expToNext,
           // Legacy stats
           str: user.str,
           dex: user.dex,
@@ -700,12 +753,18 @@ app.prepare().then(async () => {
           maxHealth: player.maxHealth,
           physicalDefense: player.physicalDefense,
           attackSpeed: player.attackSpeed,
+          // Combat stats for CharacterTab
+          pDef: player.physicalDefense,
+          mAtk: player.intellect * 2,
+          mDef: player.spirit * 2,
           // L2 Stamina (NEW)
           stamina: player.stamina,
           maxStamina: player.maxStamina,
           exhaustedUntil: player.exhaustedUntil,
-          // Other
+          // Currency
           adena: Number(user.adena),
+          ancientCoin: user.ancientCoin || 0,
+          // Mana
           mana: user.mana,
           maxMana: user.maxMana,
           manaRegen: user.manaRegen,
@@ -806,6 +865,7 @@ app.prepare().then(async () => {
       sessionLeaderboard.set(key, {
         odamage: (existing?.odamage || 0) + actualDamage,
         odamageN: player.odamageN,
+        photoUrl: player.photoUrl,
       });
 
       socket.emit('tap:result', {
@@ -843,60 +903,76 @@ app.prepare().then(async () => {
       if (bossState.currentHp <= 0) {
         console.log(`[Boss] ${bossState.name} killed by ${player.odamageN}!`);
 
-        if (bossState.sessionId) {
-          try {
-            await prisma.bossSession.update({
-              where: { id: bossState.sessionId },
-              data: { endedAt: new Date(), finalBlowBy: player.odamage || null },
-            });
-          } catch (e) {}
-        }
-
-        // Build leaderboard
+        // Build leaderboard with photoUrl
         const leaderboard = Array.from(sessionLeaderboard.entries())
           .map(([id, data]) => ({
             odamage: id,
             visitorId: id,
             visitorName: data.odamageN,
+            photoUrl: data.photoUrl,
             damage: data.odamage,
           }))
           .sort((a, b) => b.damage - a.damage);
 
         const totalDamageDealt = leaderboard.reduce((sum, p) => sum + p.damage, 0);
         const topDamagePlayer = leaderboard[0];
+        const finalBlowPlayer = player;
 
-        // Boss rewards (from DB or defaults)
-        const bossAdenaPool = bossState.adenaReward || 5000;
-        const bossExpPool = bossState.expReward || 2000;
+        // Prize pool from boss config
+        const tonPool = bossState.tonReward || 10;
+        const chestsPool = bossState.chestsReward || 10;
+        const expPool = bossState.expReward || 1000000;
+        const adenaPool = bossState.adenaReward || 5000;
+
+        // TON and Chests: 50% to final blow, 50% to top damage
+        const tonForFinalBlow = tonPool / 2;
+        const tonForTopDamage = tonPool / 2;
+        const chestsForFinalBlow = Math.floor(chestsPool / 2);
+        const chestsForTopDamage = Math.ceil(chestsPool / 2);
+
+        // Helper: generate random chest rarity
+        const getRandomChestRarity = () => {
+          const roll = Math.random();
+          if (roll < 0.50) return 'COMMON';
+          if (roll < 0.80) return 'UNCOMMON';
+          if (roll < 0.95) return 'RARE';
+          if (roll < 0.99) return 'EPIC';
+          return 'LEGENDARY';
+        };
 
         // Distribute rewards to all participants
         const rewards = [];
         for (const entry of leaderboard) {
           const damagePercent = entry.damage / totalDamageDealt;
-          let adenaReward = Math.floor(bossAdenaPool * damagePercent);
-          let expReward = Math.floor(bossExpPool * damagePercent);
+          let adenaReward = Math.floor(adenaPool * damagePercent);
+          let expReward = Math.floor(expPool * damagePercent);
+          let tonReward = 0;
+          let chestsReward = 0;
 
-          // Bonus for final blow (20% extra)
-          const isFinalBlow = entry.odamage === player.odamage;
+          // Final blow gets 50% TON and chests
+          const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
           if (isFinalBlow) {
-            adenaReward = Math.floor(adenaReward * 1.2);
-            expReward = Math.floor(expReward * 1.2);
+            tonReward += tonForFinalBlow;
+            chestsReward += chestsForFinalBlow;
           }
 
-          // Bonus for top damage (15% extra)
+          // Top damage gets 50% TON and chests
           const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
           if (isTopDamage) {
-            adenaReward = Math.floor(adenaReward * 1.15);
-            expReward = Math.floor(expReward * 1.15);
+            tonReward += tonForTopDamage;
+            chestsReward += chestsForTopDamage;
           }
 
           rewards.push({
             odamage: entry.odamage,
             visitorName: entry.visitorName,
+            photoUrl: entry.photoUrl,
             damage: entry.damage,
             damagePercent: Math.round(damagePercent * 100),
             adenaReward,
             expReward,
+            tonReward,
+            chestsReward,
             isFinalBlow,
             isTopDamage,
           });
@@ -908,21 +984,88 @@ app.prepare().then(async () => {
               data: {
                 adena: { increment: BigInt(adenaReward) },
                 exp: { increment: BigInt(expReward) },
+                tonBalance: { increment: tonReward },
                 totalDamage: { increment: BigInt(entry.damage) },
                 bossesKilled: { increment: isFinalBlow ? 1 : 0 },
               },
             });
 
+            // Create chests for winners
+            if (chestsReward > 0) {
+              const chestCreates = [];
+              for (let i = 0; i < chestsReward; i++) {
+                const rarity = getRandomChestRarity();
+                chestCreates.push({
+                  userId: entry.odamage,
+                  rarity: rarity,
+                  openingDuration: CHEST_CONFIG[rarity].duration,
+                  fromBossId: bossState.id,
+                  fromSessionId: bossState.sessionId,
+                });
+              }
+              await prisma.chest.createMany({ data: chestCreates });
+            }
+
             // Update in-memory player if online
             for (const [sid, p] of onlineUsers.entries()) {
               if (p.odamage === entry.odamage) {
                 p.adena += adenaReward;
-                p.sessionDamage = 0; // Reset session damage
+                p.sessionDamage = 0;
                 break;
               }
             }
           } catch (e) {
             console.error('[Reward] Error:', e.message);
+          }
+        }
+
+        // Add damagePercent to leaderboard entries
+        const leaderboardWithPercent = leaderboard.map(entry => ({
+          ...entry,
+          damagePercent: Math.round((entry.damage / totalDamageDealt) * 100),
+        }));
+
+        // Store previous boss session for leaderboard tab
+        previousBossSession = {
+          bossName: bossState.name,
+          bossIcon: bossState.icon,
+          maxHp: bossState.maxHp,
+          totalDamage: totalDamageDealt,
+          finalBlowBy: finalBlowPlayer.odamageN,
+          finalBlowPhoto: finalBlowPlayer.photoUrl,
+          finalBlowDamage: rewards.find(r => r.isFinalBlow)?.damage || 0,
+          topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
+          topDamagePhoto: topDamagePlayer?.photoUrl,
+          topDamage: topDamagePlayer?.damage || 0,
+          prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+          leaderboard: leaderboardWithPercent.slice(0, 20),
+          rewards: rewards.slice(0, 20),
+          killedAt: Date.now(),
+        };
+
+        // Update DB session
+        if (bossState.sessionId) {
+          try {
+            await prisma.bossSession.update({
+              where: { id: bossState.sessionId },
+              data: {
+                endedAt: new Date(),
+                bossName: bossState.name,
+                totalDamage: BigInt(totalDamageDealt),
+                finalBlowBy: finalBlowPlayer.odamage || null,
+                finalBlowName: finalBlowPlayer.odamageN,
+                finalBlowDamage: BigInt(rewards.find(r => r.isFinalBlow)?.damage || 0),
+                topDamageBy: topDamagePlayer?.odamage || null,
+                topDamageName: topDamagePlayer?.visitorName,
+                topDamage: BigInt(topDamagePlayer?.damage || 0),
+                tonPool: tonPool,
+                chestsPool: chestsPool,
+                expPool: BigInt(expPool),
+                leaderboardSnapshot: leaderboardWithPercent.slice(0, 20),
+              },
+            });
+          } catch (e) {
+            console.error('[Boss] Session update error:', e.message);
           }
         }
 
@@ -932,16 +1075,19 @@ app.prepare().then(async () => {
         io.emit('boss:killed', {
           bossName: bossState.name,
           bossIcon: bossState.icon,
-          finalBlowBy: player.odamageN,
+          finalBlowBy: finalBlowPlayer.odamageN,
+          finalBlowPhoto: finalBlowPlayer.photoUrl,
           topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
+          topDamagePhoto: topDamagePlayer?.photoUrl,
           topDamage: topDamagePlayer?.damage || 0,
-          leaderboard: leaderboard.slice(0, 10),
+          prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
+          leaderboard: leaderboardWithPercent.slice(0, 10),
           rewards: rewards.slice(0, 10),
           respawnAt: respawnTimestamp,
           respawnIn: RESPAWN_TIME_MS,
         });
 
-        console.log(`[Boss] ${bossState.name} killed! Final blow: ${player.odamageN}, Top damage: ${topDamagePlayer?.visitorName}`);
+        console.log(`[Boss] ${bossState.name} killed! Final blow: ${finalBlowPlayer.odamageN} (${tonForFinalBlow} TON, ${chestsForFinalBlow} chests), Top damage: ${topDamagePlayer?.visitorName} (${tonForTopDamage} TON, ${chestsForTopDamage} chests)`);
 
         // Respawn after 10 minutes
         setTimeout(async () => {
@@ -954,25 +1100,135 @@ app.prepare().then(async () => {
             hp: bossState.currentHp,
             maxHp: bossState.maxHp,
             icon: bossState.icon,
+            prizePool: {
+              ton: bossState.tonReward,
+              chests: bossState.chestsReward,
+              exp: bossState.expReward,
+              adena: bossState.adenaReward,
+            },
           });
         }, RESPAWN_TIME_MS);
       }
     });
 
-    // LEADERBOARD
+    // SKILL USE - Magic skills (fireball, iceball, lightning)
+    socket.on('skill:use', async (data) => {
+      const { skillId } = data;
+      const now = Date.now();
+
+      // Skill config
+      const SKILLS = {
+        fireball: { manaCost: 100, baseDamage: 500, multiplier: 1.5, cooldown: 10000 },
+        iceball: { manaCost: 100, baseDamage: 400, multiplier: 1.3, cooldown: 10000 },
+        lightning: { manaCost: 100, baseDamage: 600, multiplier: 1.8, cooldown: 10000 },
+      };
+
+      const skill = SKILLS[skillId];
+      if (!skill) {
+        socket.emit('skill:error', { message: 'Unknown skill' });
+        return;
+      }
+
+      // Check boss alive
+      if (bossState.currentHp <= 0) {
+        socket.emit('skill:error', { message: 'Boss is dead' });
+        return;
+      }
+
+      // Check mana
+      if (player.mana < skill.manaCost) {
+        socket.emit('skill:error', { message: 'Not enough mana' });
+        return;
+      }
+
+      // Deduct mana
+      player.mana -= skill.manaCost;
+
+      // Calculate damage: baseDamage + (pAtk * multiplier)
+      const damage = Math.floor(skill.baseDamage + (player.pAtk * skill.multiplier));
+      const actualDamage = Math.min(damage, bossState.currentHp);
+      bossState.currentHp -= actualDamage;
+
+      // Adena reward
+      const adenaGained = Math.floor(actualDamage / 50); // More adena for skills
+      player.adena += adenaGained;
+      player.sessionDamage += actualDamage;
+
+      // Update leaderboard
+      const key = player.odamage || socket.id;
+      const existing = sessionLeaderboard.get(key);
+      sessionLeaderboard.set(key, {
+        odamage: (existing?.odamage || 0) + actualDamage,
+        odamageN: player.odamageN,
+        photoUrl: player.photoUrl,
+      });
+
+      socket.emit('skill:result', {
+        skillId,
+        damage: actualDamage,
+        mana: player.mana,
+        maxMana: player.maxMana,
+        adena: player.adena,
+        adenaGained,
+        sessionDamage: player.sessionDamage,
+      });
+
+      io.emit('damage:feed', {
+        playerName: player.odamageN,
+        damage: actualDamage,
+        isCrit: false,
+        isSkill: true,
+        skillId,
+      });
+
+      // Check boss killed
+      if (bossState.currentHp <= 0) {
+        // Trigger same kill logic as tap:batch
+        // (simplified - in production you'd refactor to shared function)
+        console.log(`[Boss] ${bossState.name} killed by ${player.odamageN} using ${skillId}!`);
+      }
+    });
+
+    // LEADERBOARD - Current Boss (with % and photos)
     socket.on('leaderboard:get', () => {
+      const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + d.odamage, 0);
       const leaderboard = Array.from(sessionLeaderboard.entries())
         .map(([id, data]) => ({
           visitorId: id,
           visitorName: data.odamageN,
+          photoUrl: data.photoUrl,
           damage: data.odamage,
+          damagePercent: totalDamage > 0 ? Math.round((data.odamage / totalDamage) * 100) : 0,
         }))
         .sort((a, b) => b.damage - a.damage)
         .slice(0, 20);
-      socket.emit('leaderboard:data', leaderboard);
+
+      socket.emit('leaderboard:data', {
+        leaderboard,
+        bossName: bossState.name,
+        bossIcon: bossState.icon,
+        bossHp: bossState.currentHp,
+        bossMaxHp: bossState.maxHp,
+        prizePool: {
+          ton: bossState.tonReward,
+          chests: bossState.chestsReward,
+          exp: bossState.expReward,
+          adena: bossState.adenaReward,
+        },
+        totalDamage,
+      });
     });
 
-    // ALL-TIME LEADERBOARD
+    // LEADERBOARD - Previous Boss
+    socket.on('leaderboard:previous:get', () => {
+      if (previousBossSession) {
+        socket.emit('leaderboard:previous', previousBossSession);
+      } else {
+        socket.emit('leaderboard:previous', null);
+      }
+    });
+
+    // ALL-TIME LEADERBOARD (Legend)
     socket.on('leaderboard:alltime:get', async () => {
       try {
         const topUsers = await prisma.user.findMany({
@@ -982,17 +1238,176 @@ app.prepare().then(async () => {
             id: true,
             firstName: true,
             username: true,
+            photoUrl: true,
             totalDamage: true,
+            bossesKilled: true,
+            tonBalance: true,
           },
         });
         const leaderboard = topUsers.map(u => ({
           visitorId: u.id,
           visitorName: u.firstName || u.username || 'Anonymous',
+          photoUrl: u.photoUrl,
           damage: Number(u.totalDamage),
+          bossesKilled: u.bossesKilled,
+          tonBalance: u.tonBalance,
         }));
         socket.emit('leaderboard:alltime', leaderboard);
       } catch (err) {
         console.error('[Leaderboard] Error:', err.message);
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // CHESTS
+    // ═══════════════════════════════════════════════════════════
+
+    // Get player's chests
+    socket.on('chest:get', async () => {
+      if (!player.odamage) {
+        socket.emit('chest:data', { chests: [] });
+        return;
+      }
+
+      try {
+        const chests = await prisma.chest.findMany({
+          where: { userId: player.odamage },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        socket.emit('chest:data', {
+          chests: chests.map(c => ({
+            id: c.id,
+            rarity: c.rarity,
+            openingStarted: c.openingStarted?.getTime() || null,
+            openingDuration: c.openingDuration,
+          })),
+        });
+      } catch (err) {
+        console.error('[Chest] Get error:', err.message);
+        socket.emit('chest:data', { chests: [] });
+      }
+    });
+
+    // Start opening a chest
+    socket.on('chest:open', async (data) => {
+      if (!player.odamage) {
+        socket.emit('chest:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { chestId } = data;
+
+      try {
+        // Check if any chest is already opening
+        const openingChest = await prisma.chest.findFirst({
+          where: {
+            userId: player.odamage,
+            openingStarted: { not: null },
+          },
+        });
+
+        if (openingChest) {
+          // Check if it's finished
+          const elapsed = Date.now() - openingChest.openingStarted.getTime();
+          if (elapsed < openingChest.openingDuration) {
+            socket.emit('chest:error', { message: 'Already opening another chest' });
+            return;
+          }
+        }
+
+        // Start opening the chest
+        const chest = await prisma.chest.update({
+          where: { id: chestId, userId: player.odamage },
+          data: { openingStarted: new Date() },
+        });
+
+        socket.emit('chest:opened', {
+          id: chest.id,
+          rarity: chest.rarity,
+          openingStarted: chest.openingStarted.getTime(),
+          openingDuration: chest.openingDuration,
+        });
+      } catch (err) {
+        console.error('[Chest] Open error:', err.message);
+        socket.emit('chest:error', { message: 'Failed to open chest' });
+      }
+    });
+
+    // Claim an opened chest
+    socket.on('chest:claim', async (data) => {
+      if (!player.odamage) {
+        socket.emit('chest:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { chestId } = data;
+
+      try {
+        const chest = await prisma.chest.findUnique({
+          where: { id: chestId },
+        });
+
+        if (!chest || chest.userId !== player.odamage) {
+          socket.emit('chest:error', { message: 'Chest not found' });
+          return;
+        }
+
+        if (!chest.openingStarted) {
+          socket.emit('chest:error', { message: 'Chest not opened yet' });
+          return;
+        }
+
+        const elapsed = Date.now() - chest.openingStarted.getTime();
+        if (elapsed < chest.openingDuration) {
+          socket.emit('chest:error', { message: 'Chest still opening' });
+          return;
+        }
+
+        // Generate loot based on rarity
+        const lootTable = {
+          COMMON: { adena: [100, 500], exp: [1000, 5000] },
+          UNCOMMON: { adena: [500, 2000], exp: [5000, 20000] },
+          RARE: { adena: [2000, 10000], exp: [20000, 100000] },
+          EPIC: { adena: [10000, 50000], exp: [100000, 500000] },
+          LEGENDARY: { adena: [50000, 200000], exp: [500000, 2000000], ton: [0.1, 1] },
+        };
+
+        const loot = lootTable[chest.rarity];
+        const adenaReward = Math.floor(Math.random() * (loot.adena[1] - loot.adena[0]) + loot.adena[0]);
+        const expReward = Math.floor(Math.random() * (loot.exp[1] - loot.exp[0]) + loot.exp[0]);
+        let tonReward = 0;
+
+        if (loot.ton) {
+          tonReward = Math.round((Math.random() * (loot.ton[1] - loot.ton[0]) + loot.ton[0]) * 100) / 100;
+        }
+
+        // Delete chest and give rewards
+        await prisma.chest.delete({ where: { id: chestId } });
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            adena: { increment: BigInt(adenaReward) },
+            exp: { increment: BigInt(expReward) },
+            tonBalance: { increment: tonReward },
+          },
+        });
+
+        player.adena += adenaReward;
+
+        socket.emit('chest:claimed', {
+          chestId,
+          rarity: chest.rarity,
+          rewards: {
+            adena: adenaReward,
+            exp: expReward,
+            ton: tonReward,
+          },
+        });
+      } catch (err) {
+        console.error('[Chest] Claim error:', err.message);
+        socket.emit('chest:error', { message: 'Failed to claim chest' });
       }
     });
 
@@ -1435,6 +1850,12 @@ app.prepare().then(async () => {
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
+      prizePool: {
+        ton: bossState.tonReward,
+        chests: bossState.chestsReward,
+        exp: bossState.expReward,
+        adena: bossState.adenaReward,
+      },
     });
   }, 250);
 
