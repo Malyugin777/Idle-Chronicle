@@ -883,7 +883,7 @@ export default function GameCanvas() {
         <div className="mb-3">
           <div className="flex justify-between text-xs mb-1">
             <span className={`${isExhausted ? 'text-red-400' : 'text-green-400'}`}>
-              {isExhausted ? '⚡ EXHAUSTED' : '⚡ Stamina'}
+              {isExhausted ? t.game.exhausted : t.game.stamina}
             </span>
             <span>{Math.floor(stamina)} / {maxStamina}</span>
           </div>

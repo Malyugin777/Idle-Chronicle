@@ -240,7 +240,7 @@ export default function PhaserGame() {
             <div className="text-l2-gold text-lg font-bold mb-2">{t.offline.welcomeBack}</div>
             <div className="bg-black/30 rounded-lg p-4 mb-4">
               <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.adena.toLocaleString()} Adena
+                +{offlineEarnings.adena.toLocaleString()} {t.character.adena}
               </div>
             </div>
             <button

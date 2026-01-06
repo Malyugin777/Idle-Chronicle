@@ -30,6 +30,8 @@ export const translations = {
       mana: 'MANA',
       auto: 'Auto',
       rage: 'RAGE',
+      stamina: '⚡ Stamina',
+      exhausted: '⚡ EXHAUSTED',
     },
     // Boss
     boss: {
@@ -162,6 +164,8 @@ export const translations = {
       mana: 'МАНА',
       auto: 'Авто',
       rage: 'ЯРОСТЬ',
+      stamina: '⚡ Стамина',
+      exhausted: '⚡ ИСТОЩЁН',
     },
     // Boss
     boss: {
