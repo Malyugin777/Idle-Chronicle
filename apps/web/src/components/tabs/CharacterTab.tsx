@@ -339,39 +339,39 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 
         {/* Stats */}
         <div className="p-3 space-y-1">
-          {item.stats.pAtkFlat && (
+          {(item.stats.pAtkFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">P.Atk</span>
+              <span className="text-gray-400">П атака</span>
               <span className="text-red-400 font-bold">+{item.stats.pAtkFlat}</span>
             </div>
           )}
-          {item.stats.pDefFlat && (
+          {(item.stats.pDefFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">P.Def</span>
+              <span className="text-gray-400">П защита</span>
               <span className="text-blue-400 font-bold">+{item.stats.pDefFlat}</span>
             </div>
           )}
-          {item.stats.mAtkFlat && (
+          {(item.stats.mAtkFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">M.Atk</span>
+              <span className="text-gray-400">М атака</span>
               <span className="text-purple-400 font-bold">+{item.stats.mAtkFlat}</span>
             </div>
           )}
-          {item.stats.mDefFlat && (
+          {(item.stats.mDefFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">M.Def</span>
+              <span className="text-gray-400">М защита</span>
               <span className="text-cyan-400 font-bold">+{item.stats.mDefFlat}</span>
             </div>
           )}
-          {item.stats.critFlat && (
+          {(item.stats.critFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Crit</span>
-              <span className="text-yellow-400 font-bold">+{(item.stats.critFlat * 100).toFixed(0)}%</span>
+              <span className="text-gray-400">Крит</span>
+              <span className="text-yellow-400 font-bold">+{((item.stats.critFlat ?? 0) * 100).toFixed(0)}%</span>
             </div>
           )}
-          {item.stats.atkSpdFlat && (
+          {(item.stats.atkSpdFlat ?? 0) > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Atk.Spd</span>
+              <span className="text-gray-400">Скор. атаки</span>
               <span className="text-green-400 font-bold">+{item.stats.atkSpdFlat}</span>
             </div>
           )}
