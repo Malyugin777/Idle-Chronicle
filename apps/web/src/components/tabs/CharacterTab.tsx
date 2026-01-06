@@ -1,9 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
-import { X } from 'lucide-react';
+import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+
+// ═══════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════
+
+type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+type SlotType = 'weapon' | 'shield' | 'helmet' | 'armor' | 'gloves' | 'boots' | 'ring1' | 'ring2' | 'necklace';
+
+interface ItemStats {
+  pAtkFlat?: number;
+  pDefFlat?: number;
+  mAtkFlat?: number;
+  mDefFlat?: number;
+  critFlat?: number;
+  atkSpdFlat?: number;
+}
+
+interface Item {
+  id: string;
+  name: string;
+  slotType: SlotType;
+  rarity: Rarity;
+  icon: string;
+  stats: ItemStats;
+}
 
 interface PlayerStats {
   id: string;
@@ -12,67 +37,351 @@ interface PlayerStats {
   level: number;
   exp: number;
   expToNext: number;
-  // Base stats
   power: number;
   vitality: number;
   agility: number;
   intellect: number;
   spirit: number;
-  // Combat stats
   pAtk: number;
   pDef: number;
   mAtk: number;
   mDef: number;
   critChance: number;
   attackSpeed: number;
-  // Currency
   adena: number;
 }
 
-interface Skill {
-  id: string;
-  icon: string;
-  level: number;
+interface HeroState {
+  equipment: Partial<Record<SlotType, Item | null>>;
+  inventory: Item[];
+  baseStats: PlayerStats | null;
+  derivedStats: {
+    pAtk: number;
+    pDef: number;
+    mAtk: number;
+    mDef: number;
+    critChance: number;
+    attackSpeed: number;
+  };
 }
 
-type EquipmentSlot = 'helmet' | 'armor' | 'pants' | 'gloves' | 'boots' | 'weapon' | 'earring1' | 'earring2' | 'ring1' | 'ring2' | 'necklace' | 'belt';
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+
+const SLOT_ICONS: Record<SlotType, React.ReactNode> = {
+  weapon: <Sword size={16} className="opacity-30" />,
+  shield: <Shield size={16} className="opacity-30" />,
+  helmet: <Crown size={16} className="opacity-30" />,
+  armor: <Shirt size={16} className="opacity-30" />,
+  gloves: <Hand size={16} className="opacity-30" />,
+  boots: <Footprints size={16} className="opacity-30" />,
+  ring1: <CircleDot size={14} className="opacity-30" />,
+  ring2: <CircleDot size={14} className="opacity-30" />,
+  necklace: <Gem size={14} className="opacity-30" />,
+};
+
+const RARITY_STYLES: Record<Rarity, { border: string; glow: string; text: string }> = {
+  common: {
+    border: 'border-gray-500/50',
+    glow: '',
+    text: 'text-gray-400',
+  },
+  uncommon: {
+    border: 'border-green-500/70',
+    glow: 'shadow-[0_0_8px_rgba(34,197,94,0.4)]',
+    text: 'text-green-400',
+  },
+  rare: {
+    border: 'border-blue-500/70',
+    glow: 'shadow-[0_0_10px_rgba(59,130,246,0.5)]',
+    text: 'text-blue-400',
+  },
+  epic: {
+    border: 'border-purple-500/70',
+    glow: 'shadow-[0_0_12px_rgba(168,85,247,0.5)]',
+    text: 'text-purple-400',
+  },
+  legendary: {
+    border: 'border-orange-500/70',
+    glow: 'shadow-[0_0_14px_rgba(249,115,22,0.6)] animate-pulse',
+    text: 'text-orange-400',
+  },
+};
+
+// Test items for demo
+const TEST_ITEMS: Item[] = [
+  {
+    id: 'test_sword_001',
+    name: 'Ржавый меч',
+    slotType: 'weapon',
+    rarity: 'common',
+    icon: '🗡️',
+    stats: { pAtkFlat: 5 },
+  },
+  {
+    id: 'test_helmet_001',
+    name: 'Кожаный шлем',
+    slotType: 'helmet',
+    rarity: 'uncommon',
+    icon: '🪖',
+    stats: { pDefFlat: 3 },
+  },
+  {
+    id: 'test_ring_001',
+    name: 'Кольцо удачи',
+    slotType: 'ring1',
+    rarity: 'rare',
+    icon: '💍',
+    stats: { critFlat: 0.05 },
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+// STAT SYSTEM (local recalculation)
+// ═══════════════════════════════════════════════════════════
+
+function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'] {
+  const base = heroState.baseStats;
+  if (!base) {
+    return { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 };
+  }
+
+  let pAtk = base.pAtk;
+  let pDef = base.pDef;
+  let mAtk = base.mAtk;
+  let mDef = base.mDef;
+  let critChance = base.critChance;
+  let attackSpeed = base.attackSpeed;
+
+  // Add equipment bonuses
+  Object.values(heroState.equipment).forEach(item => {
+    if (item?.stats) {
+      pAtk += item.stats.pAtkFlat || 0;
+      pDef += item.stats.pDefFlat || 0;
+      mAtk += item.stats.mAtkFlat || 0;
+      mDef += item.stats.mDefFlat || 0;
+      critChance += item.stats.critFlat || 0;
+      attackSpeed += item.stats.atkSpdFlat || 0;
+    }
+  });
+
+  return { pAtk, pDef, mAtk, mDef, critChance, attackSpeed };
+}
+
+// ═══════════════════════════════════════════════════════════
+// EQUIPMENT HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function equipItem(heroState: HeroState, itemId: string): HeroState {
+  const item = heroState.inventory.find(i => i.id === itemId);
+  if (!item) return heroState;
+
+  const currentEquipped = heroState.equipment[item.slotType];
+  const newInventory = heroState.inventory.filter(i => i.id !== itemId);
+
+  // If slot has item, move it to inventory
+  if (currentEquipped) {
+    newInventory.push(currentEquipped);
+  }
+
+  const newEquipment = { ...heroState.equipment, [item.slotType]: item };
+  const newState = { ...heroState, equipment: newEquipment, inventory: newInventory };
+  newState.derivedStats = recalculateDerivedStats(newState);
+
+  return newState;
+}
+
+function unequipItem(heroState: HeroState, slotType: SlotType): HeroState {
+  const item = heroState.equipment[slotType];
+  if (!item) return heroState;
+
+  const newEquipment = { ...heroState.equipment, [slotType]: null };
+  const newInventory = [...heroState.inventory, item];
+  const newState = { ...heroState, equipment: newEquipment, inventory: newInventory };
+  newState.derivedStats = recalculateDerivedStats(newState);
+
+  return newState;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SLOT COMPONENT
+// ═══════════════════════════════════════════════════════════
+
+interface SlotProps {
+  slotType: SlotType;
+  item: Item | null;
+  size?: 'normal' | 'small';
+  onClick?: () => void;
+}
+
+function Slot({ slotType, item, size = 'normal', onClick }: SlotProps) {
+  const sizeClasses = size === 'normal' ? 'w-11 h-11' : 'w-9 h-9';
+  const iconSize = size === 'normal' ? 'text-xl' : 'text-lg';
+
+  if (!item) {
+    // Empty slot with placeholder
+    return (
+      <button
+        onClick={onClick}
+        className={`${sizeClasses} bg-black/40 rounded-lg border border-white/10 flex items-center justify-center
+          hover:bg-black/30 hover:border-white/20 active:scale-95 transition-all`}
+      >
+        {SLOT_ICONS[slotType]}
+      </button>
+    );
+  }
+
+  const style = RARITY_STYLES[item.rarity];
+
+  return (
+    <button
+      onClick={onClick}
+      className={`${sizeClasses} bg-black/60 rounded-lg border-2 ${style.border} ${style.glow}
+        flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
+    >
+      <span className={iconSize}>{item.icon}</span>
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEM TOOLTIP COMPONENT
+// ═══════════════════════════════════════════════════════════
+
+interface ItemTooltipProps {
+  item: Item;
+  isEquipped: boolean;
+  slotHasItem: boolean;
+  onEquip: () => void;
+  onUnequip: () => void;
+  onClose: () => void;
+  t: any;
+}
+
+function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClose, t }: ItemTooltipProps) {
+  const style = RARITY_STYLES[item.rarity];
+  const rarityLabel = t.character[item.rarity] || item.rarity;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
+      <div
+        className={`bg-l2-panel rounded-lg w-full max-w-xs border-2 ${style.border} ${style.glow}`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{item.icon}</span>
+            <div>
+              <div className={`font-bold ${style.text}`}>{item.name}</div>
+              <div className="text-[10px] text-gray-400">{rarityLabel}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="p-3 space-y-1">
+          {item.stats.pAtkFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">P.Atk</span>
+              <span className="text-red-400 font-bold">+{item.stats.pAtkFlat}</span>
+            </div>
+          )}
+          {item.stats.pDefFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">P.Def</span>
+              <span className="text-blue-400 font-bold">+{item.stats.pDefFlat}</span>
+            </div>
+          )}
+          {item.stats.mAtkFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">M.Atk</span>
+              <span className="text-purple-400 font-bold">+{item.stats.mAtkFlat}</span>
+            </div>
+          )}
+          {item.stats.mDefFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">M.Def</span>
+              <span className="text-cyan-400 font-bold">+{item.stats.mDefFlat}</span>
+            </div>
+          )}
+          {item.stats.critFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Crit</span>
+              <span className="text-yellow-400 font-bold">+{(item.stats.critFlat * 100).toFixed(0)}%</span>
+            </div>
+          )}
+          {item.stats.atkSpdFlat && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Atk.Spd</span>
+              <span className="text-green-400 font-bold">+{item.stats.atkSpdFlat}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="p-3 pt-0 flex gap-2">
+          {isEquipped ? (
+            <button
+              onClick={onUnequip}
+              className="flex-1 py-2 bg-red-500/20 text-red-400 rounded font-bold text-sm hover:bg-red-500/30"
+            >
+              {t.character.unequip}
+            </button>
+          ) : (
+            <button
+              onClick={onEquip}
+              className="flex-1 py-2 bg-l2-gold/20 text-l2-gold rounded font-bold text-sm hover:bg-l2-gold/30"
+            >
+              {slotHasItem ? t.character.replace : t.character.equip}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-black/30 text-gray-400 rounded font-bold text-sm hover:bg-black/40"
+          >
+            {t.character.close}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════
 
 export default function CharacterTab() {
-  const [stats, setStats] = useState<PlayerStats | null>(null);
-  const [showStatsPopup, setShowStatsPopup] = useState(false);
-  const [showSkillsPopup, setShowSkillsPopup] = useState(false);
+  const [heroState, setHeroState] = useState<HeroState>({
+    equipment: {},
+    inventory: [],
+    baseStats: null,
+    derivedStats: { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 },
+  });
+  const [activeTab, setActiveTab] = useState<'stats' | 'skills'>('stats');
+  const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
-  // Equipment slots (empty for now)
-  const equipmentSlots: { slot: EquipmentSlot; label: string }[] = [
-    { slot: 'helmet', label: t.character.helmet },
-    { slot: 'armor', label: t.character.armor },
-    { slot: 'pants', label: t.character.pants },
-    { slot: 'gloves', label: t.character.gloves },
-    { slot: 'boots', label: t.character.boots },
-    { slot: 'weapon', label: t.character.weapon },
-    { slot: 'earring1', label: t.character.earring },
-    { slot: 'earring2', label: t.character.earring },
-    { slot: 'ring1', label: t.character.ring },
-    { slot: 'ring2', label: t.character.ring },
-    { slot: 'necklace', label: t.character.necklace },
-    { slot: 'belt', label: t.character.belt },
-  ];
-
   // Skills
-  const skills: Skill[] = [
+  const skills = [
     { id: 'fireball', icon: '🔥', level: 1 },
     { id: 'iceball', icon: '❄️', level: 1 },
     { id: 'lightning', icon: '⚡', level: 1 },
   ];
 
+  // Load player data
   useEffect(() => {
     const socket = getSocket();
     socket.emit('player:get');
 
-    socket.on('player:data', (data: PlayerStats) => {
-      setStats({
+    const handlePlayerData = (data: PlayerStats) => {
+      const baseStats = {
         ...data,
         exp: data.exp || 0,
         expToNext: data.expToNext || 1000,
@@ -85,25 +394,19 @@ export default function CharacterTab() {
         mAtk: data.mAtk || 10,
         mDef: data.mDef || 30,
         attackSpeed: data.attackSpeed || 300,
-      });
-    });
+      };
 
-    socket.on('auth:success', (data: PlayerStats) => {
-      setStats({
-        ...data,
-        exp: data.exp || 0,
-        expToNext: data.expToNext || 1000,
-        power: data.power || 10,
-        vitality: data.vitality || 10,
-        agility: data.agility || 10,
-        intellect: data.intellect || 10,
-        spirit: data.spirit || 10,
-        pDef: data.pDef || 40,
-        mAtk: data.mAtk || 10,
-        mDef: data.mDef || 30,
-        attackSpeed: data.attackSpeed || 300,
+      setHeroState(prev => {
+        // Add test items to inventory if empty (first load)
+        const inventory = prev.inventory.length === 0 ? [...TEST_ITEMS] : prev.inventory;
+        const newState = { ...prev, baseStats, inventory };
+        newState.derivedStats = recalculateDerivedStats(newState);
+        return newState;
       });
-    });
+    };
+
+    socket.on('player:data', handlePlayerData);
+    socket.on('auth:success', handlePlayerData);
 
     return () => {
       socket.off('player:data');
@@ -111,7 +414,32 @@ export default function CharacterTab() {
     };
   }, []);
 
-  if (!stats) {
+  // Equip handler
+  const handleEquip = useCallback((itemId: string) => {
+    setHeroState(prev => equipItem(prev, itemId));
+    setSelectedItem(null);
+  }, []);
+
+  // Unequip handler
+  const handleUnequip = useCallback((slotType: SlotType) => {
+    setHeroState(prev => unequipItem(prev, slotType));
+    setSelectedItem(null);
+  }, []);
+
+  // Click on equipped slot
+  const handleEquippedSlotClick = useCallback((slotType: SlotType) => {
+    const item = heroState.equipment[slotType];
+    if (item) {
+      setSelectedItem({ item, isEquipped: true, slotType });
+    }
+  }, [heroState.equipment]);
+
+  // Click on inventory item
+  const handleInventoryItemClick = useCallback((item: Item) => {
+    setSelectedItem({ item, isEquipped: false });
+  }, []);
+
+  if (!heroState.baseStats) {
     return (
       <div className="flex-1 flex items-center justify-center bg-l2-dark">
         <div className="text-center">
@@ -122,6 +450,8 @@ export default function CharacterTab() {
     );
   }
 
+  const stats = heroState.baseStats;
+  const derived = heroState.derivedStats;
   const expPercent = Math.min(100, (stats.exp / stats.expToNext) * 100);
 
   return (
@@ -129,12 +459,9 @@ export default function CharacterTab() {
       {/* Compact Header */}
       <div className="bg-l2-panel p-2 border-b border-white/10">
         <div className="flex items-center gap-2">
-          {/* Level badge */}
           <div className="w-8 h-8 rounded bg-l2-gold/20 flex items-center justify-center">
             <span className="text-sm font-bold text-l2-gold">{stats.level}</span>
           </div>
-
-          {/* Name + XP bar */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-white truncate">
@@ -144,7 +471,6 @@ export default function CharacterTab() {
                 🪙 {stats.adena.toLocaleString()}
               </span>
             </div>
-            {/* XP Bar */}
             <div className="mt-1 h-2 bg-black/50 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all"
@@ -158,45 +484,215 @@ export default function CharacterTab() {
         </div>
       </div>
 
-      {/* Equipment Grid */}
+      {/* Paperdoll Equipment Layout */}
       <div className="p-2">
-        <div className="text-xs text-gray-400 mb-1">{t.character.equipment}</div>
-        <div className="grid grid-cols-6 gap-1">
-          {equipmentSlots.map((eq) => (
-            <div
-              key={eq.slot}
-              className="aspect-square bg-black/40 rounded border border-white/10 flex items-center justify-center"
-              title={eq.label}
-            >
-              <span className="text-[10px] text-gray-600">-</span>
-            </div>
-          ))}
+        <div className="text-xs text-gray-400 mb-2">{t.character.equipment}</div>
+
+        {/* Cross/Human layout */}
+        <div className="bg-black/20 rounded-lg p-3">
+          {/* Top row: Helmet */}
+          <div className="flex justify-center mb-2">
+            <Slot
+              slotType="helmet"
+              item={heroState.equipment.helmet || null}
+              onClick={() => handleEquippedSlotClick('helmet')}
+            />
+          </div>
+
+          {/* Middle row: Weapon - Armor - Shield */}
+          <div className="flex justify-center items-center gap-2 mb-2">
+            <Slot
+              slotType="weapon"
+              item={heroState.equipment.weapon || null}
+              onClick={() => handleEquippedSlotClick('weapon')}
+            />
+            <Slot
+              slotType="armor"
+              item={heroState.equipment.armor || null}
+              onClick={() => handleEquippedSlotClick('armor')}
+            />
+            <Slot
+              slotType="shield"
+              item={heroState.equipment.shield || null}
+              onClick={() => handleEquippedSlotClick('shield')}
+            />
+          </div>
+
+          {/* Lower row: Gloves - Boots */}
+          <div className="flex justify-center gap-2 mb-2">
+            <Slot
+              slotType="gloves"
+              item={heroState.equipment.gloves || null}
+              onClick={() => handleEquippedSlotClick('gloves')}
+            />
+            <Slot
+              slotType="boots"
+              item={heroState.equipment.boots || null}
+              onClick={() => handleEquippedSlotClick('boots')}
+            />
+          </div>
+
+          {/* Jewelry row: Ring1 - Necklace - Ring2 */}
+          <div className="flex justify-center gap-2">
+            <Slot
+              slotType="ring1"
+              item={heroState.equipment.ring1 || null}
+              size="small"
+              onClick={() => handleEquippedSlotClick('ring1')}
+            />
+            <Slot
+              slotType="necklace"
+              item={heroState.equipment.necklace || null}
+              size="small"
+              onClick={() => handleEquippedSlotClick('necklace')}
+            />
+            <Slot
+              slotType="ring2"
+              item={heroState.equipment.ring2 || null}
+              size="small"
+              onClick={() => handleEquippedSlotClick('ring2')}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="px-2 flex gap-2">
-        <button
-          onClick={() => setShowStatsPopup(true)}
-          className="flex-1 py-2 bg-l2-panel rounded text-xs font-bold text-white border border-white/10 hover:bg-white/10"
-        >
-          📊 {t.character.stats}
-        </button>
-        <button
-          onClick={() => setShowSkillsPopup(true)}
-          className="flex-1 py-2 bg-l2-panel rounded text-xs font-bold text-white border border-white/10 hover:bg-white/10"
-        >
-          ✨ {t.character.skills}
-        </button>
+      {/* Segmented Control for Stats/Skills */}
+      <div className="px-2 mb-2">
+        <div className="flex bg-black/30 rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`flex-1 py-2 rounded text-xs font-bold transition-all ${
+              activeTab === 'stats'
+                ? 'bg-l2-gold text-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            📊 {t.character.stats}
+          </button>
+          <button
+            onClick={() => setActiveTab('skills')}
+            className={`flex-1 py-2 rounded text-xs font-bold transition-all ${
+              activeTab === 'skills'
+                ? 'bg-l2-gold text-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            ✨ {t.character.skills}
+          </button>
+        </div>
       </div>
 
-      {/* Inventory Grid */}
+      {/* Stats/Skills Content */}
+      {activeTab === 'stats' ? (
+        <div className="px-2 pb-2">
+          {/* Combat Stats */}
+          <div className="bg-l2-panel rounded-lg p-2 mb-2">
+            <div className="text-[10px] text-gray-400 mb-1">{t.character.combatStats}</div>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
+                <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
+                <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
+                <div className="text-xs font-bold text-yellow-400">{(derived.critChance * 100).toFixed(0)}%</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
+                <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
+                <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
+                <div className="text-xs font-bold text-green-400">{derived.attackSpeed}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Base Stats */}
+          <div className="bg-l2-panel rounded-lg p-2">
+            <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
+            <div className="grid grid-cols-5 gap-1">
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500">{t.character.power}</div>
+                <div className="text-xs font-bold text-white">{stats.power}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
+                <div className="text-xs font-bold text-white">{stats.vitality}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500">{t.character.agility}</div>
+                <div className="text-xs font-bold text-white">{stats.agility}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
+                <div className="text-xs font-bold text-white">{stats.intellect}</div>
+              </div>
+              <div className="bg-black/30 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
+                <div className="text-xs font-bold text-white">{stats.spirit}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="px-2 pb-2">
+          <div className="space-y-2">
+            {skills.map((skill) => {
+              const skillName = skill.id === 'fireball' ? t.character.skillFireball
+                : skill.id === 'iceball' ? t.character.skillIceball
+                : t.character.skillLightning;
+              const skillDesc = skill.id === 'fireball' ? t.character.skillFireballDesc
+                : skill.id === 'iceball' ? t.character.skillIceballDesc
+                : t.character.skillLightningDesc;
+
+              return (
+                <div key={skill.id} className="flex items-center gap-3 bg-l2-panel rounded-lg p-2">
+                  <div className="w-10 h-10 bg-black/50 rounded-lg flex items-center justify-center text-2xl">
+                    {skill.icon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-white">{skillName}</div>
+                    <div className="text-[10px] text-gray-500">{skillDesc}</div>
+                    <div className="text-[10px] text-l2-gold">Lv.{skill.level}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Inventory */}
       <div className="p-2">
         <div className="text-xs text-gray-400 mb-1">{t.character.inventory}</div>
         <div className="grid grid-cols-6 gap-1">
-          {Array.from({ length: 24 }).map((_, i) => (
+          {/* Inventory items */}
+          {heroState.inventory.map((item) => {
+            const style = RARITY_STYLES[item.rarity];
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleInventoryItemClick(item)}
+                className={`aspect-square bg-black/60 rounded border-2 ${style.border} ${style.glow}
+                  flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
+              >
+                <span className="text-lg">{item.icon}</span>
+              </button>
+            );
+          })}
+          {/* Empty slots */}
+          {Array.from({ length: Math.max(0, 24 - heroState.inventory.length) }).map((_, i) => (
             <div
-              key={i}
+              key={`empty-${i}`}
               className="aspect-square bg-black/30 rounded border border-white/5 flex items-center justify-center"
             >
               <span className="text-[10px] text-gray-700">-</span>
@@ -205,117 +701,17 @@ export default function CharacterTab() {
         </div>
       </div>
 
-      {/* Stats Popup */}
-      {showStatsPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-l2-panel rounded-lg w-full max-w-sm max-h-[80vh] overflow-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-white/10">
-              <span className="font-bold text-white">{t.character.stats}</span>
-              <button onClick={() => setShowStatsPopup(false)} className="text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Combat Stats */}
-            <div className="p-3 border-b border-white/10">
-              <div className="text-xs text-gray-400 mb-2">{t.character.combatStats}</div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.pAtk}</div>
-                  <div className="text-sm font-bold text-red-400">{stats.pAtk}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.pDef}</div>
-                  <div className="text-sm font-bold text-blue-400">{stats.pDef}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.critChance}</div>
-                  <div className="text-sm font-bold text-yellow-400">{(stats.critChance * 100).toFixed(0)}%</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.mAtk}</div>
-                  <div className="text-sm font-bold text-purple-400">{stats.mAtk}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.mDef}</div>
-                  <div className="text-sm font-bold text-cyan-400">{stats.mDef}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.atkSpd}</div>
-                  <div className="text-sm font-bold text-green-400">{stats.attackSpeed}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Base Stats */}
-            <div className="p-3">
-              <div className="text-xs text-gray-400 mb-2">{t.character.baseStats}</div>
-              <div className="grid grid-cols-5 gap-1 text-center">
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.power}</div>
-                  <div className="text-sm font-bold text-white">{stats.power}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.vitality}</div>
-                  <div className="text-sm font-bold text-white">{stats.vitality}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.agility}</div>
-                  <div className="text-sm font-bold text-white">{stats.agility}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.intellect}</div>
-                  <div className="text-sm font-bold text-white">{stats.intellect}</div>
-                </div>
-                <div className="bg-black/30 rounded p-2">
-                  <div className="text-[10px] text-gray-500">{t.character.spirit}</div>
-                  <div className="text-sm font-bold text-white">{stats.spirit}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Skills Popup */}
-      {showSkillsPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-l2-panel rounded-lg w-full max-w-sm">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-white/10">
-              <span className="font-bold text-white">{t.character.skills}</span>
-              <button onClick={() => setShowSkillsPopup(false)} className="text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Skills List */}
-            <div className="p-3 space-y-2">
-              {skills.map((skill) => {
-                const skillName = skill.id === 'fireball' ? t.character.skillFireball
-                  : skill.id === 'iceball' ? t.character.skillIceball
-                  : t.character.skillLightning;
-                const skillDesc = skill.id === 'fireball' ? t.character.skillFireballDesc
-                  : skill.id === 'iceball' ? t.character.skillIceballDesc
-                  : t.character.skillLightningDesc;
-
-                return (
-                  <div key={skill.id} className="flex items-center gap-3 bg-black/30 rounded p-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-bold text-white">{skillName}</div>
-                      <div className="text-[10px] text-gray-500">{skillDesc}</div>
-                      <div className="text-[10px] text-l2-gold">Lv.{skill.level}</div>
-                    </div>
-                    <div className="w-10 h-10 bg-black/50 rounded flex items-center justify-center text-2xl">
-                      {skill.icon}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      {/* Item Tooltip */}
+      {selectedItem && (
+        <ItemTooltip
+          item={selectedItem.item}
+          isEquipped={selectedItem.isEquipped}
+          slotHasItem={selectedItem.isEquipped ? false : !!heroState.equipment[selectedItem.item.slotType]}
+          onEquip={() => handleEquip(selectedItem.item.id)}
+          onUnequip={() => selectedItem.slotType && handleUnequip(selectedItem.slotType)}
+          onClose={() => setSelectedItem(null)}
+          t={t}
+        />
       )}
     </div>
   );

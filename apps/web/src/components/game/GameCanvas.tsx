@@ -8,6 +8,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 interface BossState {
   id: string;
   name: string;
+  nameRu?: string;
   title?: string;
   hp: number;
   maxHp: number;
@@ -15,8 +16,12 @@ interface BossState {
   ragePhase: number;
   playersOnline: number;
   icon?: string;
+  image?: string | null;
   bossIndex?: number;
   totalBosses?: number;
+  // Respawn timer
+  isRespawning?: boolean;
+  respawnAt?: number | null;
 }
 
 interface DamageFeed {
@@ -177,6 +182,17 @@ export default function GameCanvas() {
     // Boss state updates
     socket.on('boss:state', (data: BossState) => {
       setBossState(data);
+
+      // Handle respawn timer from persistent state (when page loads during respawn)
+      if (data.isRespawning && data.respawnAt && !victoryData) {
+        const remaining = Math.max(0, data.respawnAt - Date.now());
+        if (remaining > 0) {
+          setRespawnCountdown(remaining);
+        }
+      } else if (!data.isRespawning && respawnCountdown > 0 && !victoryData) {
+        // Boss respawned while we had countdown - clear it
+        setRespawnCountdown(0);
+      }
     });
 
     // Tap results - show actual damage from server
@@ -366,14 +382,19 @@ export default function GameCanvas() {
     };
   }, []);
 
-  // Load boss image
+  // Load boss image (dynamic based on bossState.image)
   useEffect(() => {
+    const imageSrc = bossState.image || '/assets/bosses/boss_single.png';
     const img = new Image();
-    img.src = '/assets/bosses/boss_single.png';
+    img.src = imageSrc;
     img.onload = () => {
       bossImgRef.current = img;
     };
-  }, []);
+    img.onerror = () => {
+      // Fallback to default image
+      img.src = '/assets/bosses/boss_single.png';
+    };
+  }, [bossState.image]);
 
   // Canvas drawing
   useEffect(() => {
@@ -648,6 +669,27 @@ export default function GameCanvas() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Respawn Countdown Screen (when loaded during respawn) */}
+      {!victoryData && respawnCountdown > 0 && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-l2-panel/95 rounded-lg p-6 m-4 max-w-sm w-full pointer-events-auto text-center">
+            <div className="text-4xl mb-3">{bossState.icon || '👹'}</div>
+            <div className="text-gray-300 text-sm mb-2">
+              {lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name} {t.boss.defeated}
+            </div>
+            <div className="bg-black/40 rounded-lg p-4 mb-3">
+              <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
+              <div className="text-3xl font-bold text-l2-gold font-mono">
+                {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {t.leaderboard.waitForKill}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Victory Screen with Respawn Countdown */}
       {victoryData && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -812,7 +854,9 @@ export default function GameCanvas() {
           <div className="flex items-center gap-2">
             <span className="text-lg">{bossState.icon || '👹'}</span>
             <div>
-              <span className="font-pixel text-sm text-l2-gold">{bossState.name}</span>
+              <span className="font-pixel text-sm text-l2-gold">
+                {lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name}
+              </span>
               {bossState.bossIndex && (
                 <span className="text-xs text-gray-500 ml-2">
                   ({bossState.bossIndex}/{bossState.totalBosses})

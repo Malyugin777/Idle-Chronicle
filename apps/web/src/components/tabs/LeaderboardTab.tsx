@@ -74,16 +74,14 @@ export default function LeaderboardTab() {
 
     // Also update from boss:state for real-time HP updates
     socket.on('boss:state', (data: any) => {
-      if (currentData) {
-        setCurrentData(prev => prev ? {
-          ...prev,
-          bossHp: data.hp,
-          bossMaxHp: data.maxHp,
-          bossName: data.name,
-          bossIcon: data.icon,
-          prizePool: data.prizePool,
-        } : null);
-      }
+      setCurrentData(prev => prev ? {
+        ...prev,
+        bossHp: data.hp,
+        bossMaxHp: data.maxHp,
+        bossName: data.name,
+        bossIcon: data.icon,
+        // Keep existing prizePool - boss:state doesn't include it
+      } : null);
     });
 
     // Previous boss
@@ -285,7 +283,7 @@ export default function LeaderboardTab() {
         {currentData.prizePool && renderPrizePool(currentData.prizePool)}
 
         {/* Leaderboard */}
-        {currentData.leaderboard.length === 0 ? (
+        {!currentData.leaderboard || currentData.leaderboard.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             <Swords size={32} className="mx-auto mb-2 opacity-50" />
             <p>{t.leaderboard.noDamage}</p>
@@ -333,9 +331,11 @@ export default function LeaderboardTab() {
               {renderAvatar(previousData.finalBlowPhoto, previousData.finalBlowBy, 36)}
             </div>
             <div className="text-xs font-bold text-white truncate">{previousData.finalBlowBy}</div>
-            <div className="text-[10px] text-gray-400">
-              {previousData.prizePool.ton / 2} TON + {Math.floor(previousData.prizePool.chests / 2)} 📦
-            </div>
+            {previousData.prizePool && (
+              <div className="text-[10px] text-gray-400">
+                {previousData.prizePool.ton / 2} TON + {Math.floor(previousData.prizePool.chests / 2)} 📦
+              </div>
+            )}
           </div>
           {/* Top Damage */}
           <div className="bg-l2-gold/10 rounded-lg p-2 text-center">
@@ -344,17 +344,19 @@ export default function LeaderboardTab() {
               {renderAvatar(previousData.topDamagePhoto, previousData.topDamageBy, 36)}
             </div>
             <div className="text-xs font-bold text-white truncate">{previousData.topDamageBy}</div>
-            <div className="text-[10px] text-gray-400">
-              {previousData.prizePool.ton / 2} TON + {Math.ceil(previousData.prizePool.chests / 2)} 📦
-            </div>
+            {previousData.prizePool && (
+              <div className="text-[10px] text-gray-400">
+                {previousData.prizePool.ton / 2} TON + {Math.ceil(previousData.prizePool.chests / 2)} 📦
+              </div>
+            )}
           </div>
         </div>
 
         {/* Prize Pool */}
-        {renderPrizePool(previousData.prizePool)}
+        {previousData.prizePool && renderPrizePool(previousData.prizePool)}
 
         {/* Leaderboard */}
-        {renderLeaderboard(previousData.leaderboard)}
+        {previousData.leaderboard && previousData.leaderboard.length > 0 && renderLeaderboard(previousData.leaderboard)}
       </div>
     );
   };

@@ -73,7 +73,8 @@ const handle = app.getRequestHandler();
 
 let bossState = {
   id: 'default',
-  name: 'Lizard',
+  name: 'Serpent',
+  nameRu: 'Змей',
   title: 'World Boss',
   maxHp: 500000,
   currentHp: 500000,
@@ -81,9 +82,10 @@ let bossState = {
   thornsDamage: 0,  // L2: обратка босса (тратит stamina игрока)
   ragePhase: 0,
   sessionId: null,
-  icon: '🦎',
+  icon: '🐍',
+  image: '/assets/bosses/boss_1.png',
   bossIndex: 1,
-  totalBosses: 10,
+  totalBosses: 100, // Будет 100 боссов!
   // Rewards
   adenaReward: 1000,
   expReward: 1000000,
@@ -94,8 +96,121 @@ let bossState = {
 // Previous boss session data for leaderboard
 let previousBossSession = null;
 
+// Respawn timer (null = boss alive, Date = respawning)
+let bossRespawnAt = null;
+const BOSS_RESPAWN_TIME_MS = 5 * 60 * 1000; // 5 minutes
+
 const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
+
+// ═══════════════════════════════════════════════════════════
+// BOSS STATE PERSISTENCE
+// ═══════════════════════════════════════════════════════════
+
+async function loadBossState(prisma) {
+  try {
+    const state = await prisma.gameState.findUnique({ where: { id: 'singleton' } });
+    if (!state) {
+      console.log('[Boss] No saved state, will use defaults');
+      return false;
+    }
+
+    // Check if boss is respawning
+    if (state.respawnAt && new Date(state.respawnAt) > new Date()) {
+      bossRespawnAt = new Date(state.respawnAt);
+      console.log(`[Boss] Respawning at ${bossRespawnAt.toISOString()}`);
+    }
+
+    // Load boss state
+    const boss = DEFAULT_BOSSES[state.currentBossIndex] || DEFAULT_BOSSES[0];
+    currentBossIndex = state.currentBossIndex;
+
+    bossState = {
+      id: `default-${state.currentBossIndex}`,
+      name: state.bossName || boss.name,
+      nameRu: boss.nameRu || boss.name,
+      title: 'World Boss',
+      maxHp: Number(state.bossMaxHp),
+      currentHp: bossRespawnAt ? Number(state.bossMaxHp) : Number(state.bossCurrentHp),
+      defense: state.bossDefense || boss.defense,
+      thornsDamage: state.bossThorns || boss.thornsDamage || 0,
+      ragePhase: 0,
+      sessionId: null,
+      icon: state.bossIcon || boss.icon,
+      image: boss.image || null,
+      bossIndex: state.currentBossIndex + 1,
+      totalBosses: 100, // Будет 100 боссов!
+      adenaReward: state.bossAdenaReward || boss.adenaReward,
+      expReward: Number(state.bossExpReward) || boss.expReward,
+      tonReward: state.bossTonReward || boss.tonReward || 10,
+      chestsReward: state.bossChestsReward || boss.chestsReward || 10,
+    };
+
+    // Load session leaderboard
+    if (state.sessionLeaderboard && !bossRespawnAt) {
+      const saved = state.sessionLeaderboard;
+      if (Array.isArray(saved)) {
+        sessionLeaderboard.clear();
+        for (const entry of saved) {
+          sessionLeaderboard.set(entry.odamage, entry);
+        }
+      }
+    }
+
+    console.log(`[Boss] Loaded state: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp}`);
+    return true;
+  } catch (err) {
+    console.error('[Boss] Load state error:', err.message);
+    return false;
+  }
+}
+
+async function saveBossState(prisma) {
+  try {
+    // Serialize leaderboard
+    const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([odamage, data]) => ({
+      odamage,
+      ...data,
+    }));
+
+    await prisma.gameState.upsert({
+      where: { id: 'singleton' },
+      update: {
+        currentBossIndex,
+        bossCurrentHp: BigInt(Math.max(0, bossState.currentHp)),
+        bossMaxHp: BigInt(bossState.maxHp),
+        bossName: bossState.name,
+        bossIcon: bossState.icon,
+        bossDefense: bossState.defense,
+        bossThorns: bossState.thornsDamage,
+        bossAdenaReward: bossState.adenaReward,
+        bossExpReward: BigInt(bossState.expReward),
+        bossTonReward: bossState.tonReward,
+        bossChestsReward: bossState.chestsReward,
+        respawnAt: bossRespawnAt,
+        sessionLeaderboard: leaderboardArray,
+      },
+      create: {
+        id: 'singleton',
+        currentBossIndex,
+        bossCurrentHp: BigInt(Math.max(0, bossState.currentHp)),
+        bossMaxHp: BigInt(bossState.maxHp),
+        bossName: bossState.name,
+        bossIcon: bossState.icon,
+        bossDefense: bossState.defense,
+        bossThorns: bossState.thornsDamage,
+        bossAdenaReward: bossState.adenaReward,
+        bossExpReward: BigInt(bossState.expReward),
+        bossTonReward: bossState.tonReward,
+        bossChestsReward: bossState.chestsReward,
+        respawnAt: bossRespawnAt,
+        sessionLeaderboard: leaderboardArray,
+      },
+    });
+  } catch (err) {
+    console.error('[Boss] Save state error:', err.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // GAME CONSTANTS
@@ -264,25 +379,27 @@ function updateRagePhase() {
 }
 
 // Default bosses for rotation (used if DB is empty)
+// Всего будет 100 боссов! С каждым боссом награды растут.
 // thornsDamage: обратка босса - тратит stamina игрока при каждом тапе
 // tonReward и chestsReward: 50% финальному удару, 50% топ урону
 // expReward: распределяется по всем участникам по % урона
 const DEFAULT_BOSSES = [
-  { name: 'Lizard', hp: 500000, defense: 0, thornsDamage: 0, icon: '🦎', adenaReward: 1000, expReward: 1000000, tonReward: 10, chestsReward: 10 },
-  { name: 'Golem', hp: 750000, defense: 5, thornsDamage: 1, icon: '🗿', adenaReward: 2000, expReward: 1500000, tonReward: 15, chestsReward: 12 },
-  { name: 'Spider Queen', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🕷️', adenaReward: 3500, expReward: 2000000, tonReward: 20, chestsReward: 15 },
-  { name: 'Werewolf', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐺', adenaReward: 5000, expReward: 3000000, tonReward: 30, chestsReward: 18 },
-  { name: 'Demon', hp: 2000000, defense: 20, thornsDamage: 4, icon: '👹', adenaReward: 7000, expReward: 4000000, tonReward: 40, chestsReward: 20 },
-  { name: 'Kraken', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000000, tonReward: 50, chestsReward: 25 },
-  { name: 'Dragon', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 7000000, tonReward: 70, chestsReward: 30 },
-  { name: 'Hydra', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 10000000, tonReward: 100, chestsReward: 40 },
-  { name: 'Phoenix', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 15000000, tonReward: 150, chestsReward: 50 },
-  { name: 'Ancient Dragon', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 25000000, tonReward: 250, chestsReward: 75 },
+  // Первые 5 боссов с картинками
+  { name: 'Serpent', nameRu: 'Змей', hp: 500000, defense: 0, thornsDamage: 0, icon: '🐍', image: '/assets/bosses/boss_1.png', adenaReward: 1000, expReward: 1000000, tonReward: 10, chestsReward: 10 },
+  { name: 'Plague Rat', nameRu: 'Чумная Крыса', hp: 750000, defense: 5, thornsDamage: 1, icon: '🐀', image: '/assets/bosses/boss_2.png', adenaReward: 2000, expReward: 1500000, tonReward: 15, chestsReward: 12 },
+  { name: 'Lizardman', nameRu: 'Ящер', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🦎', image: '/assets/bosses/boss_3.png', adenaReward: 3500, expReward: 2000000, tonReward: 20, chestsReward: 15 },
+  { name: 'Hell Hound', nameRu: 'Адский Пёс', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐕', image: '/assets/bosses/boss_4.png', adenaReward: 5000, expReward: 3000000, tonReward: 30, chestsReward: 18 },
+  { name: 'Poison Toad', nameRu: 'Ядовитая Жаба', hp: 2000000, defense: 20, thornsDamage: 4, icon: '🐸', image: '/assets/bosses/boss_5.png', adenaReward: 7000, expReward: 4000000, tonReward: 40, chestsReward: 20 },
+  // Будущие боссы (пока без картинок - используют эмодзи)
+  { name: 'Kraken', nameRu: 'Кракен', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000000, tonReward: 50, chestsReward: 25 },
+  { name: 'Dragon', nameRu: 'Дракон', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 7000000, tonReward: 70, chestsReward: 30 },
+  { name: 'Hydra', nameRu: 'Гидра', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 10000000, tonReward: 100, chestsReward: 40 },
+  { name: 'Phoenix', nameRu: 'Феникс', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 15000000, tonReward: 150, chestsReward: 50 },
+  { name: 'Ancient Dragon', nameRu: 'Древний Дракон', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 25000000, tonReward: 250, chestsReward: 75 },
 ];
 
 // Respawn timer (10 minutes = 600000ms)
-const RESPAWN_TIME_MS = 600000;
-let respawnTimestamp = 0;
+// Using BOSS_RESPAWN_TIME_MS (5 min) and bossRespawnAt from line 98-99
 
 let currentBossIndex = 0;
 
@@ -335,6 +452,7 @@ async function respawnBoss(prisma, forceNext = true) {
       bossState = {
         id: `default-${currentBossIndex}`,
         name: boss.name,
+        nameRu: boss.nameRu || boss.name,
         title: 'World Boss',
         maxHp: boss.hp,
         currentHp: boss.hp,
@@ -343,8 +461,9 @@ async function respawnBoss(prisma, forceNext = true) {
         ragePhase: 0,
         sessionId: null,
         icon: boss.icon,
+        image: boss.image || null,
         bossIndex: currentBossIndex + 1,
-        totalBosses: DEFAULT_BOSSES.length,
+        totalBosses: 100, // Будет 100 боссов!
         adenaReward: boss.adenaReward,
         expReward: boss.expReward,
         tonReward: boss.tonReward || 10,
@@ -357,6 +476,7 @@ async function respawnBoss(prisma, forceNext = true) {
     bossState = {
       id: 'default',
       name: boss.name,
+      nameRu: boss.nameRu || boss.name,
       title: 'World Boss',
       maxHp: boss.hp,
       currentHp: boss.hp,
@@ -365,8 +485,9 @@ async function respawnBoss(prisma, forceNext = true) {
       ragePhase: 0,
       sessionId: null,
       icon: boss.icon,
+      image: boss.image || null,
       bossIndex: 1,
-      totalBosses: DEFAULT_BOSSES.length,
+      totalBosses: 100, // Будет 100 боссов!
       adenaReward: boss.adenaReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
@@ -392,8 +513,18 @@ app.prepare().then(async () => {
     console.error('[Prisma] Connection error:', err.message);
   }
 
-  // Initialize boss (start with first boss, don't rotate)
-  await respawnBoss(prisma, false);
+  // Try to load saved boss state first
+  const loadedState = await loadBossState(prisma);
+  if (!loadedState) {
+    // No saved state, initialize with first boss
+    await respawnBoss(prisma, false);
+    await saveBossState(prisma);
+  }
+
+  // Periodic boss state save (every 10 seconds)
+  setInterval(() => {
+    saveBossState(prisma);
+  }, 10000);
 
   const server = createServer(async (req, res) => {
     try {
@@ -434,6 +565,12 @@ app.prepare().then(async () => {
   io.on('connection', async (socket) => {
     console.log(`[Socket] Connected: ${socket.id}`);
 
+    // Calculate initial derived stats for level 1
+    const initialDerived = StatsService.calculateDerived(
+      { power: 10, agility: 10, vitality: 10, intellect: 10, spirit: 10 },
+      1
+    );
+
     const player = {
       odamage: '',
       odamageN: 'Guest',
@@ -443,25 +580,25 @@ app.prepare().then(async () => {
       dex: 1,
       luck: 1,
       pAtk: 10,
-      critChance: BASE_CRIT_CHANCE,
+      critChance: initialDerived.critChance,
       // L2 Core Attributes (NEW)
       power: 10,
       agility: 10,
       vitality: 10,
       intellect: 10,
       spirit: 10,
-      // L2 Derived Stats (NEW)
-      physicalPower: 15,
-      maxHealth: 100,
-      physicalDefense: 40,
-      attackSpeed: 300,
-      // Stamina System (NEW - replaces mana for combat)
-      stamina: 100,
-      maxStamina: 100,
+      // L2 Derived Stats (from StatsService)
+      physicalPower: initialDerived.physicalPower,
+      maxHealth: initialDerived.maxHealth,
+      physicalDefense: initialDerived.physicalDefense,
+      attackSpeed: initialDerived.attackSpeed,
+      // Stamina System (from StatsService)
+      stamina: initialDerived.maxStamina,
+      maxStamina: initialDerived.maxStamina,
       exhaustedUntil: null,  // timestamp when exhaustion ends
-      // Mana system (kept for skills/magic - future)
-      mana: 1000,
-      maxMana: 1000,
+      // Mana system (from StatsService)
+      mana: initialDerived.maxMana,
+      maxMana: initialDerived.maxMana,
       manaRegen: BASE_MANA_REGEN,
       // Tap & Auto-attack
       tapsPerSecond: BASE_TAPS_PER_SECOND,
@@ -682,18 +819,26 @@ app.prepare().then(async () => {
         player.vitality = user.vitality || 10;
         player.intellect = user.intellect || 10;
         player.spirit = user.spirit || 10;
-        // L2 Derived Stats (NEW)
-        player.physicalPower = user.physicalPower || 15;
-        player.maxHealth = user.maxHealth || 100;
-        player.physicalDefense = user.physicalDefense || 40;
-        player.attackSpeed = user.attackSpeed || 300;
-        // L2 Stamina (NEW)
-        player.stamina = user.stamina || 100;
-        player.maxStamina = user.maxStamina || 100;
+
+        // Recalculate derived stats using StatsService (ensures correct maxStamina)
+        const derivedStats = StatsService.calculateDerived(
+          { power: player.power, agility: player.agility, vitality: player.vitality, intellect: player.intellect, spirit: player.spirit },
+          user.level || 1
+        );
+
+        // L2 Derived Stats (from StatsService calculation)
+        player.physicalPower = derivedStats.physicalPower;
+        player.maxHealth = derivedStats.maxHealth;
+        player.physicalDefense = derivedStats.physicalDefense;
+        player.attackSpeed = derivedStats.attackSpeed;
+        player.critChance = derivedStats.critChance;
+        // L2 Stamina (from StatsService - formula: max(100, floor(maxHealth * 10)))
+        player.maxStamina = derivedStats.maxStamina;
+        player.stamina = Math.min(user.stamina || player.maxStamina, player.maxStamina);
         player.exhaustedUntil = user.exhaustedUntil ? user.exhaustedUntil.getTime() : null;
-        // Mana
-        player.mana = user.mana;
-        player.maxMana = user.maxMana;
+        // Mana (from StatsService + DB)
+        player.maxMana = derivedStats.maxMana;
+        player.mana = Math.min(user.mana || player.maxMana, player.maxMana);
         player.manaRegen = user.manaRegen;
         player.tapsPerSecond = user.tapsPerSecond;
         player.autoAttackSpeed = user.autoAttackSpeed;
@@ -1069,8 +1214,8 @@ app.prepare().then(async () => {
           }
         }
 
-        // Set respawn timer
-        respawnTimestamp = Date.now() + RESPAWN_TIME_MS;
+        // Set respawn timer (5 minutes)
+        bossRespawnAt = new Date(Date.now() + BOSS_RESPAWN_TIME_MS);
 
         io.emit('boss:killed', {
           bossName: bossState.name,
@@ -1083,31 +1228,15 @@ app.prepare().then(async () => {
           prizePool: { ton: tonPool, chests: chestsPool, exp: expPool, adena: adenaPool },
           leaderboard: leaderboardWithPercent.slice(0, 10),
           rewards: rewards.slice(0, 10),
-          respawnAt: respawnTimestamp,
-          respawnIn: RESPAWN_TIME_MS,
+          respawnAt: bossRespawnAt.getTime(),
+          respawnIn: BOSS_RESPAWN_TIME_MS,
         });
 
         console.log(`[Boss] ${bossState.name} killed! Final blow: ${finalBlowPlayer.odamageN} (${tonForFinalBlow} TON, ${chestsForFinalBlow} chests), Top damage: ${topDamagePlayer?.visitorName} (${tonForTopDamage} TON, ${chestsForTopDamage} chests)`);
+        console.log(`[Boss] Next boss spawning at ${bossRespawnAt.toISOString()}`);
 
-        // Respawn after 10 minutes
-        setTimeout(async () => {
-          await respawnBoss(prisma);
-          respawnTimestamp = 0;
-          io.emit('boss:respawn', {
-            id: bossState.id,
-            name: bossState.name,
-            title: bossState.title,
-            hp: bossState.currentHp,
-            maxHp: bossState.maxHp,
-            icon: bossState.icon,
-            prizePool: {
-              ton: bossState.tonReward,
-              chests: bossState.chestsReward,
-              exp: bossState.expReward,
-              adena: bossState.adenaReward,
-            },
-          });
-        }, RESPAWN_TIME_MS);
+        // Save state immediately after boss kill
+        await saveBossState(prisma);
       }
     });
 
@@ -1841,12 +1970,14 @@ app.prepare().then(async () => {
     io.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
+      nameRu: bossState.nameRu,
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
       defense: bossState.defense,
       ragePhase: bossState.ragePhase,
       icon: bossState.icon,
+      image: bossState.image,
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
@@ -1856,8 +1987,36 @@ app.prepare().then(async () => {
         exp: bossState.expReward,
         adena: bossState.adenaReward,
       },
+      // Respawn timer info
+      isRespawning: bossRespawnAt !== null,
+      respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
     });
   }, 250);
+
+  // Check respawn timer every second
+  setInterval(async () => {
+    if (bossRespawnAt && new Date() >= bossRespawnAt) {
+      console.log('[Boss] Respawn timer expired, spawning next boss...');
+      bossRespawnAt = null;
+      await respawnBoss(prisma);
+      await saveBossState(prisma);
+
+      io.emit('boss:respawn', {
+        id: bossState.id,
+        name: bossState.name,
+        title: bossState.title,
+        hp: bossState.currentHp,
+        maxHp: bossState.maxHp,
+        icon: bossState.icon,
+        prizePool: {
+          ton: bossState.tonReward,
+          chests: bossState.chestsReward,
+          exp: bossState.expReward,
+          adena: bossState.adenaReward,
+        },
+      });
+    }
+  }, 1000);
 
   // L2: Stamina regen every second (+1 per sec, unless exhausted)
   setInterval(() => {

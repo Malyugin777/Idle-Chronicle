@@ -394,3 +394,34 @@ enum TaskType {
   WEEKLY
   ACHIEVEMENT
 }
+
+// ═══════════════════════════════════════════════════════════
+// GAME STATE (Persistent server state across restarts)
+// ═══════════════════════════════════════════════════════════
+
+model GameState {
+  id              String   @id @default("singleton")  // Always "singleton"
+
+  // Current boss state
+  currentBossIndex Int     @default(0)
+  bossCurrentHp    BigInt  @default(500000)
+  bossMaxHp        BigInt  @default(500000)
+  bossName         String  @default("Lizard")
+  bossIcon         String  @default("🦎")
+  bossDefense      Int     @default(0)
+  bossThorns       Int     @default(0)
+
+  // Boss rewards
+  bossAdenaReward  Int     @default(1000)
+  bossExpReward    BigInt  @default(1000000)
+  bossTonReward    Float   @default(10)
+  bossChestsReward Int     @default(10)
+
+  // Respawn timer (null = boss alive, timestamp = respawning)
+  respawnAt        DateTime?
+
+  // Session leaderboard (JSON - resets on boss kill)
+  sessionLeaderboard Json?
+
+  updatedAt        DateTime @updatedAt
+}
