@@ -2189,14 +2189,29 @@ app.prepare().then(async () => {
 
     // LEADERBOARD - Current Boss (with % and photos)
     socket.on('leaderboard:get', () => {
-      const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + d.odamage, 0);
-      const leaderboard = Array.from(sessionLeaderboard.entries())
-        .map(([id, data]) => ({
-          visitorId: id,
-          visitorName: data.odamageN,
-          photoUrl: data.photoUrl,
-          damage: data.odamage,
-          damagePercent: totalDamage > 0 ? Math.round((data.odamage / totalDamage) * 100) : 0,
+      // Aggregate by player name to avoid duplicates from different socket.ids
+      const aggregated = new Map();
+      for (const [id, data] of sessionLeaderboard.entries()) {
+        const name = data.odamageN || id;
+        const existing = aggregated.get(name);
+        if (existing) {
+          existing.damage += data.odamage;
+          if (!existing.photoUrl && data.photoUrl) existing.photoUrl = data.photoUrl;
+        } else {
+          aggregated.set(name, {
+            visitorId: id,
+            visitorName: name,
+            photoUrl: data.photoUrl,
+            damage: data.odamage,
+          });
+        }
+      }
+
+      const totalDamage = Array.from(aggregated.values()).reduce((sum, d) => sum + d.damage, 0);
+      const leaderboard = Array.from(aggregated.values())
+        .map(entry => ({
+          ...entry,
+          damagePercent: totalDamage > 0 ? Math.round((entry.damage / totalDamage) * 100) : 0,
         }))
         .sort((a, b) => b.damage - a.damage)
         .slice(0, 20);
