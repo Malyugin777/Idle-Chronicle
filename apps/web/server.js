@@ -638,20 +638,49 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
         },
       });
 
-      // Create chests for winners
+      // Create chests for winners (check available slots)
       if (chestsReward > 0) {
-        const chestCreates = [];
-        for (let i = 0; i < chestsReward; i++) {
-          const rarity = getRandomChestRarity();
-          chestCreates.push({
-            userId: entry.odamage,
-            rarity: rarity,
-            openingDuration: CHEST_CONFIG[rarity].duration,
-            fromBossId: bossState.id,
-            fromSessionId: bossState.sessionId,
+        // Get user's slot info
+        const userSlotInfo = await prisma.user.findUnique({
+          where: { id: entry.odamage },
+          select: { chestSlots: true },
+        });
+        const currentChestCount = await prisma.chest.count({
+          where: { userId: entry.odamage },
+        });
+        const maxSlots = userSlotInfo?.chestSlots || 5;
+        const freeSlots = Math.max(0, maxSlots - currentChestCount);
+        const chestsToCreate = Math.min(chestsReward, freeSlots);
+
+        if (chestsToCreate > 0) {
+          const chestCreates = [];
+          const rarityIncrements = { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 };
+
+          for (let i = 0; i < chestsToCreate; i++) {
+            const rarity = getRandomChestRarity();
+            rarityIncrements[rarity]++;
+            chestCreates.push({
+              userId: entry.odamage,
+              rarity: rarity,
+              openingDuration: CHEST_CONFIG[rarity].duration,
+              fromBossId: bossState.id,
+              fromSessionId: bossState.sessionId,
+            });
+          }
+          await prisma.chest.createMany({ data: chestCreates });
+
+          // Update total chests counters
+          await prisma.user.update({
+            where: { id: entry.odamage },
+            data: {
+              totalChestsCommon: { increment: rarityIncrements.COMMON },
+              totalChestsUncommon: { increment: rarityIncrements.UNCOMMON },
+              totalChestsRare: { increment: rarityIncrements.RARE },
+              totalChestsEpic: { increment: rarityIncrements.EPIC },
+              totalChestsLegendary: { increment: rarityIncrements.LEGENDARY },
+            },
           });
         }
-        await prisma.chest.createMany({ data: chestCreates });
       }
 
       // Update in-memory player if online
@@ -1960,6 +1989,7 @@ app.prepare().then(async () => {
             adena: { increment: BigInt(adenaReward) },
             exp: { increment: BigInt(expReward) },
             tonBalance: { increment: tonReward },
+            totalGoldEarned: { increment: BigInt(adenaReward) },
           },
         });
 
@@ -2007,6 +2037,105 @@ app.prepare().then(async () => {
       } catch (err) {
         console.error('[Chest] Delete error:', err.message);
         socket.emit('chest:error', { message: 'Failed to delete chest' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // LOOT STATS & SLOTS
+    // ═══════════════════════════════════════════════════════════
+
+    // Get loot stats
+    socket.on('loot:stats:get', async () => {
+      if (!player.odamage) {
+        socket.emit('loot:stats', {
+          totalGoldEarned: 0,
+          chestSlots: 5,
+          totalChests: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+        });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: {
+            totalGoldEarned: true,
+            chestSlots: true,
+            totalChestsCommon: true,
+            totalChestsUncommon: true,
+            totalChestsRare: true,
+            totalChestsEpic: true,
+            totalChestsLegendary: true,
+          },
+        });
+
+        socket.emit('loot:stats', {
+          totalGoldEarned: Number(user?.totalGoldEarned || 0),
+          chestSlots: user?.chestSlots || 5,
+          totalChests: {
+            COMMON: user?.totalChestsCommon || 0,
+            UNCOMMON: user?.totalChestsUncommon || 0,
+            RARE: user?.totalChestsRare || 0,
+            EPIC: user?.totalChestsEpic || 0,
+            LEGENDARY: user?.totalChestsLegendary || 0,
+          },
+        });
+      } catch (err) {
+        console.error('[Loot Stats] Error:', err.message);
+        socket.emit('loot:stats', {
+          totalGoldEarned: 0,
+          chestSlots: 5,
+          totalChests: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+        });
+      }
+    });
+
+    // Unlock a chest slot
+    socket.on('slot:unlock', async () => {
+      if (!player.odamage) {
+        socket.emit('slot:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const SLOT_UNLOCK_COST = 999;
+      const MAX_SLOTS = 10;
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { chestSlots: true, ancientCoin: true },
+        });
+
+        if (!user) {
+          socket.emit('slot:error', { message: 'User not found' });
+          return;
+        }
+
+        if (user.chestSlots >= MAX_SLOTS) {
+          socket.emit('slot:error', { message: 'Все ячейки уже разблокированы' });
+          return;
+        }
+
+        if (user.ancientCoin < SLOT_UNLOCK_COST) {
+          socket.emit('slot:error', { message: 'Недостаточно кристаллов' });
+          return;
+        }
+
+        const updated = await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            chestSlots: { increment: 1 },
+            ancientCoin: { decrement: SLOT_UNLOCK_COST },
+          },
+        });
+
+        socket.emit('slot:unlocked', {
+          chestSlots: updated.chestSlots,
+          crystals: updated.ancientCoin,
+        });
+      } catch (err) {
+        console.error('[Slot Unlock] Error:', err.message);
+        socket.emit('slot:error', { message: 'Failed to unlock slot' });
       }
     });
 

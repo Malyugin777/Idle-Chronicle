@@ -578,7 +578,12 @@
   </div>
 
   <script>
-    // Domain protection - only allow tnsb.fun
+    // ═══════════════════════════════════════════════════════════
+    // НАСТРОЙКИ - ИЗМЕНИ ПОД СВОЙ СЕРВЕР
+    // ═══════════════════════════════════════════════════════════
+    const API_BASE = 'https://rb-v7zx.onrender.com'; // URL сервера игры на Render
+
+    // Domain protection - домены с которых можно открыть админку
     const ALLOWED_DOMAINS = ['tnsb.fun', 'www.tnsb.fun', 'localhost', '127.0.0.1'];
     const ADMIN_PASSWORD = 'admin123'; // Will be checked server-side
 
@@ -602,7 +607,7 @@
     function checkAuth() {
       const password = document.getElementById('adminPassword').value;
 
-      fetch('/api/admin/auth', {
+      fetch(API_BASE + '/api/admin/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -630,7 +635,7 @@
     function checkSavedAuth() {
       const savedPass = sessionStorage.getItem('adminAuth');
       if (savedPass) {
-        fetch('/api/admin/auth', {
+        fetch(API_BASE + '/api/admin/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: savedPass })
@@ -678,7 +683,7 @@
       };
       if (body) opts.body = JSON.stringify(body);
 
-      const res = await fetch('/api/admin/' + endpoint, opts);
+      const res = await fetch(API_BASE + '/api/admin/' + endpoint, opts);
       return res.json();
     }
 

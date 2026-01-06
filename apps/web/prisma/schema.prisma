@@ -72,6 +72,15 @@ model User {
   ancientCoin     Int      @default(0)
   tonBalance      Float    @default(0)    // TON cryptocurrency balance
 
+  // Chest Slots System
+  chestSlots      Int      @default(5)    // Unlocked chest slots (5-10), buy more for 999 crystals
+  totalGoldEarned BigInt   @default(0)    // Total adena earned all-time
+  totalChestsCommon   Int  @default(0)    // Total common chests earned
+  totalChestsUncommon Int  @default(0)    // Total uncommon chests earned
+  totalChestsRare     Int  @default(0)    // Total rare chests earned
+  totalChestsEpic     Int  @default(0)    // Total epic chests earned
+  totalChestsLegendary Int @default(0)    // Total legendary chests earned
+
   // Consumables
   soulshotNG      Int      @default(100)
   soulshotD       Int      @default(0)
