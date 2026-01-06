@@ -135,11 +135,14 @@ export default function TreasuryTab() {
     });
 
     // Chest boosted (30 min acceleration)
-    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; ancientCoin: number }) => {
+    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; ancientCoin?: number; gold?: number }) => {
       setChests(prev => prev.map(c =>
         c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
       ));
-      setCrystals(data.ancientCoin);
+      // Update crystals if provided (normal users pay crystals)
+      if (data.ancientCoin !== undefined) {
+        setCrystals(data.ancientCoin);
+      }
       // Update selected chest if it's the one being boosted
       setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
     });

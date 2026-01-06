@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.23';
+const APP_VERSION = 'v1.0.24';
 
 interface BossState {
   name: string;
@@ -299,9 +299,21 @@ export default function PhaserGame() {
     // Tap result
     socket.on('tap:result', (data: any) => {
       setSessionDamage(data.sessionDamage || 0);
-      if (data.stamina !== undefined) {
-        setPlayerState(p => ({ ...p, stamina: data.stamina, maxStamina: data.maxStamina || p.maxStamina }));
-      }
+      setPlayerState(p => ({
+        ...p,
+        stamina: data.stamina ?? p.stamina,
+        maxStamina: data.maxStamina ?? p.maxStamina,
+        gold: data.gold ?? p.gold,
+      }));
+    });
+
+    // Auto-attack result
+    socket.on('autoAttack:result', (data: any) => {
+      setSessionDamage(data.sessionDamage || 0);
+      setPlayerState(p => ({
+        ...p,
+        gold: data.gold ?? p.gold,
+      }));
     });
 
     // Player state (stamina/mana regen from server)
@@ -418,6 +430,7 @@ export default function PhaserGame() {
       socket.off('disconnect');
       socket.off('boss:state');
       socket.off('tap:result');
+      socket.off('autoAttack:result');
       socket.off('player:state');
       socket.off('skill:result');
       socket.off('auth:success');
