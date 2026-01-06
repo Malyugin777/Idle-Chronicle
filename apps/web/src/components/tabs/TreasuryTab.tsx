@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { Package, Gem, Coins, Lock, X, ScrollText } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+import ChestOpenModal from '../modals/ChestOpenModal';
 
 type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
 
@@ -92,6 +93,7 @@ export default function TreasuryTab() {
   });
   const [now, setNow] = useState(Date.now());
   const [claimedReward, setClaimedReward] = useState<ClaimedReward | null>(null);
+  const [isOpeningAnimation, setIsOpeningAnimation] = useState(false);  // Анимация открытия
   const [selectedChest, setSelectedChest] = useState<Chest | null>(null);
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
@@ -133,9 +135,10 @@ export default function TreasuryTab() {
     socket.on('chest:claimed', (data: ClaimedReward) => {
       setChests(prev => prev.filter(c => c.id !== data.chestId));
       setClaimedReward(data);
+      setIsOpeningAnimation(true);
+      setSelectedChest(null);
       // Refresh stats
       socket.emit('loot:stats:get');
-      setTimeout(() => setClaimedReward(null), 4000);
     });
 
     // Chest deleted
@@ -291,40 +294,18 @@ export default function TreasuryTab() {
 
   return (
     <div className="flex-1 overflow-auto bg-l2-dark relative">
-      {/* Claimed Reward Popup */}
-      {claimedReward && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className={`${CHEST_CONFIG[claimedReward.chestType].bgColor} rounded-xl p-6 text-center mx-4 animate-bounce`}>
-            <div className="text-5xl mb-3">{CHEST_CONFIG[claimedReward.chestType].icon}</div>
-            <div className={`text-lg font-bold ${CHEST_CONFIG[claimedReward.chestType].color} mb-4`}>
-              {getChestLabel(claimedReward.chestType)}!
-            </div>
-            <div className="space-y-2">
-              {claimedReward.rewards.gold > 0 && (
-                <div className="flex items-center justify-center gap-2">
-                  <Coins className="text-l2-gold" size={18} />
-                  <span className="text-l2-gold font-bold">+{formatNumber(claimedReward.rewards.gold)}</span>
-                </div>
-              )}
-              {claimedReward.rewards.equipment && (
-                <div className="flex items-center justify-center gap-2">
-                  <span className={`text-2xl ${RARITY_COLORS[claimedReward.rewards.equipment.rarity]?.glow}`}>
-                    {claimedReward.rewards.equipment.icon}
-                  </span>
-                  <span className={`font-bold ${RARITY_COLORS[claimedReward.rewards.equipment.rarity]?.color || 'text-white'}`}>
-                    {claimedReward.rewards.equipment.name}
-                  </span>
-                </div>
-              )}
-              {claimedReward.rewards.enchantScrolls && claimedReward.rewards.enchantScrolls > 0 && (
-                <div className="flex items-center justify-center gap-2">
-                  <ScrollText className="text-blue-400" size={18} />
-                  <span className="text-blue-400 font-bold">+{claimedReward.rewards.enchantScrolls} Свиток заточки</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Chest Open Modal with Animation */}
+      {claimedReward && isOpeningAnimation && (
+        <ChestOpenModal
+          chestType={claimedReward.chestType}
+          rewards={claimedReward.rewards}
+          isOpening={true}
+          onClose={() => {
+            setClaimedReward(null);
+            setIsOpeningAnimation(false);
+          }}
+          lang={lang}
+        />
       )}
 
       {/* Header - Total Earnings */}
