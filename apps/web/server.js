@@ -274,30 +274,35 @@ const CHEST_CONFIG = {
   GOLD: { duration: 8 * 60 * 60 * 1000, icon: '🟨', name: 'Золотой' },       // 8 hours
 };
 
-// Drop rates for each chest type
+// Drop rates for each chest type (matching TZ exactly)
 // Item rarities: COMMON (white), UNCOMMON (green), RARE (purple), EPIC (orange)
+// Gold is FIXED amount, not range per TZ
 const CHEST_DROP_RATES = {
   WOODEN: {
-    items: { COMMON: 0.80, UNCOMMON: 0.05, RARE: 0, EPIC: 0 },
-    gold: { min: 100, max: 500 },
+    // TZ: Common 50%, Uncommon 7%, Rare 0%, Epic 0%, Enchant +1 3%, Gold 1000
+    items: { COMMON: 0.50, UNCOMMON: 0.07, RARE: 0, EPIC: 0 },
+    gold: 1000,
     enchantChance: 0.03,
     enchantQty: [1, 1],
   },
   BRONZE: {
-    items: { COMMON: 0.80, UNCOMMON: 0.20, RARE: 0.03, EPIC: 0 },
-    gold: { min: 500, max: 2000 },
+    // TZ: Common 60%, Uncommon 20%, Rare 3%, Epic 0%, Enchant +1 15%, Gold 3000
+    items: { COMMON: 0.60, UNCOMMON: 0.20, RARE: 0.03, EPIC: 0 },
+    gold: 3000,
     enchantChance: 0.15,
     enchantQty: [1, 1],
   },
   SILVER: {
-    items: { COMMON: 0, UNCOMMON: 0.40, RARE: 0.10, EPIC: 0.03 },
-    gold: { min: 2000, max: 10000 },
+    // TZ: Common 0%, Uncommon 40%, Rare 10%, Epic 1%, Enchant +1-5 25%, Gold 8000
+    items: { COMMON: 0, UNCOMMON: 0.40, RARE: 0.10, EPIC: 0.01 },
+    gold: 8000,
     enchantChance: 0.25,
     enchantQty: [1, 5],
   },
   GOLD: {
-    items: { COMMON: 0, UNCOMMON: 0, RARE: 0.15, EPIC: 0.05 },
-    gold: { min: 10000, max: 50000 },
+    // TZ: Common 0%, Uncommon 0%, Rare 15%, Epic 3%, Enchant +1-5 45%, Gold 20000
+    items: { COMMON: 0, UNCOMMON: 0, RARE: 0.15, EPIC: 0.03 },
+    gold: 20000,
     enchantChance: 0.45,
     enchantQty: [1, 5],
   },
@@ -1416,10 +1421,11 @@ app.prepare().then(async () => {
 
     onlineUsers.set(socket.id, player);
 
-    // Send initial state
+    // Send initial state (with all fields including image)
     socket.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
+      nameRu: bossState.nameRu,
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
@@ -1427,8 +1433,12 @@ app.prepare().then(async () => {
       ragePhase: bossState.ragePhase,
       playersOnline: onlineUsers.size,
       icon: bossState.icon,
+      image: bossState.image,
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
+      // Respawn timer info
+      isRespawning: bossRespawnAt !== null,
+      respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
     });
 
     socket.emit('player:state', {
@@ -2104,9 +2114,9 @@ app.prepare().then(async () => {
         const chestType = chest.chestType || 'WOODEN';
         const dropRates = CHEST_DROP_RATES[chestType];
 
-        // Gold reward
-        const adenaReward = Math.floor(Math.random() * (dropRates.gold.max - dropRates.gold.min) + dropRates.gold.min);
-        const expReward = adenaReward * 10; // EXP = gold * 10
+        // Gold reward (fixed amount per TZ)
+        const goldReward = dropRates.gold;
+        const expReward = goldReward * 10; // EXP = gold * 10
 
         // Enchant scrolls
         let enchantScrolls = 0;
@@ -2115,17 +2125,46 @@ app.prepare().then(async () => {
           enchantScrolls = Math.floor(Math.random() * (maxQty - minQty + 1)) + minQty;
         }
 
-        // Item drop (roll for rarity)
+        // Get current pity counter for Epic (only silver+gold chests count)
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { pityCounter: true },
+        });
+        let currentPity = user?.pityCounter || 0;
+        const isSilverOrGold = chestType === 'SILVER' || chestType === 'GOLD';
+
+        // Item drop (roll for rarity with pity system)
         let droppedItem = null;
         let droppedItemRarity = null;
         const itemRoll = Math.random();
         let cumulative = 0;
 
-        for (const [rarity, chance] of Object.entries(dropRates.items)) {
+        // Apply pity bonus: after 30 silver+gold chests without Epic, add +1% per chest
+        const pityBonus = isSilverOrGold && currentPity >= 30 ? (currentPity - 30 + 1) * 0.01 : 0;
+        const adjustedRates = { ...dropRates.items };
+        if (pityBonus > 0 && (chestType === 'SILVER' || chestType === 'GOLD')) {
+          adjustedRates.EPIC = Math.min(1, adjustedRates.EPIC + pityBonus);
+          console.log(`[Pity] User ${player.odamage} pity=${currentPity}, Epic chance: ${adjustedRates.EPIC * 100}%`);
+        }
+
+        for (const [rarity, chance] of Object.entries(adjustedRates)) {
           cumulative += chance;
           if (itemRoll < cumulative && chance > 0) {
             droppedItemRarity = rarity;
             break;
+          }
+        }
+
+        // Track pity counter for silver+gold chests
+        let pityCounterDelta = 0;
+        if (isSilverOrGold) {
+          if (droppedItemRarity === 'EPIC') {
+            // Reset pity counter on Epic drop
+            pityCounterDelta = -currentPity; // Will set it to 0
+            console.log(`[Pity] User ${player.odamage} got EPIC! Resetting pity counter`);
+          } else {
+            // Increment pity counter
+            pityCounterDelta = 1;
           }
         }
 
@@ -2141,19 +2180,27 @@ app.prepare().then(async () => {
           });
 
           if (!equipment) {
-            // Create equipment template on-the-fly
-            const slotNames = {
-              WEAPON: { name: 'Меч', icon: '🗡️', pAtk: true },
-              HELMET: { name: 'Шлем', icon: '⛑️', pDef: true },
-              CHEST: { name: 'Нагрудник', icon: '🎽', pDef: true },
-              GLOVES: { name: 'Перчатки', icon: '🧤', pDef: true },
-              LEGS: { name: 'Поножи', icon: '👖', pDef: true },
-              BOOTS: { name: 'Ботинки', icon: '👢', pDef: true },
-              SHIELD: { name: 'Щит', icon: '🛡️', pDef: true },
+            // Equipment stat ranges per TZ:
+            // WEAPON example: Common 10, Uncommon 12-13, Rare 15-16, Epic 18-20
+            // DEF scales similarly
+            const slotConfig = {
+              WEAPON: { name: 'Меч', icon: '🗡️', isWeapon: true },
+              HELMET: { name: 'Шлем', icon: '⛑️', isWeapon: false },
+              CHEST: { name: 'Нагрудник', icon: '🎽', isWeapon: false },
+              GLOVES: { name: 'Перчатки', icon: '🧤', isWeapon: false },
+              LEGS: { name: 'Поножи', icon: '👖', isWeapon: false },
+              BOOTS: { name: 'Ботинки', icon: '👢', isWeapon: false },
+              SHIELD: { name: 'Щит', icon: '🛡️', isWeapon: false },
             };
-            const slotInfo = slotNames[randomSlot];
-            const rarityMultiplier = { COMMON: 1, UNCOMMON: 1.2, RARE: 1.5, EPIC: 1.8 };
-            const mult = rarityMultiplier[droppedItemRarity] || 1;
+            // Stat ranges per rarity (matching TZ example for Starter Sword)
+            const rarityStats = {
+              COMMON: { pAtkMin: 10, pAtkMax: 10, pDefMin: 2, pDefMax: 2 },
+              UNCOMMON: { pAtkMin: 12, pAtkMax: 13, pDefMin: 3, pDefMax: 4 },
+              RARE: { pAtkMin: 15, pAtkMax: 16, pDefMin: 5, pDefMax: 6 },
+              EPIC: { pAtkMin: 18, pAtkMax: 20, pDefMin: 7, pDefMax: 8 },
+            };
+            const slotInfo = slotConfig[randomSlot];
+            const stats = rarityStats[droppedItemRarity] || rarityStats.COMMON;
 
             equipment = await prisma.equipment.create({
               data: {
@@ -2163,10 +2210,10 @@ app.prepare().then(async () => {
                 icon: slotInfo.icon,
                 slot: randomSlot,
                 rarity: droppedItemRarity,
-                pAtkMin: slotInfo.pAtk ? Math.floor(10 * mult) : 0,
-                pAtkMax: slotInfo.pAtk ? Math.floor(20 * mult) : 0,
-                pDefMin: slotInfo.pDef ? Math.floor(1 * mult) : 0,
-                pDefMax: slotInfo.pDef ? Math.floor(5 * mult) : 0,
+                pAtkMin: slotInfo.isWeapon ? stats.pAtkMin : 0,
+                pAtkMax: slotInfo.isWeapon ? stats.pAtkMax : 0,
+                pDefMin: slotInfo.isWeapon ? 0 : stats.pDefMin,
+                pDefMax: slotInfo.isWeapon ? 0 : stats.pDefMax,
               },
             });
           }
@@ -2205,27 +2252,40 @@ app.prepare().then(async () => {
         // Delete chest and give rewards
         await prisma.chest.delete({ where: { id: chestId } });
 
+        // Build update data with pity counter handling
+        const updateData = {
+          adena: { increment: BigInt(goldReward) },
+          exp: { increment: BigInt(expReward) },
+          totalGoldEarned: { increment: BigInt(goldReward) },
+          enchantScrolls: { increment: enchantScrolls },
+          [chestTypeCounterField]: { increment: 1 },
+        };
+
+        // Handle pity counter (increment or reset)
+        if (pityCounterDelta !== 0) {
+          if (droppedItemRarity === 'EPIC') {
+            // Reset to 0 when Epic drops
+            updateData.pityCounter = 0;
+          } else {
+            updateData.pityCounter = { increment: pityCounterDelta };
+          }
+        }
+
         await prisma.user.update({
           where: { id: player.odamage },
-          data: {
-            adena: { increment: BigInt(adenaReward) },
-            exp: { increment: BigInt(expReward) },
-            totalGoldEarned: { increment: BigInt(adenaReward) },
-            enchantScrolls: { increment: enchantScrolls },
-            [chestTypeCounterField]: { increment: 1 },
-          },
+          data: updateData,
         });
 
-        player.adena += adenaReward;
+        player.adena += goldReward;
 
         socket.emit('chest:claimed', {
           chestId,
           chestType,
           rewards: {
-            adena: adenaReward,
+            adena: goldReward,
             exp: expReward,
             enchantScrolls,
-            item: droppedItem,
+            equipment: droppedItem, // Changed from 'item' to 'equipment' to match TreasuryTab
           },
         });
       } catch (err) {

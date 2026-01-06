@@ -425,35 +425,41 @@ export default function TreasuryTab() {
               })()}
             </div>
 
-            {/* Drop rates info */}
+            {/* Drop rates info (matching TZ exactly) */}
             <div className="bg-black/30 rounded-lg p-2 mb-3 text-xs">
               <div className="text-gray-500 mb-1">Возможный дроп:</div>
               {selectedChest.chestType === 'WOODEN' && (
-                <div className="text-gray-400">
-                  <div>💰 100-500 золота</div>
-                  <div>📦 80% Обычная экипировка</div>
-                  <div>📦 5% Необычная экипировка</div>
+                <div className="text-gray-400 space-y-0.5">
+                  <div>💰 1,000 золота</div>
+                  <div><span className="text-gray-300">50%</span> Обычная экипировка</div>
+                  <div><span className="text-green-400">7%</span> Необычная экипировка</div>
+                  <div><span className="text-blue-400">3%</span> Свиток заточки +1</div>
                 </div>
               )}
               {selectedChest.chestType === 'BRONZE' && (
-                <div className="text-gray-400">
-                  <div>💰 500-2000 золота</div>
-                  <div>📦 80% Обычная, 20% Необычная</div>
-                  <div>📦 3% Редкая экипировка</div>
+                <div className="text-gray-400 space-y-0.5">
+                  <div>💰 3,000 золота</div>
+                  <div><span className="text-gray-300">60%</span> Обычная экипировка</div>
+                  <div><span className="text-green-400">20%</span> Необычная экипировка</div>
+                  <div><span className="text-purple-400">3%</span> Редкая экипировка</div>
+                  <div><span className="text-blue-400">15%</span> Свиток заточки +1</div>
                 </div>
               )}
               {selectedChest.chestType === 'SILVER' && (
-                <div className="text-gray-400">
-                  <div>💰 2000-10000 золота</div>
-                  <div>📦 40% Необычная, 10% Редкая</div>
-                  <div>📦 3% Эпическая экипировка</div>
+                <div className="text-gray-400 space-y-0.5">
+                  <div>💰 8,000 золота</div>
+                  <div><span className="text-green-400">40%</span> Необычная экипировка</div>
+                  <div><span className="text-purple-400">10%</span> Редкая экипировка</div>
+                  <div><span className="text-orange-400">1%</span> Эпическая экипировка</div>
+                  <div><span className="text-blue-400">25%</span> Свитки заточки +1-5</div>
                 </div>
               )}
               {selectedChest.chestType === 'GOLD' && (
-                <div className="text-gray-400">
-                  <div>💰 10000-50000 золота</div>
-                  <div>📦 15% Редкая экипировка</div>
-                  <div>📦 5% Эпическая экипировка</div>
+                <div className="text-gray-400 space-y-0.5">
+                  <div>💰 20,000 золота</div>
+                  <div><span className="text-purple-400">15%</span> Редкая экипировка</div>
+                  <div><span className="text-orange-400">3%</span> Эпическая экипировка</div>
+                  <div><span className="text-blue-400">45%</span> Свитки заточки +1-5</div>
                 </div>
               )}
             </div>

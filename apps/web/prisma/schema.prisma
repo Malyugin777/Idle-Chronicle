@@ -82,6 +82,10 @@ model User {
   totalChestsSilver   Int  @default(0)
   totalChestsGold     Int  @default(0)
 
+  // Pity system: count silver+gold chests without Epic drop
+  // Resets to 0 when Epic drops
+  pityCounter         Int  @default(0)
+
   // Enchant scrolls
   enchantScrolls  Int      @default(0)    // Свитки заточки
 
