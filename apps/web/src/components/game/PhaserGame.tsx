@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.32';
+const APP_VERSION = 'v1.0.33';
 
 interface BossState {
   name: string;
@@ -820,24 +820,44 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {showDropTable && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowDropTable(false)}>
-          <div className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30" onClick={e => e.stopPropagation()}>
+          <div className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
               <div className="text-2xl mb-1">🎁</div>
               <div className="text-lg font-bold text-purple-400">{lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}</div>
+              <div className="text-xs text-gray-500">{lang === 'ru' ? '(нужно 30 сек активности)' : '(need 30s activity)'}</div>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between bg-black/30 rounded-lg p-2">
-                <span>🪙 Gold</span>
-                <span className="text-l2-gold font-bold">{formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}</span>
+            <div className="space-y-1 text-sm">
+              <div className="bg-yellow-500/20 rounded-lg p-2 border border-yellow-500/30">
+                <div className="text-yellow-400 font-bold">🥇 1 место</div>
+                <div className="text-gray-300 text-xs">1🟨 + 2🪙 + 2🟫 + 2🪵 + Slayer 7д</div>
               </div>
-              <div className="flex justify-between bg-black/30 rounded-lg p-2">
-                <span>⭐ EXP</span>
-                <span className="text-green-400 font-bold">{formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}</span>
+              <div className="bg-gray-400/20 rounded-lg p-2 border border-gray-400/30">
+                <div className="text-gray-300 font-bold">🥈 2 место</div>
+                <div className="text-gray-400 text-xs">1🟨 + 1🪙 + 2🟫 + 2🪵 + Elite 7д</div>
               </div>
-              <div className="flex justify-between bg-black/30 rounded-lg p-2">
-                <span>📦 Chests</span>
-                <span className="text-purple-400 font-bold">{10 * Math.pow(2, bossState.bossIndex - 1)}</span>
+              <div className="bg-orange-500/20 rounded-lg p-2 border border-orange-500/30">
+                <div className="text-orange-400 font-bold">🥉 3 место</div>
+                <div className="text-gray-400 text-xs">1🟨 + 1🪙 + 1🟫 + 2🪵 + Elite 3д</div>
               </div>
+              <div className="bg-black/30 rounded-lg p-2">
+                <div className="text-gray-400 font-bold">4-10 место</div>
+                <div className="text-gray-500 text-xs">1🪙 + 1🟫 + 2🪵</div>
+              </div>
+              <div className="bg-black/30 rounded-lg p-2">
+                <div className="text-gray-400 font-bold">11-25 место</div>
+                <div className="text-gray-500 text-xs">1🪙 + 2🪵</div>
+              </div>
+              <div className="bg-black/30 rounded-lg p-2">
+                <div className="text-gray-400 font-bold">26-100 место</div>
+                <div className="text-gray-500 text-xs">1🟫 + 2🪵</div>
+              </div>
+              <div className="bg-black/30 rounded-lg p-2">
+                <div className="text-gray-400 font-bold">101+ место</div>
+                <div className="text-gray-500 text-xs">2🪵</div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-gray-500 text-center">
+              🟨 Gold • 🪙 Silver • 🟫 Bronze • 🪵 Wooden
             </div>
             <button onClick={() => setShowDropTable(false)} className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg">
               {lang === 'ru' ? 'Закрыть' : 'Close'}

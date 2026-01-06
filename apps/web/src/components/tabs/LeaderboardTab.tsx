@@ -283,9 +283,6 @@ export default function LeaderboardTab() {
           </div>
         </div>
 
-        {/* Prize Pool */}
-        {currentData.prizePool && renderPrizePool(currentData.prizePool)}
-
         {/* Leaderboard */}
         {!currentData.leaderboard || currentData.leaderboard.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
@@ -335,11 +332,6 @@ export default function LeaderboardTab() {
               {renderAvatar(previousData.finalBlowPhoto, previousData.finalBlowBy, 36)}
             </div>
             <div className="text-xs font-bold text-white truncate">{previousData.finalBlowBy}</div>
-            {previousData.prizePool && (
-              <div className="text-[10px] text-gray-400">
-                {(previousData.prizePool.ton ?? 0) / 2} TON + {Math.floor((previousData.prizePool.chests ?? 0) / 2)} 📦
-              </div>
-            )}
           </div>
           {/* Top Damage */}
           <div className="bg-l2-gold/10 rounded-lg p-2 text-center">
@@ -348,16 +340,8 @@ export default function LeaderboardTab() {
               {renderAvatar(previousData.topDamagePhoto, previousData.topDamageBy, 36)}
             </div>
             <div className="text-xs font-bold text-white truncate">{previousData.topDamageBy}</div>
-            {previousData.prizePool && (
-              <div className="text-[10px] text-gray-400">
-                {(previousData.prizePool.ton ?? 0) / 2} TON + {Math.ceil((previousData.prizePool.chests ?? 0) / 2)} 📦
-              </div>
-            )}
           </div>
         </div>
-
-        {/* Prize Pool */}
-        {previousData.prizePool && renderPrizePool(previousData.prizePool)}
 
         {/* Leaderboard */}
         {previousData.leaderboard && previousData.leaderboard.length > 0 && renderLeaderboard(previousData.leaderboard)}
