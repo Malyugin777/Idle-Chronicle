@@ -275,7 +275,7 @@ const CHEST_CONFIG = {
 };
 
 // DEBUG: Быстрое открытие сундуков для тестовых аккаунтов (30 сек)
-const DEBUG_FAST_CHEST_USERNAMES = ['malyugin777'];
+const DEBUG_FAST_CHEST_USERNAMES = ['malyugin777', 'malyugin7777'];
 const DEBUG_CHEST_DURATION = 30 * 1000; // 30 секунд
 
 function getChestDuration(chestType, username) {
@@ -2650,6 +2650,7 @@ app.prepare().then(async () => {
 
       const { chestId } = data;
       const isDebugUser = DEBUG_FAST_CHEST_USERNAMES.includes(player.username);
+      console.log(`[Chest:Boost] username="${player.username}", isDebugUser=${isDebugUser}, gold=${player.gold}`);
       const BOOST_TIME = 30 * 60 * 1000; // 30 минут в мс
 
       try {
