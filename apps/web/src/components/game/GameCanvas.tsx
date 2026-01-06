@@ -488,6 +488,11 @@ export default function GameCanvas() {
       const w = rect.width;
       const h = rect.height;
 
+      // Reset transform matrix to prevent accumulation issues
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const dpr = window.devicePixelRatio || 1;
+      ctx.scale(dpr, dpr);
+
       ctx.clearRect(0, 0, w, h);
 
       // Draw gradient background
@@ -646,6 +651,7 @@ export default function GameCanvas() {
     const rect = canvas.getBoundingClientRect();
     const w = rect.width;
     const h = rect.height;
+    const now = performance.now();
 
     // Queue tap for batching
     tapQueueRef.current++;
@@ -653,14 +659,17 @@ export default function GameCanvas() {
     // Optimistic UI update for stamina (server will correct if wrong)
     setStamina(prev => Math.max(0, prev - 1));
 
-    // Trigger hit animation
-    hitT0Ref.current = performance.now();
+    // Trigger hit animation only if previous one is mostly done (prevents accumulation)
+    const timeSinceLastHit = now - hitT0Ref.current;
+    if (timeSinceLastHit > 150 || hitT0Ref.current < 0) {
+      hitT0Ref.current = now;
+    }
 
     // Spawn spark effect (damage numbers come from server via tap:result)
     sparksRef.current.push({
       x: w / 2 + Math.floor(Math.random() * 80 - 40),
       y: h / 2 + Math.floor(Math.random() * 90 - 50),
-      born: performance.now(),
+      born: now,
       life: 260,
     });
   }, [bossState.hp, stamina, isExhausted]);

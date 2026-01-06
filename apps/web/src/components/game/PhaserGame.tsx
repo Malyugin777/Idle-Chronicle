@@ -11,6 +11,18 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // L2-style Battle Scene with Socket.io integration
 // ═══════════════════════════════════════════════════════════
 
+interface BossState {
+  name: string;
+  nameRu?: string;
+  icon: string;
+  hp: number;
+  maxHp: number;
+  bossIndex: number;
+  totalBosses: number;
+  defense?: number;
+  ragePhase?: number;
+}
+
 interface VictoryData {
   bossName: string;
   bossIcon: string;
@@ -41,8 +53,27 @@ export default function PhaserGame() {
   const [respawnCountdown, setRespawnCountdown] = useState(0);
   const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showDropTable, setShowDropTable] = useState(false);
   const [lang, setLang] = useState<Language>('en');
   const t = useTranslation(lang);
+
+  // Boss state for header
+  const [bossState, setBossState] = useState<BossState>({
+    name: 'Loading...',
+    nameRu: '',
+    icon: '👹',
+    hp: 1000000,
+    maxHp: 1000000,
+    bossIndex: 1,
+    totalBosses: 100,
+  });
+
+  // Helper for compact number format
+  const formatCompact = (num: number) => {
+    if (num >= 1000000) return Math.floor(num / 1000000) + 'M';
+    if (num >= 1000) return Math.floor(num / 1000) + 'K';
+    return num.toString();
+  };
 
   useEffect(() => {
     // Detect language
@@ -97,8 +128,30 @@ export default function PhaserGame() {
 
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('boss:state', (data: { playersOnline: number }) => {
+    socket.on('boss:state', (data: {
+      playersOnline: number;
+      name: string;
+      nameRu?: string;
+      icon?: string;
+      hp: number;
+      maxHp: number;
+      bossIndex?: number;
+      totalBosses?: number;
+      defense?: number;
+      ragePhase?: number;
+    }) => {
       setPlayersOnline(data.playersOnline);
+      setBossState({
+        name: data.name || 'Boss',
+        nameRu: data.nameRu,
+        icon: data.icon || '👹',
+        hp: data.hp,
+        maxHp: data.maxHp,
+        bossIndex: data.bossIndex || 1,
+        totalBosses: data.totalBosses || 100,
+        defense: data.defense,
+        ragePhase: data.ragePhase,
+      });
     });
 
     socket.on('tap:result', (data: { sessionDamage: number }) => {
@@ -167,15 +220,57 @@ export default function PhaserGame() {
     getSocket().emit('firstLogin:complete');
   };
 
+  const hpPercent = (bossState.hp / bossState.maxHp) * 100;
+  const bossDisplayName = lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name;
+
   return (
     <div className="flex flex-col h-full relative">
+      {/* Header with HP - React overlay */}
+      <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">
+        <div className="flex justify-between items-center mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{bossState.icon}</span>
+            <div>
+              <span className="font-bold text-sm text-l2-gold">
+                {bossDisplayName}
+              </span>
+              <span className="text-xs text-gray-500 ml-2">
+                ({bossState.bossIndex}/{bossState.totalBosses})
+              </span>
+            </div>
+          </div>
+          <span className="text-xs text-gray-400">
+            {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+          </span>
+        </div>
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-xs text-white">
+            {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
+          </span>
+          {bossState.defense && bossState.defense > 0 && (
+            <span className="text-xs text-blue-400">🛡️ {bossState.defense}</span>
+          )}
+        </div>
+        <div className="h-3 bg-black/50 rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all duration-100 ${
+              hpPercent < 25 ? 'bg-red-600' :
+              hpPercent < 50 ? 'bg-orange-500' :
+              hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
+            }`}
+            style={{ width: `${hpPercent}%` }}
+          />
+        </div>
+        <button
+          onClick={() => setShowDropTable(true)}
+          className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
+        >
+          🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
+        </button>
+      </div>
+
       {/* Phaser Game Container */}
       <div ref={containerRef} id="game-container" className="flex-1 w-full" />
-
-      {/* Status bar */}
-      <div className="absolute top-2 right-2 text-xs text-gray-400">
-        {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-      </div>
 
       {/* Session damage */}
       <div className="absolute bottom-4 left-4 text-xs">
@@ -248,6 +343,115 @@ export default function PhaserGame() {
               className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg"
             >
               {t.offline.collect}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drop Table Popup */}
+      {showDropTable && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setShowDropTable(false)}
+        >
+          <div
+            className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-4">
+              <div className="text-2xl mb-1">🎁</div>
+              <div className="text-lg font-bold text-purple-400">
+                {lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}
+              </div>
+              <div className="text-xs text-gray-500">
+                {bossDisplayName} ({bossState.bossIndex}/{bossState.totalBosses})
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {/* Adena */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🪙</span>
+                  <span className="text-sm text-gray-300">Adena</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-l2-gold font-bold text-sm">
+                    {formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}
+                  </div>
+                  <div className="text-[10px] text-gray-500">100%</div>
+                </div>
+              </div>
+
+              {/* EXP */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⭐</span>
+                  <span className="text-sm text-gray-300">EXP</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-green-400 font-bold text-sm">
+                    {formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}
+                  </div>
+                  <div className="text-[10px] text-gray-500">100%</div>
+                </div>
+              </div>
+
+              {/* TON */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💎</span>
+                  <span className="text-sm text-gray-300">TON</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-blue-400 font-bold text-sm">
+                    {10 * Math.pow(2, bossState.bossIndex - 1)}
+                  </div>
+                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
+                </div>
+              </div>
+
+              {/* Chests */}
+              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📦</span>
+                  <span className="text-sm text-gray-300">{lang === 'ru' ? 'Сундуки' : 'Chests'}</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-purple-400 font-bold text-sm">
+                    {10 * Math.pow(2, bossState.bossIndex - 1)}
+                  </div>
+                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Chest Rarity */}
+            <div className="mt-3 p-2 bg-black/20 rounded-lg">
+              <div className="text-xs text-gray-400 mb-2 text-center">
+                {lang === 'ru' ? 'Шанс редкости сундука' : 'Chest Rarity Chances'}
+              </div>
+              <div className="grid grid-cols-5 gap-1 text-center text-[9px]">
+                <div><div className="text-gray-300">📦</div><div className="text-gray-400">50%</div></div>
+                <div><div className="text-green-400">🎁</div><div className="text-gray-400">30%</div></div>
+                <div><div className="text-blue-400">💎</div><div className="text-gray-400">15%</div></div>
+                <div><div className="text-purple-400">👑</div><div className="text-gray-400">4%</div></div>
+                <div><div className="text-orange-400">🏆</div><div className="text-gray-400">1%</div></div>
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="mt-3 text-center text-[10px] text-gray-500">
+              {lang === 'ru'
+                ? 'FB = Добивание, TD = Топ урон'
+                : 'FB = Final Blow, TD = Top Damage'}
+            </div>
+
+            <button
+              onClick={() => setShowDropTable(false)}
+              className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg font-bold text-sm"
+            >
+              {lang === 'ru' ? 'Закрыть' : 'Close'}
             </button>
           </div>
         </div>

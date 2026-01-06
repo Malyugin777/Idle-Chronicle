@@ -636,6 +636,39 @@ export default function CharacterTab() {
         </div>
       )}
 
+      {/* Inventory */}
+      <div className="px-2 pb-2">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-gray-400">{t.character.inventory || 'Инвентарь'}</span>
+          <span className="text-xs text-gray-500">{heroState.inventory.length}/20</span>
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {/* Filled slots */}
+          {heroState.inventory.map((item) => {
+            const style = RARITY_STYLES[item.rarity];
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSelectedItem({ item, isEquipped: false })}
+                className={`aspect-square bg-black/40 rounded-lg border-2 ${style.border} ${style.glow}
+                  flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
+              >
+                <span className="text-xl">{item.icon}</span>
+              </button>
+            );
+          })}
+          {/* Empty slots */}
+          {Array.from({ length: Math.max(0, 20 - heroState.inventory.length) }).map((_, i) => (
+            <div
+              key={`empty-${i}`}
+              className="aspect-square bg-black/20 rounded-lg border border-white/5 flex items-center justify-center"
+            >
+              <span className="text-[10px] text-gray-700">-</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Item Tooltip */}
       {selectedItem && (
         <ItemTooltip
