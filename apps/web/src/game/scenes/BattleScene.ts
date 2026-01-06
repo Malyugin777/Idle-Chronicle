@@ -274,7 +274,7 @@ export class BattleScene extends Phaser.Scene {
     });
 
     // Flash effect
-    this.cameras.main.flash(80, 255, 255, 255, false, (cam, progress) => {
+    this.cameras.main.flash(80, 255, 255, 255, false, (cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
       cam.setAlpha(1 - progress * 0.3);
     });
   }
