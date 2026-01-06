@@ -2,205 +2,285 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Package, Scroll, Gem, Coins, Sparkles } from 'lucide-react';
+import { Package, Lock, Gem } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+
+type ChestRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+
+interface Chest {
+  id: string;
+  rarity: ChestRarity;
+  openingStarted: number | null; // timestamp when opening started
+  openingDuration: number; // ms to open
+}
 
 interface InventoryItem {
   id: string;
-  itemId: string;
   name: string;
-  description?: string;
+  icon: string;
   quantity: number;
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
-  type: string;
-  iconUrl?: string;
+  rarity: ChestRarity;
 }
 
-interface TreasuryState {
-  adena: number;
-  ancientCoin: number;
-  items: InventoryItem[];
-}
-
-const RARITY_COLORS = {
-  COMMON: 'text-gray-300 border-gray-500',
-  UNCOMMON: 'text-green-400 border-green-500',
-  RARE: 'text-blue-400 border-blue-500',
-  EPIC: 'text-purple-400 border-purple-500',
-  LEGENDARY: 'text-orange-400 border-orange-500',
+// Chest config
+const CHEST_CONFIG: Record<ChestRarity, { icon: string; color: string; bgColor: string; duration: number }> = {
+  COMMON: { icon: '📦', color: 'text-gray-300', bgColor: 'bg-gray-500/20', duration: 5 * 60 * 1000 }, // 5 min
+  UNCOMMON: { icon: '🎁', color: 'text-green-400', bgColor: 'bg-green-500/20', duration: 30 * 60 * 1000 }, // 30 min
+  RARE: { icon: '💎', color: 'text-blue-400', bgColor: 'bg-blue-500/20', duration: 4 * 60 * 60 * 1000 }, // 4h
+  EPIC: { icon: '👑', color: 'text-purple-400', bgColor: 'bg-purple-500/20', duration: 8 * 60 * 60 * 1000 }, // 8h
+  LEGENDARY: { icon: '🏆', color: 'text-orange-400', bgColor: 'bg-orange-500/20', duration: 24 * 60 * 60 * 1000 }, // 24h
 };
 
-const RARITY_BG = {
-  COMMON: 'bg-gray-500/10',
-  UNCOMMON: 'bg-green-500/10',
-  RARE: 'bg-blue-500/10',
-  EPIC: 'bg-purple-500/10',
-  LEGENDARY: 'bg-orange-500/10',
-};
-
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  SCROLL: <Scroll size={20} />,
-  MATERIAL: <Gem size={20} />,
-  CURRENCY: <Coins size={20} />,
-  default: <Package size={20} />,
-};
+const SLOT_UNLOCK_COST = 50; // crystals per slot
 
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
-  const [treasury, setTreasury] = useState<TreasuryState>({
-    adena: 0,
-    ancientCoin: 0,
-    items: [],
-  });
-  const [loading, setLoading] = useState(true);
 
+  // Mock data - in real app this comes from server
+  const [crystals, setCrystals] = useState(120);
+  const [unlockedSlots, setUnlockedSlots] = useState(5);
+  const [chests, setChests] = useState<Chest[]>([
+    { id: '1', rarity: 'COMMON', openingStarted: null, openingDuration: CHEST_CONFIG.COMMON.duration },
+    { id: '2', rarity: 'UNCOMMON', openingStarted: null, openingDuration: CHEST_CONFIG.UNCOMMON.duration },
+    { id: '3', rarity: 'RARE', openingStarted: null, openingDuration: CHEST_CONFIG.RARE.duration },
+  ]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [now, setNow] = useState(Date.now());
+
+  // Update timer every second
   useEffect(() => {
-    const socket = getSocket();
-
-    // Request data on mount
-    socket.emit('player:get');
-    socket.emit('inventory:get');
-
-    const updateCurrency = (data: any) => {
-      if (!data) return;
-      setTreasury(prev => ({
-        ...prev,
-        adena: data.adena || 0,
-        ancientCoin: data.ancientCoin || 0,
-      }));
-    };
-
-    socket.on('player:data', updateCurrency);
-    socket.on('auth:success', updateCurrency);
-
-    socket.on('inventory:data', (data: { items: InventoryItem[] }) => {
-      setTreasury(prev => ({
-        ...prev,
-        items: data.items,
-      }));
-      setLoading(false);
-    });
-
-    // Update when loot drops
-    socket.on('loot:drop', (data: { item: InventoryItem; adena?: number }) => {
-      setTreasury(prev => {
-        const existingIndex = prev.items.findIndex(i => i.itemId === data.item.itemId);
-        let newItems;
-
-        if (existingIndex >= 0) {
-          newItems = [...prev.items];
-          newItems[existingIndex] = {
-            ...newItems[existingIndex],
-            quantity: newItems[existingIndex].quantity + data.item.quantity,
-          };
-        } else {
-          newItems = [data.item, ...prev.items];
-        }
-
-        return {
-          ...prev,
-          items: newItems,
-          adena: data.adena ?? prev.adena,
-        };
-      });
-    });
-
-    return () => {
-      socket.off('player:data');
-      socket.off('auth:success');
-      socket.off('inventory:data');
-      socket.off('loot:drop');
-    };
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
   }, []);
 
-  const groupedItems = treasury.items.reduce((acc, item) => {
-    const type = item.type || 'OTHER';
-    if (!acc[type]) acc[type] = [];
-    acc[type].push(item);
-    return acc;
-  }, {} as Record<string, InventoryItem[]>);
+  // Check if any chest is currently opening
+  const openingChest = chests.find(c => c.openingStarted !== null);
+
+  // Start opening a chest
+  const startOpening = (chestId: string) => {
+    if (openingChest) return; // Already opening one
+
+    setChests(prev => prev.map(c =>
+      c.id === chestId ? { ...c, openingStarted: Date.now() } : c
+    ));
+
+    // In real app: socket.emit('chest:open', { chestId })
+  };
+
+  // Claim opened chest
+  const claimChest = (chestId: string) => {
+    const chest = chests.find(c => c.id === chestId);
+    if (!chest || !chest.openingStarted) return;
+
+    const elapsed = now - chest.openingStarted;
+    if (elapsed < chest.openingDuration) return; // Not ready
+
+    // Remove chest and add random loot
+    setChests(prev => prev.filter(c => c.id !== chestId));
+
+    // Mock loot based on rarity
+    const lootCount = chest.rarity === 'LEGENDARY' ? 5 : chest.rarity === 'EPIC' ? 4 : chest.rarity === 'RARE' ? 3 : 2;
+    // In real app: server sends actual loot
+
+    // In real app: socket.emit('chest:claim', { chestId })
+  };
+
+  // Unlock new slot
+  const unlockSlot = () => {
+    if (crystals < SLOT_UNLOCK_COST || unlockedSlots >= 10) return;
+    setCrystals(prev => prev - SLOT_UNLOCK_COST);
+    setUnlockedSlots(prev => prev + 1);
+    // In real app: socket.emit('slot:unlock')
+  };
+
+  // Format time remaining
+  const formatTime = (ms: number) => {
+    if (ms <= 0) return t.treasury.claim;
+    const totalSeconds = Math.ceil(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}${t.treasury.hours} ${minutes}${t.treasury.minutes}`;
+    }
+    if (minutes > 0) {
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${seconds}s`;
+  };
+
+  // Get rarity label
+  const getRarityLabel = (rarity: ChestRarity) => {
+    switch (rarity) {
+      case 'COMMON': return t.treasury.common;
+      case 'UNCOMMON': return t.treasury.uncommon;
+      case 'RARE': return t.treasury.rare;
+      case 'EPIC': return t.treasury.epic;
+      case 'LEGENDARY': return t.treasury.legendary;
+    }
+  };
 
   return (
-    <div className="flex-1 overflow-auto bg-l2-dark p-4">
-      {/* Currency Header */}
-      <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <div className="flex items-center gap-3 mb-3">
-          <Package className="text-l2-gold" size={28} />
-          <div>
-            <h2 className="text-lg font-bold text-white">{t.treasury.title}</h2>
-            <p className="text-xs text-gray-400">{t.treasury.subtitle}</p>
+    <div className="flex-1 overflow-auto bg-l2-dark">
+      {/* Header with crystals */}
+      <div className="bg-l2-panel p-2 border-b border-white/10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Package className="text-l2-gold" size={20} />
+            <span className="font-bold text-white">{t.treasury.title}</span>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-black/30 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Coins className="text-l2-gold" size={18} />
-              <span className="text-xs text-gray-400">{t.treasury.adena}</span>
-            </div>
-            <p className="text-xl font-bold text-l2-gold">
-              {treasury.adena.toLocaleString()}
-            </p>
-          </div>
-          <div className="bg-black/30 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="text-purple-400" size={18} />
-              <span className="text-xs text-gray-400">{t.treasury.ancientCoins}</span>
-            </div>
-            <p className="text-xl font-bold text-purple-400">
-              {treasury.ancientCoin.toLocaleString()}
-            </p>
+          <div className="flex items-center gap-1 bg-purple-500/20 px-2 py-1 rounded">
+            <Gem className="text-purple-400" size={14} />
+            <span className="text-sm font-bold text-purple-400">{crystals}</span>
           </div>
         </div>
       </div>
 
-      {/* Inventory */}
-      <div className="bg-l2-panel rounded-lg p-4">
-        <h3 className="text-sm text-gray-400 mb-3">{t.treasury.inventory}</h3>
+      {/* Chests Section */}
+      <div className="p-2">
+        <div className="text-xs text-gray-400 mb-2">{t.treasury.chests}</div>
 
-        {loading ? (
-          <div className="p-8 text-center text-gray-400">{t.treasury.loading}</div>
-        ) : treasury.items.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
-            <Package size={32} className="mx-auto mb-2 opacity-50" />
-            <p>{t.treasury.noItems}</p>
-            <p className="text-xs mt-1">{t.treasury.defeatBosses}</p>
+        {chests.length === 0 ? (
+          <div className="bg-black/30 rounded p-4 text-center">
+            <Package size={32} className="mx-auto mb-2 opacity-30" />
+            <p className="text-gray-500 text-sm">{t.treasury.noChests}</p>
+            <p className="text-gray-600 text-xs">{t.treasury.defeatBosses}</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {Object.entries(groupedItems).map(([type, items]) => (
-              <div key={type}>
-                <div className="text-xs text-gray-500 mb-2 uppercase">{type}</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`p-3 rounded-lg border ${RARITY_COLORS[item.rarity]} ${RARITY_BG[item.rarity]}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className={`${RARITY_COLORS[item.rarity]}`}>
-                          {TYPE_ICONS[item.type] || TYPE_ICONS.default}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-bold text-sm truncate ${RARITY_COLORS[item.rarity].split(' ')[0]}`}>
-                            {item.name}
-                          </p>
-                          <p className="text-xs text-gray-500">x{item.quantity}</p>
+          <div className="space-y-2">
+            {chests.map((chest) => {
+              const config = CHEST_CONFIG[chest.rarity];
+              const isOpening = chest.openingStarted !== null;
+              const elapsed = isOpening ? now - chest.openingStarted! : 0;
+              const remaining = chest.openingDuration - elapsed;
+              const isReady = isOpening && remaining <= 0;
+              const progress = isOpening ? Math.min(100, (elapsed / chest.openingDuration) * 100) : 0;
+              const canOpen = !openingChest || openingChest.id === chest.id;
+
+              return (
+                <div
+                  key={chest.id}
+                  className={`${config.bgColor} rounded-lg p-3 border border-white/10`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Chest icon */}
+                    <div className="text-3xl">{config.icon}</div>
+
+                    {/* Info */}
+                    <div className="flex-1">
+                      <div className={`font-bold ${config.color}`}>
+                        {getRarityLabel(chest.rarity)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {formatTime(chest.openingDuration)}
+                      </div>
+                    </div>
+
+                    {/* Action button */}
+                    {isReady ? (
+                      <button
+                        onClick={() => claimChest(chest.id)}
+                        className="px-4 py-2 bg-l2-gold text-black font-bold rounded text-sm"
+                      >
+                        {t.treasury.claim}
+                      </button>
+                    ) : isOpening ? (
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">{formatTime(remaining)}</div>
+                        <div className="w-20 h-1 bg-black/50 rounded-full mt-1">
+                          <div
+                            className="h-full bg-l2-gold rounded-full transition-all"
+                            style={{ width: `${progress}%` }}
+                          />
                         </div>
                       </div>
-                      {item.description && (
-                        <p className="text-xs text-gray-400 mt-2 line-clamp-2">
-                          {item.description}
-                        </p>
-                      )}
+                    ) : (
+                      <button
+                        onClick={() => startOpening(chest.id)}
+                        disabled={!canOpen}
+                        className={`px-4 py-2 rounded text-sm font-bold ${
+                          canOpen
+                            ? 'bg-white/10 text-white hover:bg-white/20'
+                            : 'bg-black/30 text-gray-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {t.treasury.openChest}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Opening progress bar */}
+                  {isOpening && !isReady && (
+                    <div className="mt-2 h-1 bg-black/30 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${config.color.replace('text-', 'bg-')} transition-all`}
+                        style={{ width: `${progress}%` }}
+                      />
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
+      </div>
+
+      {/* Inventory Section */}
+      <div className="p-2">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-gray-400">{t.treasury.inventory}</span>
+          <span className="text-xs text-gray-500">{unlockedSlots}/10 {t.treasury.slots}</span>
+        </div>
+
+        <div className="grid grid-cols-5 gap-1">
+          {Array.from({ length: 10 }).map((_, i) => {
+            const isLocked = i >= unlockedSlots;
+            const item = inventory[i];
+
+            if (isLocked) {
+              return (
+                <button
+                  key={i}
+                  onClick={unlockSlot}
+                  disabled={crystals < SLOT_UNLOCK_COST}
+                  className="aspect-square bg-black/50 rounded border border-white/5 flex flex-col items-center justify-center hover:bg-black/40 transition-colors"
+                  title={`${t.treasury.unlockFor} ${SLOT_UNLOCK_COST} 💎`}
+                >
+                  <Lock size={14} className="text-gray-600" />
+                  <span className="text-[8px] text-gray-600 mt-0.5">{SLOT_UNLOCK_COST}💎</span>
+                </button>
+              );
+            }
+
+            if (item) {
+              const config = CHEST_CONFIG[item.rarity];
+              return (
+                <div
+                  key={i}
+                  className={`aspect-square ${config.bgColor} rounded border border-white/10 flex flex-col items-center justify-center relative`}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                  {item.quantity > 1 && (
+                    <span className="absolute bottom-0.5 right-1 text-[10px] text-white font-bold">
+                      x{item.quantity}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={i}
+                className="aspect-square bg-black/30 rounded border border-white/5 flex items-center justify-center"
+              >
+                <span className="text-[10px] text-gray-700">-</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

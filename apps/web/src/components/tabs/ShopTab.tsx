@@ -114,7 +114,7 @@ export default function ShopTab() {
             {shopState.adena.toLocaleString()}
           </span>
         </div>
-        <span className="text-gray-400">{t.shop.adena}</span>
+        <span className="text-gray-400">{t.shop.gold}</span>
       </div>
 
       {/* Soulshots */}

@@ -793,7 +793,7 @@ export default function GameCanvas() {
             <div className="bg-black/30 rounded-lg p-4 mb-4">
               <div className="text-xs text-gray-400 mb-1">{t.offline.earnings}</div>
               <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.adena.toLocaleString()} {t.character.adena}
+                +{offlineEarnings.adena.toLocaleString()} {t.character.gold}
               </div>
             </div>
             <button
