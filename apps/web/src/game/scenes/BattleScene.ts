@@ -287,6 +287,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateDamageFeed() {
+    if (!this.damageFeedTexts || this.damageFeedTexts.length === 0) return;  // Guard against early calls
     for (let i = 0; i < this.damageFeedTexts.length; i++) {
       const item = this.damageFeed[i];
       if (item) {
@@ -347,8 +348,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateOnlineText() {
+    if (!this.onlineText) return;  // Guard against early calls before create()
     const count = this.bossState.playersOnline || 0;
-    this.onlineText?.setText(`🟢 ${count} online`);
+    this.onlineText.setText(`🟢 ${count} online`);
   }
 
   // Save cooldowns to sessionStorage so they persist across tab switches
@@ -382,6 +384,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateManaBar() {
+    if (!this.manaBar) return;  // Guard against early calls before create()
+
     const { width, height } = this.scale;
     const barWidth = width - 40;
     const barHeight = 16;
@@ -653,6 +657,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateHpBar() {
+    if (!this.hpBar) return;  // Guard against early calls before create()
+
     const { width } = this.scale;
     const barWidth = width - 40;
     const barHeight = 16;
@@ -671,10 +677,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateHpText() {
+    if (!this.hpText) return;  // Guard against early calls before create()
     this.hpText.setText(`${this.bossState.hp.toLocaleString()} / ${this.bossState.maxHp.toLocaleString()}`);
   }
 
   private updateStaminaBar() {
+    if (!this.staminaBar) return;  // Guard against early calls before create()
+
     const { width, height } = this.scale;
     const barWidth = width - 40;
     const barHeight = 16;

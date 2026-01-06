@@ -157,7 +157,8 @@ export default function LeaderboardTab() {
     }
   };
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | undefined | null) => {
+    if (num === undefined || num === null) return '0';
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toLocaleString();
@@ -184,32 +185,35 @@ export default function LeaderboardTab() {
     );
   };
 
-  const renderPrizePool = (pool: PrizePool) => (
-    <div className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-lg p-3 mb-3">
-      <div className="text-xs text-gray-400 mb-2">{t.leaderboard.prizePool}</div>
-      <div className="grid grid-cols-4 gap-2 text-center">
-        <div>
-          <div className="text-blue-400 font-bold text-sm">{pool.ton}</div>
-          <div className="text-[10px] text-gray-500">{t.leaderboard.ton}</div>
+  const renderPrizePool = (pool: PrizePool | null | undefined) => {
+    if (!pool) return null;
+    return (
+      <div className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-lg p-3 mb-3">
+        <div className="text-xs text-gray-400 mb-2">{t.leaderboard.prizePool}</div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <div>
+            <div className="text-blue-400 font-bold text-sm">{pool.ton ?? 0}</div>
+            <div className="text-[10px] text-gray-500">{t.leaderboard.ton}</div>
+          </div>
+          <div>
+            <div className="text-purple-400 font-bold text-sm">{pool.chests ?? 0}</div>
+            <div className="text-[10px] text-gray-500">{t.leaderboard.chests}</div>
+          </div>
+          <div>
+            <div className="text-green-400 font-bold text-sm">{formatNumber(pool.exp)}</div>
+            <div className="text-[10px] text-gray-500">{t.leaderboard.exp}</div>
+          </div>
+          <div>
+            <div className="text-l2-gold font-bold text-sm">{formatNumber(pool.adena)}</div>
+            <div className="text-[10px] text-gray-500">{t.shop.gold}</div>
+          </div>
         </div>
-        <div>
-          <div className="text-purple-400 font-bold text-sm">{pool.chests}</div>
-          <div className="text-[10px] text-gray-500">{t.leaderboard.chests}</div>
-        </div>
-        <div>
-          <div className="text-green-400 font-bold text-sm">{formatNumber(pool.exp)}</div>
-          <div className="text-[10px] text-gray-500">{t.leaderboard.exp}</div>
-        </div>
-        <div>
-          <div className="text-l2-gold font-bold text-sm">{formatNumber(pool.adena)}</div>
-          <div className="text-[10px] text-gray-500">{t.shop.gold}</div>
+        <div className="text-[10px] text-center text-gray-500 mt-2">
+          50% {t.leaderboard.finalBlow} + 50% {t.leaderboard.topDamage}
         </div>
       </div>
-      <div className="text-[10px] text-center text-gray-500 mt-2">
-        50% {t.leaderboard.finalBlow} + 50% {t.leaderboard.topDamage}
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderLeaderboard = (entries: LeaderboardEntry[], showPercent = true) => (
     <div className="space-y-1">
@@ -333,7 +337,7 @@ export default function LeaderboardTab() {
             <div className="text-xs font-bold text-white truncate">{previousData.finalBlowBy}</div>
             {previousData.prizePool && (
               <div className="text-[10px] text-gray-400">
-                {previousData.prizePool.ton / 2} TON + {Math.floor(previousData.prizePool.chests / 2)} 📦
+                {(previousData.prizePool.ton ?? 0) / 2} TON + {Math.floor((previousData.prizePool.chests ?? 0) / 2)} 📦
               </div>
             )}
           </div>
@@ -346,7 +350,7 @@ export default function LeaderboardTab() {
             <div className="text-xs font-bold text-white truncate">{previousData.topDamageBy}</div>
             {previousData.prizePool && (
               <div className="text-[10px] text-gray-400">
-                {previousData.prizePool.ton / 2} TON + {Math.ceil(previousData.prizePool.chests / 2)} 📦
+                {(previousData.prizePool.ton ?? 0) / 2} TON + {Math.ceil((previousData.prizePool.chests ?? 0) / 2)} 📦
               </div>
             )}
           </div>
