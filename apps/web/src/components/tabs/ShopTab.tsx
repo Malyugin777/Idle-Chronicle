@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Flame, Zap, Clover, Coins, Check, Box } from 'lucide-react';
+import { Flame, Zap, Clover, Coins, Check } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
@@ -35,13 +35,6 @@ export default function ShopTab() {
     { id: 'luck', name: t.shop.luck, icon: <Clover size={20} />, effect: t.shop.luckEffect, duration: '60s', cost: 1000, color: 'green' },
   ];
 
-  // DEBUG: Сундуки за 1 монету
-  const DEBUG_CHESTS = [
-    { id: 'WOODEN', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🪵', color: 'amber' },
-    { id: 'BRONZE', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🟫', color: 'orange' },
-    { id: 'SILVER', name: lang === 'ru' ? 'Серебряный' : 'Silver', icon: '🪙', color: 'gray' },
-    { id: 'GOLD', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🟨', color: 'yellow' },
-  ];
   const [shopState, setShopState] = useState<ShopState>({
     gold: 0,
     activeSoulshot: null,
@@ -110,12 +103,6 @@ export default function ShopTab() {
     if (buying) return;
     setBuying(`buff-${buffId}`);
     getSocket().emit('shop:buy', { type: 'buff', buffId });
-  };
-
-  const handleBuyChest = (chestType: string) => {
-    if (buying) return;
-    setBuying(`chest-${chestType}`);
-    getSocket().emit('shop:buy', { type: 'chest', chestType });
   };
 
   return (
@@ -235,40 +222,6 @@ export default function ShopTab() {
                   {buying === `buff-${buff.id}` ? '...' : buff.cost}
                 </button>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* DEBUG: Chests */}
-      <div className="bg-l2-panel rounded-lg p-4 mt-4 border border-red-500/50">
-        <h3 className="text-sm text-red-400 mb-3">🛠️ DEBUG: {lang === 'ru' ? 'Сундуки' : 'Chests'}</h3>
-        <p className="text-xs text-red-400/70 mb-3">{lang === 'ru' ? 'Тестовые сундуки за 1 монету' : 'Test chests for 1 gold'}</p>
-
-        <div className="grid grid-cols-2 gap-2">
-          {DEBUG_CHESTS.map((chest) => {
-            const canAfford = shopState.gold >= 1;
-
-            return (
-              <button
-                key={chest.id}
-                onClick={() => handleBuyChest(chest.id)}
-                disabled={!canAfford || buying === `chest-${chest.id}`}
-                className={`flex items-center gap-2 p-3 rounded-lg transition-all ${
-                  canAfford
-                    ? 'bg-black/30 hover:bg-black/50 border border-transparent hover:border-l2-gold/50'
-                    : 'bg-gray-800/30 opacity-50'
-                }`}
-              >
-                <span className="text-2xl">{chest.icon}</span>
-                <div className="flex-1 text-left">
-                  <div className="text-sm font-bold text-white">{chest.name}</div>
-                  <div className="text-xs text-l2-gold">1 💰</div>
-                </div>
-                {buying === `chest-${chest.id}` && (
-                  <span className="text-xs text-gray-400">...</span>
-                )}
-              </button>
             );
           })}
         </div>

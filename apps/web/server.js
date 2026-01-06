@@ -274,6 +274,17 @@ const CHEST_CONFIG = {
   GOLD: { duration: 8 * 60 * 60 * 1000, icon: '🟨', name: 'Золотой' },       // 8 hours
 };
 
+// DEBUG: Быстрое открытие сундуков для тестовых аккаунтов (30 сек)
+const DEBUG_FAST_CHEST_USERNAMES = ['malyugin777'];
+const DEBUG_CHEST_DURATION = 30 * 1000; // 30 секунд
+
+function getChestDuration(chestType, username) {
+  if (username && DEBUG_FAST_CHEST_USERNAMES.includes(username)) {
+    return DEBUG_CHEST_DURATION;
+  }
+  return CHEST_CONFIG[chestType].duration;
+}
+
 // ═══════════════════════════════════════════════════════════
 // CHEST DROP CONFIG — GPT формат (itemChance + rarityWeights)
 // ═══════════════════════════════════════════════════════════
@@ -1750,7 +1761,7 @@ app.prepare().then(async () => {
               chestsToCreate.push({
                 userId: player.odamage,
                 chestType: type,
-                openingDuration: CHEST_CONFIG[type].duration,
+                openingDuration: getChestDuration(type, player.username),
                 fromBossId: null,
                 fromSessionId: reward.bossSessionId,
               });
@@ -3114,50 +3125,6 @@ app.prepare().then(async () => {
             gold: player.gold,
             [potionKey]: player[potionKey],
           });
-        } else if (data.type === 'chest') {
-          // DEBUG: Покупка сундуков за 1 монету
-          const chestType = data.chestType;
-          if (!CHEST_CONFIG[chestType]) {
-            socket.emit('shop:error', { message: 'Invalid chest type' });
-            return;
-          }
-
-          const cost = 1; // Дебаг цена
-          if (player.gold < cost) {
-            socket.emit('shop:error', { message: 'Not enough gold' });
-            return;
-          }
-
-          // Проверяем лимит слотов
-          const chestCount = await prisma.chest.count({
-            where: { userId: player.odamage },
-          });
-
-          if (chestCount >= (player.chestSlots || 5)) {
-            socket.emit('shop:error', { message: 'No free chest slots' });
-            return;
-          }
-
-          player.gold -= cost;
-
-          // Создаём сундук
-          const newChest = await prisma.chest.create({
-            data: {
-              userId: player.odamage,
-              chestType: chestType,
-              openingDuration: CHEST_CONFIG[chestType].duration,
-            },
-          });
-
-          await prisma.user.update({
-            where: { id: player.odamage },
-            data: { gold: BigInt(player.gold) },
-          });
-
-          console.log(`[Shop] Debug chest ${chestType} bought by ${player.odamage}`);
-
-          socket.emit('shop:success', { gold: player.gold });
-          socket.emit('chests:update'); // Триггерим обновление сундуков
         }
       } catch (err) {
         console.error('[Shop] Error:', err.message);
