@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.24';
+const APP_VERSION = 'v1.0.25';
 
 interface BossState {
   name: string;
@@ -70,9 +70,9 @@ interface VictoryData {
 }
 
 const SKILLS: Skill[] = [
-  { id: 'fireball', name: 'Fireball', icon: '🔥', manaCost: 25, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
-  { id: 'iceball', name: 'Ice Ball', icon: '❄️', manaCost: 25, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
-  { id: 'lightning', name: 'Lightning', icon: '⚡', manaCost: 25, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
+  { id: 'fireball', name: 'Fireball', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
+  { id: 'iceball', name: 'Ice Ball', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
+  { id: 'lightning', name: 'Lightning', icon: '⚡', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
 ];
 
 const COOLDOWNS_KEY = 'battle_skill_cooldowns';

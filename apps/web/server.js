@@ -1470,6 +1470,7 @@ app.prepare().then(async () => {
     const player = {
       odamage: '',
       odamageN: 'Guest',
+      username: null, // Telegram username для debug-проверок
       photoUrl: null,
       // Legacy stats
       str: 1,
@@ -1945,6 +1946,7 @@ app.prepare().then(async () => {
         // Update player state from DB
         player.odamage = user.id;
         player.odamageN = user.firstName || user.username || 'Player';
+        player.username = user.username || null; // Для DEBUG_FAST_CHEST_USERNAMES
         player.photoUrl = user.photoUrl || null;
         // Legacy stats
         player.str = user.str;
