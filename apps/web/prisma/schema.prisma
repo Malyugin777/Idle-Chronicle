@@ -30,12 +30,12 @@ model User {
   dex             Int      @default(1)
   luck            Int      @default(1)
 
-  // L2 Core Attributes (NEW)
-  power           Int      @default(10)    // → Physical Power (P.Atk)
-  agility         Int      @default(10)    // → Attack Speed, Crit Chance
-  vitality        Int      @default(10)    // → Max Health, Max Stamina
-  intellect       Int      @default(10)    // → Magic Power (future)
-  spirit          Int      @default(10)    // → Max Mana (future)
+  // L2 Core Attributes (MVP)
+  power           Int      @default(10)    // СИЛ → Physical Power (P.Atk)
+  agility         Int      @default(10)    // ЛОВ → Attack Speed, Crit Chance
+  vitality        Int      @default(12)    // СТОЙ → Max Stamina (12 для "длинной сессии")
+  intellect       Int      @default(10)    // ИНТ → Skill Power
+  spirit          Int      @default(10)    // ДУХ → Max Mana, Mana Regen
 
   // Derived Stats (legacy)
   pAtk            Int      @default(10)
@@ -43,21 +43,21 @@ model User {
   critDamage      Float    @default(2.0)
   attackSpeed     Float    @default(1.0)
 
-  // L2 Derived Stats (NEW - cached from calculateDerived)
-  physicalPower   Int      @default(15)    // floor(basePower * powerMod)
-  maxHealth       Int      @default(100)   // floor(baseHealth * vitalityMod)
-  physicalDefense Int      @default(40)    // P.Def for thorns reduction
+  // L2 Derived Stats (MVP формулы)
+  physicalPower   Int      @default(10)    // P.Atk = 10 (база кулаками)
+  maxHealth       Int      @default(140)   // 100 + (12-10)*20 = 140
+  physicalDefense Int      @default(0)     // P.Def = 0 (голый)
 
-  // Stamina System (NEW - replaces Mana for combat)
-  stamina         Int      @default(100)   // Current stamina
-  maxStamina      Int      @default(100)   // max(100, floor(maxHealth * 10))
+  // Stamina System (СТОЙ влияет на длину сессии)
+  stamina         Int      @default(960)   // 800 + (12-10)*80 = 960
+  maxStamina      Int      @default(960)   // MaxStamina = 800 + (СТОЙ-10)*80
   lastStaminaTick DateTime @default(now())
-  exhaustedUntil  DateTime?               // null = not exhausted
+  exhaustedUntil  DateTime?               // null = not exhausted, 5 сек при 0
 
-  // Mana System (kept for skills/magic - future use)
-  mana            Int      @default(1000)
-  maxMana         Int      @default(1000)
-  manaRegen       Float    @default(0.2)  // 1 per 5 seconds = 0.2/sec, upgradeable to 10/sec
+  // Mana System (ДУХ влияет на ману)
+  mana            Int      @default(100)   // MP max = 100 + (ДУХ-10)*10
+  maxMana         Int      @default(100)
+  manaRegen       Float    @default(1.0)   // 1 MP per second
   lastManaTick    DateTime @default(now())
 
   // Tap & Auto-Attack System

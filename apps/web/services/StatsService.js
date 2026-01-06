@@ -12,9 +12,9 @@
 const ATTRIBUTE_DEFAULTS = {
   power: 10,         // → Physical Power (P.Atk)
   agility: 10,       // → Attack Speed, Crit Chance
-  vitality: 10,      // → Max Health, Max Stamina
-  intellect: 10,     // → Magic Power (будущее)
-  spirit: 10,        // → Max Mana (будущее)
+  vitality: 12,      // → Max Stamina (СТОЙ - начинаем с 12 для "длинной сессии")
+  intellect: 10,     // → Skill Power (сила скиллов)
+  spirit: 10,        // → Max Mana, Mana Regen
 };
 
 // Modifier tables - экспоненциальный рост статов
@@ -61,46 +61,64 @@ function clampStat(val) {
  * @param {number} level - уровень персонажа
  * @param {Object} bonuses - { flat: {}, pct: {} } бонусы от экипировки
  * @returns {Object} derived stats
+ *
+ * MVP ФОРМУЛЫ (упрощённые):
+ * - P.Atk = 10 (база кулаками) + бонусы от экипировки
+ * - P.Def = 0 (голый) + бонусы от экипировки
+ * - MaxStamina = 800 + (СТОЙ - 10) * 80
+ * - MaxMana = 100 + (ДУХ - 10) * 10
+ * - Crit = 5% + (ЛОВ - 10) * 0.2%
+ * - AtkSpd = 2.0 сек интервал (база)
  */
 function calculateDerived(attributes, level = 1, bonuses = {}) {
-  const lvl = clamp(level, 1, 99);
   const flat = bonuses.flat || {};
   const pct = bonuses.pct || {};
 
-  // Get modifiers from tables
-  const powerMod = POWER_MOD[clampStat(attributes.power)];
-  const agilityMod = AGILITY_MOD[clampStat(attributes.agility)];
-  const vitalityMod = VITALITY_MOD[clampStat(attributes.vitality)];
-  const intellectMod = INTELLECT_MOD[clampStat(attributes.intellect)];
-  const spiritMod = SPIRIT_MOD[clampStat(attributes.spirit)];
+  // Get attribute values
+  const power = clampStat(attributes.power);
+  const agility = clampStat(attributes.agility);
+  const vitality = clampStat(attributes.vitality);
+  const intellect = clampStat(attributes.intellect);
+  const spirit = clampStat(attributes.spirit);
 
-  // Base values by level
-  const baseHealth = 80 + 12 * (lvl - 1) + 0.37 * ((lvl - 1) * (lvl - 2) / 2);
-  const baseMana = 30 + 5.5 * (lvl - 1) + 0.16 * ((lvl - 1) * (lvl - 2) / 2);
-  const basePhysicalPower = 4 + lvl * 2;
-  const baseMagicPower = 2 + lvl;
-  const basePhysicalDef = 40;
-  const baseMagicDef = 25;
-  const baseAttackSpeed = 300;
+  // ═══════════════════════════════════════════════════════════
+  // MVP ФОРМУЛЫ
+  // ═══════════════════════════════════════════════════════════
 
-  // Calculate derived stats
-  const maxHealth = Math.floor(baseHealth * vitalityMod * (1 + (pct.healthMax || 0))) + (flat.healthMax || 0);
-  const maxMana = Math.floor(baseMana * spiritMod * (1 + (pct.manaMax || 0))) + (flat.manaMax || 0);
+  // P.Atk = 10 (база кулаками) + (СИЛ - 10) * 1 + equipment
+  const basePhysicalPower = 10 + (power - 10) * 1;
+  const physicalPower = Math.floor(basePhysicalPower * (1 + (pct.physicalPower || 0))) + (flat.physicalPower || 0);
 
-  // STAMINA: max(100, floor(maxHealth * 10)) - ключевая формула из ТЗ
-  const maxStamina = Math.max(100, Math.floor(maxHealth * 10));
-
-  const physicalPower = Math.floor(basePhysicalPower * powerMod * (1 + (pct.physicalPower || 0))) + (flat.physicalPower || 0);
-  const magicPower = Math.floor(baseMagicPower * intellectMod * (1 + (pct.magicPower || 0))) + (flat.magicPower || 0);
-
-  const attackSpeed = Math.floor(baseAttackSpeed * agilityMod * (1 + (pct.attackSpeed || 0))) + (flat.attackSpeed || 0);
-
+  // P.Def = 0 (голый) + equipment
+  const basePhysicalDef = 0;
   const physicalDefense = Math.floor(basePhysicalDef * (1 + (pct.physicalDefense || 0))) + (flat.physicalDefense || 0);
-  const magicDefense = Math.floor(baseMagicDef * (1 + (pct.magicDefense || 0))) + (flat.magicDefense || 0);
 
-  // Crit from agility
+  // MaxStamina = 800 + (СТОЙ - 10) * 80
+  // При СТОЙ 12 → 960, при СТОЙ 20 → 1600
+  const maxStamina = 800 + (vitality - 10) * 80;
+
+  // MaxMana = 100 + (ДУХ - 10) * 10
+  const baseMana = 100 + (spirit - 10) * 10;
+  const maxMana = Math.floor(baseMana * (1 + (pct.manaMax || 0))) + (flat.manaMax || 0);
+
+  // MaxHealth (для отображения, пока не используется в бою)
+  const maxHealth = 100 + (vitality - 10) * 20;
+
+  // Magic Power = (ИНТ - 10) * 2 (для скиллов)
+  const baseMagicPower = 10 + (intellect - 10) * 2;
+  const magicPower = Math.floor(baseMagicPower * (1 + (pct.magicPower || 0))) + (flat.magicPower || 0);
+
+  // M.Def (для будущего)
+  const magicDefense = 0 + (flat.magicDefense || 0);
+
+  // Attack Speed = 300 (база) + (ЛОВ - 10) * 10
+  // 300 = 1 атака в секунду, 600 = 2 атаки в секунду
+  const baseAttackSpeed = 300 + (agility - 10) * 10;
+  const attackSpeed = Math.floor(baseAttackSpeed * (1 + (pct.attackSpeed || 0))) + (flat.attackSpeed || 0);
+
+  // Crit = 5% + (ЛОВ - 10) * 0.2%
   const baseCrit = 0.05;
-  const agilityCritBonus = (clampStat(attributes.agility) - 10) * 0.002;
+  const agilityCritBonus = (agility - 10) * 0.002;
   const critChance = Math.min(0.5, Math.max(0, baseCrit + agilityCritBonus + (flat.critChance || 0) + (pct.critChance || 0)));
   const critMultiplier = 2.0 + (flat.critMultiplier || 0) + (pct.critMultiplier || 0);
 
