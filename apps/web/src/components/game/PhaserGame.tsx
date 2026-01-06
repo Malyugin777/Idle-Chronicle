@@ -16,16 +16,23 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.0.2';
 
 interface BossState {
   name: string;
   nameRu?: string;
   icon: string;
+  image?: string;
   hp: number;
   maxHp: number;
   bossIndex: number;
   totalBosses: number;
+}
+
+interface StarterItem {
+  name: string;
+  icon: string;
+  slot: string;
 }
 
 interface PlayerState {
@@ -130,7 +137,9 @@ export default function PhaserGame() {
   const [respawnCountdown, setRespawnCountdown] = useState(0);
   const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
-  const [welcomeStep, setWelcomeStep] = useState(0); // 0, 1, 2 for 3-screen carousel
+  const [welcomeStep, setWelcomeStep] = useState(0); // 0, 1, 2, 3 for 4-screen carousel
+  const [starterItems, setStarterItems] = useState<StarterItem[]>([]);
+  const [starterOpening, setStarterOpening] = useState(false);
   const [showDropTable, setShowDropTable] = useState(false);
 
   // Check exhaustion
@@ -247,15 +256,30 @@ export default function PhaserGame() {
     // Boss state
     socket.on('boss:state', (data: any) => {
       setPlayersOnline(data.playersOnline);
-      setBossState({
-        name: data.name || 'Boss',
-        nameRu: data.nameRu,
-        icon: data.icon || '👹',
-        hp: data.hp,
-        maxHp: data.maxHp,
-        bossIndex: data.bossIndex || 1,
-        totalBosses: data.totalBosses || 100,
+      const newImage = data.image || '/assets/bosses/boss_single.png';
+      setBossState(prev => {
+        // If boss image changed, update Phaser
+        if (prev.image !== newImage && sceneRef.current) {
+          sceneRef.current.updateBossImage(newImage);
+        }
+        return {
+          name: data.name || 'Boss',
+          nameRu: data.nameRu,
+          icon: data.icon || '👹',
+          image: newImage,
+          hp: data.hp,
+          maxHp: data.maxHp,
+          bossIndex: data.bossIndex || 1,
+          totalBosses: data.totalBosses || 100,
+        };
       });
+    });
+
+    // Starter chest opened
+    socket.on('starter:opened', (data: { equipment: StarterItem[] }) => {
+      console.log('[Starter] Opened:', data.equipment);
+      setStarterItems(data.equipment);
+      setStarterOpening(false);
     });
 
     // Tap result
@@ -371,6 +395,7 @@ export default function PhaserGame() {
       socket.off('offline:earnings');
       socket.off('boss:killed');
       socket.off('boss:respawn');
+      socket.off('starter:opened');
 
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -582,14 +607,14 @@ export default function PhaserGame() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* WELCOME CAROUSEL (3 screens) */}
+      {/* WELCOME CAROUSEL (4 screens) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {showWelcome && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
           <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30">
             {/* Progress dots */}
             <div className="flex justify-center gap-2 mb-4">
-              {[0, 1, 2].map(i => (
+              {[0, 1, 2, 3].map(i => (
                 <div
                   key={i}
                   className={`w-2 h-2 rounded-full transition-all ${
@@ -648,9 +673,54 @@ export default function PhaserGame() {
               </div>
             )}
 
+            {/* Screen 3: Starter Chest */}
+            {welcomeStep === 3 && (
+              <div className="text-center mb-6">
+                {starterItems.length === 0 ? (
+                  <>
+                    <div className="text-6xl mb-3 animate-bounce">🎁</div>
+                    <h2 className="text-xl font-bold text-purple-400 mb-2">
+                      {lang === 'ru' ? 'Стартовый Набор!' : 'Starter Pack!'}
+                    </h2>
+                    <p className="text-gray-300 text-sm mb-4">
+                      {lang === 'ru' ? 'Открой сундук и получи стартовое снаряжение!' : 'Open the chest to get starter equipment!'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        console.log('[Starter] Opening chest...');
+                        setStarterOpening(true);
+                        getSocket().emit('starter:open');
+                      }}
+                      disabled={starterOpening}
+                      className="px-6 py-3 bg-purple-600 text-white font-bold rounded-lg disabled:opacity-50"
+                    >
+                      {starterOpening
+                        ? (lang === 'ru' ? 'Открываем...' : 'Opening...')
+                        : (lang === 'ru' ? '📦 Открыть Сундук' : '📦 Open Chest')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl mb-2">✨</div>
+                    <h2 className="text-xl font-bold text-green-400 mb-3">
+                      {lang === 'ru' ? 'Получено!' : 'Received!'}
+                    </h2>
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      {starterItems.map((item, i) => (
+                        <div key={i} className="bg-black/40 rounded-lg p-2 border border-green-500/30">
+                          <div className="text-2xl">{item.icon}</div>
+                          <div className="text-xs text-gray-300 truncate">{item.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Navigation buttons */}
             <div className="flex gap-3">
-              {welcomeStep > 0 && (
+              {welcomeStep > 0 && welcomeStep < 3 && (
                 <button
                   onClick={() => { console.log('[Welcome] Back to step', welcomeStep - 1); setWelcomeStep(s => s - 1); }}
                   className="flex-1 py-3 bg-gray-700 text-white font-bold rounded-lg active:scale-95 transition-transform"
@@ -658,7 +728,7 @@ export default function PhaserGame() {
                   {lang === 'ru' ? 'Назад' : 'Back'}
                 </button>
               )}
-              {welcomeStep < 2 ? (
+              {welcomeStep < 3 ? (
                 <button
                   onClick={() => { console.log('[Welcome] Next to step', welcomeStep + 1); setWelcomeStep(s => s + 1); }}
                   className="flex-1 py-3 bg-l2-gold text-black font-bold rounded-lg active:scale-95 transition-transform"
@@ -667,8 +737,15 @@ export default function PhaserGame() {
                 </button>
               ) : (
                 <button
-                  onClick={() => { console.log('[Welcome] Complete!'); setShowWelcome(false); setWelcomeStep(0); getSocket().emit('firstLogin:complete'); }}
-                  className="flex-1 py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg animate-pulse active:scale-95 transition-transform"
+                  onClick={() => {
+                    console.log('[Welcome] Complete!');
+                    setShowWelcome(false);
+                    setWelcomeStep(0);
+                    setStarterItems([]);
+                    getSocket().emit('firstLogin:complete');
+                  }}
+                  disabled={starterItems.length === 0 && !starterOpening}
+                  className="flex-1 py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg animate-pulse active:scale-95 transition-transform disabled:opacity-50 disabled:animate-none"
                 >
                   {t.welcome.startButton}
                 </button>

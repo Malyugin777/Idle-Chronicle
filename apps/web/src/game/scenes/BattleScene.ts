@@ -114,6 +114,30 @@ export class BattleScene extends Phaser.Scene {
     this.tapQueue = 0;
   }
 
+  // Update boss image dynamically (called by React when boss changes)
+  updateBossImage(imageUrl: string) {
+    if (!this.bossSprite) return;
+
+    const textureKey = `boss_${imageUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+    // If texture already loaded, just swap it
+    if (this.textures.exists(textureKey)) {
+      this.bossSprite.setTexture(textureKey);
+      this.updateBossScale();
+      return;
+    }
+
+    // Load new texture
+    this.load.image(textureKey, imageUrl);
+    this.load.once('complete', () => {
+      if (this.bossSprite && this.textures.exists(textureKey)) {
+        this.bossSprite.setTexture(textureKey);
+        this.updateBossScale();
+      }
+    });
+    this.load.start();
+  }
+
   // ─────────────────────────────────────────────────────────
   // DAMAGE NUMBERS (floating text)
   // ─────────────────────────────────────────────────────────

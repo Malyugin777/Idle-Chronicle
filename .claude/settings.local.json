@@ -9,7 +9,14 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(where:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git stash drop:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cat:*)"
     ]
   }
 }
