@@ -91,7 +91,7 @@ let bossState = {
   bossIndex: 1,
   totalBosses: 100, // Будет 100 боссов!
   // Rewards
-  adenaReward: 1000,
+  goldReward: 1000,
   expReward: 1000000,
   tonReward: 10,
   chestsReward: 10,
@@ -153,7 +153,7 @@ async function loadBossState(prisma) {
       image: boss.image || null,
       bossIndex: state.currentBossIndex + 1,
       totalBosses: 100, // Будет 100 боссов!
-      adenaReward: state.bossAdenaReward || boss.adenaReward,
+      goldReward: state.bossGoldReward || boss.goldReward,
       expReward: Number(state.bossExpReward) || boss.expReward,
       tonReward: state.bossTonReward || boss.tonReward || 10,
       chestsReward: state.bossChestsReward || boss.chestsReward || 10,
@@ -197,7 +197,7 @@ async function saveBossState(prisma) {
         bossIcon: bossState.icon,
         bossDefense: bossState.defense,
         bossThorns: bossState.thornsDamage,
-        bossAdenaReward: bossState.adenaReward || 1000000,
+        bossGoldReward: bossState.goldReward || 1000000,
         bossExpReward: BigInt(bossState.expReward || 1000000),
         bossTonReward: bossState.tonReward || 10,
         bossChestsReward: bossState.chestsReward || 10,
@@ -214,7 +214,7 @@ async function saveBossState(prisma) {
         bossIcon: bossState.icon,
         bossDefense: bossState.defense,
         bossThorns: bossState.thornsDamage,
-        bossAdenaReward: bossState.adenaReward || 1000000,
+        bossGoldReward: bossState.goldReward || 1000000,
         bossExpReward: BigInt(bossState.expReward || 1000000),
         bossTonReward: bossState.tonReward || 10,
         bossChestsReward: bossState.chestsReward || 10,
@@ -351,7 +351,7 @@ function calculateOfflineEarnings(player, lastOnline) {
   });
 
   return {
-    adena: progress.adenaEarned,
+    gold: progress.goldEarned,
     hours: progress.offlineHours,
     damage: progress.totalDamage,
     exp: progress.expEarned,
@@ -469,7 +469,7 @@ function getBossStats(index) {
     hp: Math.floor(500000 * hpMultiplier),
     defense: Math.floor(index * 5),
     thornsDamage: Math.floor(index * 2),
-    adenaReward: Math.floor(1000000 * multiplier),
+    goldReward: Math.floor(1000000 * multiplier),
     expReward: Math.floor(1000000 * multiplier),
     tonReward: Math.floor(10 * multiplier),
     chestsReward: Math.floor(10 * multiplier),
@@ -554,7 +554,7 @@ async function respawnBoss(prisma, forceNext = true) {
         image: boss.image || null,
         bossIndex: currentBossIndex + 1,
         totalBosses: 100, // Будет 100 боссов!
-        adenaReward: boss.adenaReward,
+        goldReward: boss.goldReward,
         expReward: boss.expReward,
         tonReward: boss.tonReward || 10,
         chestsReward: boss.chestsReward || 10,
@@ -578,7 +578,7 @@ async function respawnBoss(prisma, forceNext = true) {
       image: boss.image || null,
       bossIndex: 1,
       totalBosses: 100, // Будет 100 боссов!
-      adenaReward: boss.adenaReward,
+      goldReward: boss.goldReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
       chestsReward: boss.chestsReward || 10,
@@ -615,7 +615,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
 
   // Prize pool from boss config (for adena/exp distribution)
   const expPool = bossState.expReward || 1000000;
-  const adenaPool = bossState.adenaReward || 5000;
+  const goldPool = bossState.goldReward || 5000;
 
   // ═══════════════════════════════════════════════════════════
   // TZ ЭТАП 2: NEW REWARD SYSTEM
@@ -685,7 +685,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     const damagePercent = totalDamageDealt > 0 ? entry.damage / totalDamageDealt : 0;
 
     // Adena and EXP still distributed by damage %
-    const adenaReward = Math.floor(adenaPool * damagePercent);
+    const goldReward = Math.floor(goldPool * damagePercent);
     const expReward = Math.floor(expPool * damagePercent);
 
     const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
@@ -702,7 +702,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       damagePercent: Math.round(damagePercent * 100),
       rank,
       isEligible: entry.isEligible,
-      adenaReward,
+      goldReward,
       expReward,
       chestRewards,
       isFinalBlow,
@@ -714,7 +714,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
-          adena: { increment: BigInt(adenaReward) },
+          gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(expReward) },
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: isFinalBlow ? 1 : 0 },
@@ -755,7 +755,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       // Update in-memory player if online
       for (const [sid, p] of onlineUsers.entries()) {
         if (p.odamage === entry.odamage) {
-          p.adena += adenaReward;
+          p.gold += goldReward;
           p.sessionDamage = 0;
           // Reset activity for next boss
           p.activityTime = 0;
@@ -801,7 +801,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
     topDamagePhoto: topDamagePlayer?.photoUrl,
     topDamage: topDamagePlayer?.damage || 0,
-    prizePool: { chests: totalChestsDistributed, exp: expPool, adena: adenaPool },
+    prizePool: { chests: totalChestsDistributed, exp: expPool, gold: goldPool },
     leaderboard: leaderboardWithPercent.slice(0, 20),
     rewards: rewards.slice(0, 20),
     killedAt: Date.now(),
@@ -844,7 +844,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     topDamageBy: topDamagePlayer?.visitorName || 'Unknown',
     topDamagePhoto: topDamagePlayer?.photoUrl,
     topDamage: topDamagePlayer?.damage || 0,
-    prizePool: { chests: totalChestsDistributed, exp: expPool, adena: adenaPool },
+    prizePool: { chests: totalChestsDistributed, exp: expPool, gold: goldPool },
     leaderboard: leaderboardWithPercent.slice(0, 10),
     rewards: rewards.slice(0, 10),
     respawnAt: bossRespawnAt.getTime(),
@@ -1010,7 +1010,7 @@ app.prepare().then(async () => {
         // Update boss rewards
         if (parsedUrl.pathname === '/api/admin/boss/rewards' && req.method === 'POST') {
           const body = await parseBody();
-          if (body.adenaReward !== undefined) bossState.adenaReward = body.adenaReward;
+          if (body.goldReward !== undefined) bossState.goldReward = body.goldReward;
           if (body.expReward !== undefined) bossState.expReward = body.expReward;
           if (body.tonReward !== undefined) bossState.tonReward = body.tonReward;
           if (body.chestsReward !== undefined) bossState.chestsReward = body.chestsReward;
@@ -1048,7 +1048,7 @@ app.prepare().then(async () => {
               firstName: true,
               photoUrl: true,
               level: true,
-              adena: true,
+              gold: true,
               totalDamage: true,
             },
           });
@@ -1058,7 +1058,7 @@ app.prepare().then(async () => {
             users: users.map(u => ({
               ...u,
               telegramId: u.telegramId.toString(),
-              adena: u.adena.toString(),
+              gold: u.gold.toString(),
               totalDamage: u.totalDamage.toString(),
             })),
           });
@@ -1078,7 +1078,7 @@ app.prepare().then(async () => {
             user: {
               ...user,
               telegramId: user.telegramId.toString(),
-              adena: user.adena.toString(),
+              gold: user.gold.toString(),
               exp: user.exp.toString(),
               totalDamage: user.totalDamage.toString(),
             },
@@ -1093,7 +1093,7 @@ app.prepare().then(async () => {
 
           const updateData = {};
           if (body.level !== undefined) updateData.level = body.level;
-          if (body.adena !== undefined) updateData.adena = BigInt(body.adena);
+          if (body.gold !== undefined) updateData.gold = BigInt(body.gold);
           if (body.exp !== undefined) updateData.exp = BigInt(body.exp);
           if (body.stamina !== undefined) updateData.stamina = body.stamina;
           if (body.mana !== undefined) updateData.mana = body.mana;
@@ -1359,7 +1359,7 @@ app.prepare().then(async () => {
             data: {
               level: 1,
               exp: BigInt(0),
-              adena: BigInt(0),
+              gold: BigInt(0),
               totalDamage: BigInt(0),
               bossesKilled: 0,
               tonBalance: 0,
@@ -1457,7 +1457,7 @@ app.prepare().then(async () => {
       // First login
       isFirstLogin: true,
       // Stats
-      adena: 0,
+      gold: 0,
       sessionDamage: 0,
       sessionClicks: 0,
       sessionCrits: 0,
@@ -1568,7 +1568,7 @@ app.prepare().then(async () => {
             critChance: user.critChance,
             attackSpeed: user.attackSpeed,
             // Currency
-            adena: Number(user.adena),
+            gold: Number(user.gold),
             ancientCoin: user.ancientCoin,
             // Mana
             mana: user.mana,
@@ -1911,7 +1911,7 @@ app.prepare().then(async () => {
         player.tapsPerSecond = user.tapsPerSecond;
         player.autoAttackSpeed = user.autoAttackSpeed;
         player.isFirstLogin = user.isFirstLogin;
-        player.adena = Number(user.adena);
+        player.gold = Number(user.gold);
         player.activeSoulshot = user.activeSoulshot;
         player.soulshotNG = user.soulshotNG;
         player.soulshotD = user.soulshotD;
@@ -1967,7 +1967,7 @@ app.prepare().then(async () => {
           maxStamina: player.maxStamina,
           exhaustedUntil: player.exhaustedUntil,
           // Currency
-          adena: Number(user.adena),
+          gold: Number(user.gold),
           ancientCoin: user.ancientCoin || 0,
           // Mana
           mana: user.mana,
@@ -2056,8 +2056,8 @@ app.prepare().then(async () => {
       bossState.currentHp -= actualDamage;
 
       // Adena reward: 1 adena per 100 damage
-      const adenaGained = Math.floor(actualDamage / 100);
-      player.adena += adenaGained;
+      const goldGained = Math.floor(actualDamage / 100);
+      player.gold += goldGained;
 
       player.sessionDamage += actualDamage;
       player.sessionClicks += tapCount;
@@ -2082,8 +2082,8 @@ app.prepare().then(async () => {
         // Legacy mana
         mana: player.mana,
         sessionDamage: player.sessionDamage,
-        adena: player.adena,
-        adenaGained,
+        gold: player.gold,
+        goldGained,
         soulshotUsed,
         activeSoulshot: player.activeSoulshot,
         [`soulshot${player.activeSoulshot}`]: player.activeSoulshot ? player[`soulshot${player.activeSoulshot}`] : undefined,
@@ -2147,8 +2147,8 @@ app.prepare().then(async () => {
       bossState.currentHp -= actualDamage;
 
       // Adena reward
-      const adenaGained = Math.floor(actualDamage / 50); // More adena for skills
-      player.adena += adenaGained;
+      const goldGained = Math.floor(actualDamage / 50); // More adena for skills
+      player.gold += goldGained;
       player.sessionDamage += actualDamage;
 
       // Update leaderboard
@@ -2166,8 +2166,8 @@ app.prepare().then(async () => {
         damage: actualDamage,
         mana: player.mana,
         maxMana: player.maxMana,
-        adena: player.adena,
-        adenaGained,
+        gold: player.gold,
+        goldGained,
         sessionDamage: player.sessionDamage,
       });
 
@@ -2211,7 +2211,7 @@ app.prepare().then(async () => {
           ton: bossState.tonReward,
           chests: bossState.chestsReward,
           exp: bossState.expReward,
-          adena: bossState.adenaReward,
+          gold: bossState.goldReward,
         },
         totalDamage,
       });
@@ -2506,7 +2506,7 @@ app.prepare().then(async () => {
 
         // Build update data with pity counter handling
         const updateData = {
-          adena: { increment: BigInt(goldReward) },
+          gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(expReward) },
           totalGoldEarned: { increment: BigInt(goldReward) },
           enchantScrolls: { increment: enchantScrolls },
@@ -2528,13 +2528,13 @@ app.prepare().then(async () => {
           data: updateData,
         });
 
-        player.adena += goldReward;
+        player.gold += goldReward;
 
         socket.emit('chest:claimed', {
           chestId,
           chestType,
           rewards: {
-            adena: goldReward,
+            gold: goldReward,
             exp: expReward,
             enchantScrolls,
             equipment: droppedItem, // Changed from 'item' to 'equipment' to match TreasuryTab
@@ -2691,14 +2691,14 @@ app.prepare().then(async () => {
       }
 
       const cost = getUpgradeCost(player[stat]);
-      if (player.adena < cost) {
-        socket.emit('upgrade:error', { message: 'Not enough adena' });
+      if (player.gold < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough gold' });
         return;
       }
 
       try {
         player[stat] += 1;
-        player.adena -= cost;
+        player.gold -= cost;
 
         // Recalculate derived stats
         player.pAtk = 10 + Math.floor(player.str * 2);
@@ -2708,7 +2708,7 @@ app.prepare().then(async () => {
           where: { id: player.odamage },
           data: {
             [stat]: player[stat],
-            adena: BigInt(player.adena),
+            gold: BigInt(player.gold),
             pAtk: player.pAtk,
             critChance: player.critChance,
           },
@@ -2717,7 +2717,7 @@ app.prepare().then(async () => {
         socket.emit('upgrade:success', {
           stat,
           value: player[stat],
-          adena: player.adena,
+          gold: player.gold,
           pAtk: player.pAtk,
           critChance: player.critChance,
         });
@@ -2740,27 +2740,27 @@ app.prepare().then(async () => {
       }
 
       const cost = getTapSpeedCost(player.tapsPerSecond);
-      if (player.adena < cost) {
-        socket.emit('upgrade:error', { message: 'Not enough adena' });
+      if (player.gold < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough gold' });
         return;
       }
 
       try {
         player.tapsPerSecond += 1;
-        player.adena -= cost;
+        player.gold -= cost;
 
         await prisma.user.update({
           where: { id: player.odamage },
           data: {
             tapsPerSecond: player.tapsPerSecond,
-            adena: BigInt(player.adena),
+            gold: BigInt(player.gold),
           },
         });
 
         socket.emit('upgrade:success', {
           stat: 'tapsPerSecond',
           value: player.tapsPerSecond,
-          adena: player.adena,
+          gold: player.gold,
           nextCost: player.tapsPerSecond < MAX_TAPS_PER_SECOND ? getTapSpeedCost(player.tapsPerSecond) : null,
         });
       } catch (err) {
@@ -2782,27 +2782,27 @@ app.prepare().then(async () => {
       }
 
       const cost = getAutoAttackCost(player.autoAttackSpeed);
-      if (player.adena < cost) {
-        socket.emit('upgrade:error', { message: 'Not enough adena' });
+      if (player.gold < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough gold' });
         return;
       }
 
       try {
         player.autoAttackSpeed += 1;
-        player.adena -= cost;
+        player.gold -= cost;
 
         await prisma.user.update({
           where: { id: player.odamage },
           data: {
             autoAttackSpeed: player.autoAttackSpeed,
-            adena: BigInt(player.adena),
+            gold: BigInt(player.gold),
           },
         });
 
         socket.emit('upgrade:success', {
           stat: 'autoAttackSpeed',
           value: player.autoAttackSpeed,
-          adena: player.adena,
+          gold: player.gold,
           nextCost: player.autoAttackSpeed < MAX_AUTO_ATTACK_SPEED ? getAutoAttackCost(player.autoAttackSpeed) : null,
         });
       } catch (err) {
@@ -2824,8 +2824,8 @@ app.prepare().then(async () => {
       }
 
       const cost = getManaRegenCost(player.manaRegen);
-      if (player.adena < cost) {
-        socket.emit('upgrade:error', { message: 'Not enough adena' });
+      if (player.gold < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough gold' });
         return;
       }
 
@@ -2836,20 +2836,20 @@ app.prepare().then(async () => {
         } else {
           player.manaRegen += 1;
         }
-        player.adena -= cost;
+        player.gold -= cost;
 
         await prisma.user.update({
           where: { id: player.odamage },
           data: {
             manaRegen: player.manaRegen,
-            adena: BigInt(player.adena),
+            gold: BigInt(player.gold),
           },
         });
 
         socket.emit('upgrade:success', {
           stat: 'manaRegen',
           value: player.manaRegen,
-          adena: player.adena,
+          gold: player.gold,
           nextCost: player.manaRegen < MAX_MANA_REGEN ? getManaRegenCost(player.manaRegen) : null,
         });
       } catch (err) {
@@ -2974,17 +2974,17 @@ app.prepare().then(async () => {
           }
 
           const totalCost = SOULSHOTS[grade].cost * (quantity / 100);
-          if (player.adena < totalCost) {
-            socket.emit('shop:error', { message: 'Not enough adena' });
+          if (player.gold < totalCost) {
+            socket.emit('shop:error', { message: 'Not enough gold' });
             return;
           }
 
-          player.adena -= totalCost;
+          player.gold -= totalCost;
           const ssKey = `soulshot${grade}`;
           player[ssKey] = (player[ssKey] || 0) + quantity;
 
           // Update DB (only for NG, D, C which exist in schema)
-          const updateData = { adena: BigInt(player.adena) };
+          const updateData = { gold: BigInt(player.gold) };
           if (['NG', 'D', 'C'].includes(grade)) {
             updateData[ssKey] = player[ssKey];
           }
@@ -2995,7 +2995,7 @@ app.prepare().then(async () => {
           });
 
           socket.emit('shop:success', {
-            adena: player.adena,
+            gold: player.gold,
             [ssKey]: player[ssKey],
           });
         } else if (data.type === 'buff') {
@@ -3006,25 +3006,25 @@ app.prepare().then(async () => {
           }
 
           const cost = BUFFS[buffId].cost;
-          if (player.adena < cost) {
-            socket.emit('shop:error', { message: 'Not enough adena' });
+          if (player.gold < cost) {
+            socket.emit('shop:error', { message: 'Not enough gold' });
             return;
           }
 
-          player.adena -= cost;
+          player.gold -= cost;
           const potionKey = `potion${buffId.charAt(0).toUpperCase() + buffId.slice(1)}`;
           player[potionKey] = (player[potionKey] || 0) + 1;
 
           await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              adena: BigInt(player.adena),
+              gold: BigInt(player.gold),
               [potionKey]: player[potionKey],
             },
           });
 
           socket.emit('shop:success', {
-            adena: player.adena,
+            gold: player.gold,
             [potionKey]: player[potionKey],
           });
         }
@@ -3152,7 +3152,7 @@ app.prepare().then(async () => {
             exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
             // Legacy mana
             mana: Math.floor(player.mana),
-            adena: BigInt(player.adena),
+            gold: BigInt(player.gold),
             activeSoulshot: player.activeSoulshot,
             soulshotNG: player.soulshotNG,
             soulshotD: player.soulshotD,
@@ -3169,7 +3169,7 @@ app.prepare().then(async () => {
             where: { id: player.odamage },
             data: updateData,
           });
-          console.log(`[Disconnect] Saved data for user ${player.odamage}: adena=${player.adena}, stamina=${player.stamina}, dmg=${player.sessionDamage}`);
+          console.log(`[Disconnect] Saved data for user ${player.odamage}: gold=${player.gold}, stamina=${player.stamina}, dmg=${player.sessionDamage}`);
         } catch (e) {
           console.error('[Disconnect] Save error:', e.message);
         }
@@ -3205,7 +3205,7 @@ app.prepare().then(async () => {
         ton: bossState.tonReward,
         chests: bossState.chestsReward,
         exp: bossState.expReward,
-        adena: bossState.adenaReward,
+        gold: bossState.goldReward,
       },
       // Respawn timer info
       isRespawning: bossRespawnAt !== null,
@@ -3232,7 +3232,7 @@ app.prepare().then(async () => {
           ton: bossState.tonReward,
           chests: bossState.chestsReward,
           exp: bossState.expReward,
-          adena: bossState.adenaReward,
+          gold: bossState.goldReward,
         },
       });
     }
@@ -3307,8 +3307,8 @@ app.prepare().then(async () => {
           player.sessionDamage += actualDamage;
 
           // Adena from auto-attack (lower rate)
-          const adenaGained = Math.floor(actualDamage / 200);
-          player.adena += adenaGained;
+          const goldGained = Math.floor(actualDamage / 200);
+          player.gold += goldGained;
 
           // Send auto-attack result to player with hit animation trigger
           const socket = io.sockets.sockets.get(socketId);
@@ -3317,7 +3317,7 @@ app.prepare().then(async () => {
               damage: actualDamage,
               crits,
               sessionDamage: player.sessionDamage,
-              adena: player.adena,
+              gold: player.gold,
               showHitEffect: true, // Trigger hit animation on client
             });
           }
@@ -3351,7 +3351,7 @@ app.prepare().then(async () => {
           await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              adena: BigInt(player.adena),
+              gold: BigInt(player.gold),
               // L2 Stamina (NEW)
               stamina: Math.floor(player.stamina),
               exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,

@@ -6,7 +6,7 @@ import { Flame, Zap, Clover, Coins, Check } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
-  adena: number;
+  gold: number;
   activeSoulshot: string | null;
   soulshotNG: number;
   soulshotD: number;
@@ -35,7 +35,7 @@ export default function ShopTab() {
     { id: 'luck', name: t.shop.luck, icon: <Clover size={20} />, effect: t.shop.luckEffect, duration: '60s', cost: 1000, color: 'green' },
   ];
   const [shopState, setShopState] = useState<ShopState>({
-    adena: 0,
+    gold: 0,
     activeSoulshot: null,
     soulshotNG: 0,
     soulshotD: 0,
@@ -55,7 +55,7 @@ export default function ShopTab() {
     const updateShopState = (data: any) => {
       if (!data) return;
       setShopState({
-        adena: data.adena || 0,
+        gold: data.gold || 0,
         activeSoulshot: data.activeSoulshot || null,
         soulshotNG: data.soulshotNG || 0,
         soulshotD: data.soulshotD || 0,
@@ -111,7 +111,7 @@ export default function ShopTab() {
         <div className="flex items-center gap-2">
           <Coins className="text-l2-gold" size={24} />
           <span className="text-xl font-bold text-l2-gold">
-            {shopState.adena.toLocaleString()}
+            {shopState.gold.toLocaleString()}
           </span>
         </div>
         <span className="text-gray-400">{t.shop.gold}</span>
@@ -126,7 +126,7 @@ export default function ShopTab() {
           {SOULSHOTS.map((ss) => {
             const owned = shopState[`soulshot${ss.id}` as keyof ShopState] as number || 0;
             const isActive = shopState.activeSoulshot === ss.id;
-            const canAfford = shopState.adena >= ss.cost;
+            const canAfford = shopState.gold >= ss.cost;
 
             return (
               <div
@@ -182,7 +182,7 @@ export default function ShopTab() {
         <div className="space-y-2">
           {BUFFS.map((buff) => {
             const owned = shopState[`potion${buff.id.charAt(0).toUpperCase() + buff.id.slice(1)}` as keyof ShopState] as number || 0;
-            const canAfford = shopState.adena >= buff.cost;
+            const canAfford = shopState.gold >= buff.cost;
 
             return (
               <div

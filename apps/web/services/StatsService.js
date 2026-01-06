@@ -231,7 +231,7 @@ const MAX_OFFLINE_HOURS = 4; // Кап 4 часа
 /**
  * Рассчитывает оффлайн-прогресс
  * @param {Object} user - { attackSpeed, physicalPower, lastOnline }
- * @returns {Object} { offlineHours, totalDamage, adenaEarned, expEarned, attacksSimulated }
+ * @returns {Object} { offlineHours, totalDamage, goldEarned, expEarned, attacksSimulated }
  */
 function calculateOfflineProgress(user) {
   const now = Date.now();
@@ -241,7 +241,7 @@ function calculateOfflineProgress(user) {
 
   if (offlineSeconds < 60) {
     // Меньше минуты - нет награды
-    return { offlineHours: 0, totalDamage: 0, adenaEarned: 0, expEarned: 0, attacksSimulated: 0 };
+    return { offlineHours: 0, totalDamage: 0, goldEarned: 0, expEarned: 0, attacksSimulated: 0 };
   }
 
   // Рассчитываем сколько авто-атак произошло бы
@@ -253,8 +253,8 @@ function calculateOfflineProgress(user) {
   const damagePerAttack = calculateBaseDamage(user.physicalPower || 10);
   const totalDamage = totalAttacks * damagePerAttack;
 
-  // Adena (1 adena per 100 damage)
-  const adenaEarned = Math.floor(totalDamage / 100);
+  // Gold (1 gold per 100 damage)
+  const goldEarned = Math.floor(totalDamage / 100);
 
   // Exp (1 exp per 50 damage)
   const expEarned = Math.floor(totalDamage / 50);
@@ -262,7 +262,7 @@ function calculateOfflineProgress(user) {
   return {
     offlineHours: Math.round(offlineSeconds / 3600 * 10) / 10,
     totalDamage,
-    adenaEarned,
+    goldEarned,
     expEarned,
     attacksSimulated: totalAttacks,
   };

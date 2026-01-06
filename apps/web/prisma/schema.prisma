@@ -68,13 +68,13 @@ model User {
   isFirstLogin    Boolean  @default(true)
 
   // Currencies
-  adena           BigInt   @default(0)
+  gold            BigInt   @default(0)
   ancientCoin     Int      @default(0)
   tonBalance      Float    @default(0)    // TON cryptocurrency balance
 
   // Chest Slots System
   chestSlots      Int      @default(5)    // Unlocked chest slots (5-10), buy more for 999 crystals
-  totalGoldEarned BigInt   @default(0)    // Total adena earned all-time
+  totalGoldEarned BigInt   @default(0)    // Total gold earned all-time
 
   // Total chests opened by TYPE
   totalChestsWooden   Int  @default(0)
@@ -512,7 +512,7 @@ model Task {
   type        TaskType
   target      Int
 
-  adenaReward      BigInt @default(0)
+  goldReward       BigInt @default(0)
   ancientCoinReward Int   @default(0)
 
   users       UserTask[]
@@ -559,7 +559,7 @@ model GameState {
   bossThorns       Int     @default(0)
 
   // Boss rewards
-  bossAdenaReward  Int     @default(1000000)
+  bossGoldReward   Int     @default(1000000)
   bossExpReward    BigInt  @default(1000000)
   bossTonReward    Float   @default(10)
   bossChestsReward Int     @default(10)

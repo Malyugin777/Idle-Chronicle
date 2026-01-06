@@ -107,7 +107,7 @@ export interface UserState {
   maxMana: number;
   manaRegen: number;
   // Currencies
-  adena: string;
+  gold: string;
   ancientCoin: number;
   soulshotNG: number;
   soulshotD: number;
@@ -168,7 +168,7 @@ export interface S2C_TapResult {
     rejected: number;
     totalDamage: string;
     crits: number;
-    adenaEarned: string;
+    goldEarned: string;
     soulshotsUsed: number;
     newEnergy: number;
     newBossHp: string;

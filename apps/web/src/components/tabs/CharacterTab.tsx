@@ -48,7 +48,7 @@ interface PlayerStats {
   mDef: number;
   critChance: number;
   attackSpeed: number;
-  adena: number;
+  gold: number;
 }
 
 interface HeroState {
@@ -447,7 +447,7 @@ export default function CharacterTab() {
                 {stats.firstName || stats.username || 'Hero'}
               </span>
               <span className="text-xs text-l2-gold ml-2">
-                🪙 {stats.adena.toLocaleString()}
+                🪙 {stats.gold.toLocaleString()}
               </span>
             </div>
             <div className="mt-1 h-2 bg-black/50 rounded-full overflow-hidden">

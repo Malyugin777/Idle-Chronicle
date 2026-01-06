@@ -27,7 +27,7 @@ interface ClaimedReward {
   chestId: string;
   chestType: ChestType;
   rewards: {
-    adena: number;
+    gold: number;
     equipment?: EquipmentReward;
     enchantScrolls?: number;
   };
@@ -300,10 +300,10 @@ export default function TreasuryTab() {
               {getChestLabel(claimedReward.chestType)}!
             </div>
             <div className="space-y-2">
-              {claimedReward.rewards.adena > 0 && (
+              {claimedReward.rewards.gold > 0 && (
                 <div className="flex items-center justify-center gap-2">
                   <Coins className="text-l2-gold" size={18} />
-                  <span className="text-l2-gold font-bold">+{formatNumber(claimedReward.rewards.adena)}</span>
+                  <span className="text-l2-gold font-bold">+{formatNumber(claimedReward.rewards.gold)}</span>
                 </div>
               )}
               {claimedReward.rewards.equipment && (

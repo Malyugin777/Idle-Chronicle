@@ -280,7 +280,7 @@ io.on('connection', async (socket: Socket) => {
         str: user.str,
         dex: user.dex,
         luck: user.luck,
-        adena: Number(user.adena),
+        gold: Number(user.gold),
         energy: user.energy,
         maxEnergy: user.maxEnergy,
         totalDamage: Number(user.totalDamage),
@@ -424,13 +424,13 @@ io.on('connection', async (socket: Socket) => {
 
     try {
       const user = await prisma.user.findUnique({ where: { id: player.odamage } });
-      if (!user || Number(user.adena) < cost) {
-        socket.emit('upgrade:error', { message: 'Not enough adena' });
+      if (!user || Number(user.gold) < cost) {
+        socket.emit('upgrade:error', { message: 'Not enough gold' });
         return;
       }
 
       const updateData: any = {
-        adena: { decrement: BigInt(cost) },
+        gold: { decrement: BigInt(cost) },
       };
       updateData[data.stat] = { increment: 1 };
 
@@ -457,7 +457,7 @@ io.on('connection', async (socket: Socket) => {
       socket.emit('upgrade:success', {
         stat: data.stat,
         value: updatedUser[data.stat],
-        adena: Number(updatedUser.adena),
+        gold: Number(updatedUser.gold),
         pAtk: updatedUser.pAtk,
         critChance: updatedUser.critChance,
       });

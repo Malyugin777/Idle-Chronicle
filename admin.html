@@ -696,8 +696,8 @@
           </div>
           <div class="form-grid">
             <div class="form-group">
-              <label>Adena Reward</label>
-              <input type="number" id="bossAdenaReward">
+              <label>Gold Reward</label>
+              <input type="number" id="bossGoldReward">
             </div>
             <div class="form-group">
               <label>EXP Reward</label>
@@ -737,7 +737,7 @@
                   <th>Photo</th>
                   <th>Name</th>
                   <th>Level</th>
-                  <th>Adena</th>
+                  <th>Gold</th>
                   <th>Total Damage</th>
                   <th>Chests</th>
                   <th>Actions</th>
@@ -1211,7 +1211,7 @@
         document.getElementById('bossMaxHp').value = boss.maxHp;
         document.getElementById('bossDefense').value = boss.defense;
         document.getElementById('bossThorns').value = boss.thorns || 0;
-        document.getElementById('bossAdenaReward').value = boss.adenaReward;
+        document.getElementById('bossGoldReward').value = boss.goldReward;
         document.getElementById('bossExpReward').value = boss.expReward;
         document.getElementById('bossTonReward').value = boss.tonReward;
         document.getElementById('bossChestsReward').value = boss.chestsReward;
@@ -1247,7 +1247,7 @@
 
     async function updateBossRewards() {
       const data = await api('boss/rewards', 'POST', {
-        adenaReward: parseInt(document.getElementById('bossAdenaReward').value),
+        goldReward: parseInt(document.getElementById('bossGoldReward').value),
         expReward: parseInt(document.getElementById('bossExpReward').value),
         tonReward: parseFloat(document.getElementById('bossTonReward').value),
         chestsReward: parseInt(document.getElementById('bossChestsReward').value),
@@ -1290,7 +1290,7 @@
           <td>${u.photoUrl ? `<img src="${u.photoUrl}" class="user-photo">` : '-'}</td>
           <td>${u.firstName || u.username || 'Anonymous'}<br><small style="color:var(--text-muted)">${u.id.substring(0,8)}...</small></td>
           <td><span class="badge badge-gold">Lv.${u.level}</span></td>
-          <td>${Number(u.adena).toLocaleString()}</td>
+          <td>${Number(u.gold).toLocaleString()}</td>
           <td>${Number(u.totalDamage).toLocaleString()}</td>
           <td>${u._count?.chests || 0}</td>
           <td>
@@ -1335,8 +1335,8 @@
             <input type="number" id="editExp" value="${u.exp}">
           </div>
           <div class="form-group">
-            <label>Adena</label>
-            <input type="number" id="editAdena" value="${u.adena}">
+            <label>Gold</label>
+            <input type="number" id="editGold" value="${u.gold}">
           </div>
           <div class="form-group">
             <label>Ancient Coin</label>
@@ -1414,7 +1414,7 @@
       const data = await api('users/' + userId, 'POST', {
         level: parseInt(document.getElementById('editLevel').value),
         exp: parseInt(document.getElementById('editExp').value),
-        adena: parseInt(document.getElementById('editAdena').value),
+        gold: parseInt(document.getElementById('editGold').value),
         ancientCoin: parseInt(document.getElementById('editAncientCoin').value),
         power: parseInt(document.getElementById('editPower').value),
         agility: parseInt(document.getElementById('editAgility').value),

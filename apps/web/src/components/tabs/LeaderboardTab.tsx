@@ -19,7 +19,7 @@ interface PrizePool {
   ton: number;
   chests: number;
   exp: number;
-  adena: number;
+  gold: number;
 }
 
 interface CurrentBossData {
@@ -204,7 +204,7 @@ export default function LeaderboardTab() {
             <div className="text-[10px] text-gray-500">{t.leaderboard.exp}</div>
           </div>
           <div>
-            <div className="text-l2-gold font-bold text-sm">{formatNumber(pool.adena)}</div>
+            <div className="text-l2-gold font-bold text-sm">{formatNumber(pool.gold)}</div>
             <div className="text-[10px] text-gray-500">{t.shop.gold}</div>
           </div>
         </div>

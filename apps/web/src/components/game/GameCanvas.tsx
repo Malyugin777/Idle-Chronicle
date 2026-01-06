@@ -41,7 +41,7 @@ interface VictoryData {
     visitorName: string;
     damage: number;
     damagePercent: number;
-    adenaReward: number;
+    goldReward: number;
     expReward: number;
     isFinalBlow: boolean;
     isTopDamage: boolean;
@@ -823,7 +823,7 @@ export default function GameCanvas() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400">{reward.damagePercent}%</span>
-                      <span className="text-l2-gold">+{reward.adenaReward.toLocaleString()}</span>
+                      <span className="text-l2-gold">+{reward.goldReward.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -1112,11 +1112,11 @@ export default function GameCanvas() {
             </div>
 
             <div className="space-y-2">
-              {/* Adena */}
+              {/* Gold */}
               <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🪙</span>
-                  <span className="text-sm text-gray-300">Adena</span>
+                  <span className="text-sm text-gray-300">Gold</span>
                 </div>
                 <div className="text-right">
                   <div className="text-l2-gold font-bold text-sm">

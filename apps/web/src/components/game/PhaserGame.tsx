@@ -33,7 +33,7 @@ interface VictoryData {
     visitorName: string;
     damage: number;
     damagePercent: number;
-    adenaReward: number;
+    goldReward: number;
     expReward: number;
     isFinalBlow: boolean;
     isTopDamage: boolean;
@@ -51,7 +51,7 @@ export default function PhaserGame() {
   const [sessionDamage, setSessionDamage] = useState(0);
   const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(0);
-  const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
+  const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showDropTable, setShowDropTable] = useState(false);
   const [lang, setLang] = useState<Language>('en');
@@ -162,7 +162,7 @@ export default function PhaserGame() {
       if (data.isFirstLogin) setShowWelcome(true);
     });
 
-    socket.on('offline:earnings', (data: { adena: number; hours: number }) => {
+    socket.on('offline:earnings', (data: { gold: number; hours: number }) => {
       setOfflineEarnings(data);
     });
 
@@ -332,7 +332,7 @@ export default function PhaserGame() {
             <div className="text-l2-gold text-lg font-bold mb-2">{t.offline.welcomeBack}</div>
             <div className="bg-black/30 rounded-lg p-4 mb-4">
               <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.adena.toLocaleString()} {t.character.gold}
+                +{offlineEarnings.gold.toLocaleString()} {t.character.gold}
               </div>
             </div>
             <button
@@ -366,11 +366,11 @@ export default function PhaserGame() {
             </div>
 
             <div className="space-y-2">
-              {/* Adena */}
+              {/* Gold */}
               <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🪙</span>
-                  <span className="text-sm text-gray-300">Adena</span>
+                  <span className="text-sm text-gray-300">Gold</span>
                 </div>
                 <div className="text-right">
                   <div className="text-l2-gold font-bold text-sm">

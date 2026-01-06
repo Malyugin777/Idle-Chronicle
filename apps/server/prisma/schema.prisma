@@ -42,7 +42,7 @@ model User {
   lastEnergyTick  DateTime @default(now())
 
   // Currencies
-  adena           BigInt   @default(0)
+  gold            BigInt   @default(0)
   ancientCoin     Int      @default(0)
 
   // Consumables
@@ -283,7 +283,7 @@ model Task {
   type        TaskType
   target      Int
 
-  adenaReward      BigInt @default(0)
+  goldReward       BigInt @default(0)
   ancientCoinReward Int   @default(0)
 
   users       UserTask[]

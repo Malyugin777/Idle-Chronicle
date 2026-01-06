@@ -102,7 +102,7 @@ export interface Task {
   description: string;
   type: TaskType;
   target: number;
-  adenaReward: bigint;
+  goldReward: bigint;
   ancientCoinReward: number;
 }
 
