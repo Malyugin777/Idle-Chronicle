@@ -2940,7 +2940,7 @@ app.prepare().then(async () => {
             });
           }
 
-          // Create user equipment instance
+          // Create user equipment instance (NOT equipped - goes to inventory)
           const userEquip = await prisma.userEquipment.create({
             data: {
               userId: player.odamage,
@@ -2948,7 +2948,7 @@ app.prepare().then(async () => {
               pAtk: starter.pAtk || 0,
               pDef: starter.pDef || 0,
               enchant: 0,
-              isEquipped: true, // Auto-equip starter gear
+              isEquipped: false, // Goes to inventory, player equips manually
             },
           });
 
