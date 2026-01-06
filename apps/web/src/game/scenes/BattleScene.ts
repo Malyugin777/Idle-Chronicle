@@ -130,11 +130,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   preload() {
-    // Load boss sprite
-    this.load.image('boss', '/assets/bosses/boss_single.png');
-
-    // Load spark/hit effect
-    this.load.image('spark', '/assets/effects/spark.png');
+    // Load boss sprite (only if not already cached)
+    if (!this.textures.exists('boss')) {
+      this.load.image('boss', '/assets/bosses/boss_single.png');
+    }
   }
 
   create() {
