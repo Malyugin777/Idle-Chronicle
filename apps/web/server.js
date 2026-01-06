@@ -1589,6 +1589,8 @@ app.prepare().then(async () => {
             potionHaste: user.potionHaste,
             potionAcumen: user.potionAcumen,
             potionLuck: user.potionLuck,
+            // Session stats (from memory, not DB)
+            sessionDamage: player.sessionDamage || 0,
           });
         }
       } catch (err) {

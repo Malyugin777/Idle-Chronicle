@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.9';
+const APP_VERSION = 'v1.0.10';
 
 interface BossState {
   name: string;
@@ -377,6 +377,22 @@ export default function PhaserGame() {
       setRespawnCountdown(0);
     });
 
+    // Player data (sent on player:get request - used when tab remounts)
+    socket.on('player:data', (data: any) => {
+      if (data?.sessionDamage !== undefined) {
+        setSessionDamage(data.sessionDamage);
+      }
+      if (data?.stamina !== undefined) {
+        setPlayerState(p => ({
+          ...p,
+          stamina: data.stamina ?? p.stamina,
+          maxStamina: data.maxStamina ?? p.maxStamina,
+          mana: data.mana ?? p.mana,
+          maxMana: data.maxMana ?? p.maxMana,
+        }));
+      }
+    });
+
     if (socket.connected) {
       setConnected(true);
       socket.emit('player:get');
@@ -409,6 +425,7 @@ export default function PhaserGame() {
       socket.off('offline:earnings');
       socket.off('boss:killed');
       socket.off('boss:respawn');
+      socket.off('player:data');
       socket.off('starter:opened');
       socket.off('starter:error');
 
@@ -527,18 +544,6 @@ export default function PhaserGame() {
 
         {/* Skill Buttons */}
         <div className="flex justify-center gap-3">
-          {/* Debug: Show welcome button */}
-          <button
-            onClick={() => {
-              console.log('[Debug] Show welcome clicked');
-              getSocket().emit('admin:resetFirstLogin');
-              setShowWelcome(true);
-              setWelcomeStep(0);
-            }}
-            className="w-14 h-14 rounded-lg border-2 border-purple-500 bg-purple-900/50 flex items-center justify-center text-2xl"
-          >
-            ❓
-          </button>
           {skills.map(skill => {
             const now = Date.now();
             const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
