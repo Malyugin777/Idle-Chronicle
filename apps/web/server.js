@@ -1162,6 +1162,27 @@ app.prepare().then(async () => {
           return;
         }
 
+        // Give crystals (ancientCoin)
+        if (parsedUrl.pathname === '/api/admin/crystals/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { username, amount } = body;
+
+          const user = await prisma.user.findFirst({ where: { username: username } });
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+
+          const updated = await prisma.user.update({
+            where: { id: user.id },
+            data: { ancientCoin: { increment: amount || 0 } },
+          });
+
+          console.log(`[Admin] Gave ${amount} crystals to ${username}`);
+          sendJson({ success: true, username, newBalance: updated.ancientCoin });
+          return;
+        }
+
         // ═══════════════════════════════════════════════════════════
         // EQUIPMENT MANAGEMENT
         // ═══════════════════════════════════════════════════════════
@@ -2615,6 +2636,68 @@ app.prepare().then(async () => {
       } catch (err) {
         console.error('[Chest] Claim error:', err.message);
         socket.emit('chest:error', { message: 'Failed to claim chest' });
+      }
+    });
+
+    // BOOST CHEST (ускорить на 30 минут за 999 кристаллов)
+    socket.on('chest:boost', async (data) => {
+      if (!player.odamage) {
+        socket.emit('chest:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { chestId } = data;
+      const BOOST_COST = 999;       // Кристаллы
+      const BOOST_TIME = 30 * 60 * 1000; // 30 минут в мс
+
+      try {
+        // Проверяем кристаллы
+        if ((player.ancientCoin || 0) < BOOST_COST) {
+          socket.emit('chest:error', { message: 'Not enough crystals' });
+          return;
+        }
+
+        const chest = await prisma.chest.findUnique({
+          where: { id: chestId },
+        });
+
+        if (!chest || chest.userId !== player.odamage) {
+          socket.emit('chest:error', { message: 'Chest not found' });
+          return;
+        }
+
+        if (!chest.openingStarted) {
+          socket.emit('chest:error', { message: 'Chest not opening yet' });
+          return;
+        }
+
+        // Списываем кристаллы
+        player.ancientCoin -= BOOST_COST;
+
+        // Уменьшаем openingDuration на 30 минут
+        const newDuration = Math.max(0, chest.openingDuration - BOOST_TIME);
+
+        await prisma.$transaction([
+          prisma.chest.update({
+            where: { id: chestId },
+            data: { openingDuration: newDuration },
+          }),
+          prisma.user.update({
+            where: { id: player.odamage },
+            data: { ancientCoin: player.ancientCoin },
+          }),
+        ]);
+
+        console.log(`[Chest] Boosted chest ${chestId} by 30min, cost ${BOOST_COST} crystals`);
+
+        socket.emit('chest:boosted', {
+          chestId,
+          newDuration,
+          ancientCoin: player.ancientCoin,
+        });
+      } catch (err) {
+        console.error('[Chest] Boost error:', err.message);
+        socket.emit('chest:error', { message: 'Failed to boost chest' });
       }
     });
 

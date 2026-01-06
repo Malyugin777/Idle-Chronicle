@@ -71,6 +71,7 @@ const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: stri
 };
 
 const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
+const BOOST_COST = 999; // crystals to boost chest opening by 30 min
 
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
@@ -131,6 +132,16 @@ export default function TreasuryTab() {
       setSelectedChest(null);
       // Refresh stats
       socket.emit('loot:stats:get');
+    });
+
+    // Chest boosted (30 min acceleration)
+    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; ancientCoin: number }) => {
+      setChests(prev => prev.map(c =>
+        c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
+      ));
+      setCrystals(data.ancientCoin);
+      // Update selected chest if it's the one being boosted
+      setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
     });
 
     // Chest deleted
@@ -194,6 +205,7 @@ export default function TreasuryTab() {
       socket.off('loot:stats');
       socket.off('chest:opened');
       socket.off('chest:claimed');
+      socket.off('chest:boosted');
       socket.off('chest:deleted');
       socket.off('slot:unlocked');
       socket.off('chest:error');
@@ -236,6 +248,12 @@ export default function TreasuryTab() {
     getSocket().emit('chest:delete', { chestId });
     setChests(prev => prev.filter(c => c.id !== chestId));
     setSelectedChest(null);
+  };
+
+  // Boost chest opening by 30 min
+  const boostChest = (chestId: string) => {
+    if (crystals < BOOST_COST) return;
+    getSocket().emit('chest:boost', { chestId });
   };
 
   // Unlock slot
@@ -597,15 +615,34 @@ export default function TreasuryTab() {
                   );
                 } else if (isOpening) {
                   return (
-                    <div className="py-3 bg-black/30 rounded-lg text-center">
-                      <div className="text-sm text-gray-400">Открывается...</div>
-                      <div className="w-full h-2 bg-black/50 rounded-full mt-2 overflow-hidden">
-                        <div
-                          className="h-full bg-l2-gold rounded-full transition-all"
-                          style={{ width: `${Math.min(100, (elapsed / selectedChest.openingDuration) * 100)}%` }}
-                        />
+                    <>
+                      <div className="py-3 bg-black/30 rounded-lg text-center">
+                        <div className="text-sm text-gray-400">Открывается...</div>
+                        <div className="w-full h-2 bg-black/50 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className="h-full bg-l2-gold rounded-full transition-all"
+                            style={{ width: `${Math.min(100, (elapsed / selectedChest.openingDuration) * 100)}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                      {/* Boost button */}
+                      <button
+                        onClick={() => boostChest(selectedChest.id)}
+                        disabled={crystals < BOOST_COST}
+                        className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
+                          crystals >= BOOST_COST
+                            ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 border border-purple-500/50'
+                            : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>⚡</span>
+                        <span>Ускорить 30 мин</span>
+                        <span className="flex items-center gap-1">
+                          <Gem size={14} />
+                          {BOOST_COST}
+                        </span>
+                      </button>
+                    </>
                   );
                 } else {
                   return (
