@@ -3142,6 +3142,70 @@ app.prepare().then(async () => {
       }
     });
 
+    // EQUIP ITEM
+    socket.on('equipment:equip', async (data) => {
+      if (!player.odamage) return;
+      const { itemId } = data;
+      if (!itemId) return;
+
+      try {
+        // Find the item to equip
+        const itemToEquip = await prisma.userEquipment.findFirst({
+          where: { id: itemId, userId: player.odamage },
+          include: { equipment: true },
+        });
+
+        if (!itemToEquip) {
+          console.error('[Equipment] Item not found:', itemId);
+          return;
+        }
+
+        const slot = itemToEquip.equipment.slot;
+
+        // Unequip any item currently in that slot
+        await prisma.userEquipment.updateMany({
+          where: {
+            userId: player.odamage,
+            isEquipped: true,
+            equipment: { slot },
+          },
+          data: { isEquipped: false },
+        });
+
+        // Equip the new item
+        await prisma.userEquipment.update({
+          where: { id: itemId },
+          data: { isEquipped: true },
+        });
+
+        console.log(`[Equipment] User ${player.odamage} equipped ${itemToEquip.equipment.name} in ${slot}`);
+        socket.emit('equipment:equipped', { success: true, itemId, slot });
+      } catch (err) {
+        console.error('[Equipment] Equip error:', err.message);
+        socket.emit('equipment:equipped', { success: false, error: err.message });
+      }
+    });
+
+    // UNEQUIP ITEM
+    socket.on('equipment:unequip', async (data) => {
+      if (!player.odamage) return;
+      const { itemId } = data;
+      if (!itemId) return;
+
+      try {
+        await prisma.userEquipment.update({
+          where: { id: itemId, userId: player.odamage },
+          data: { isEquipped: false },
+        });
+
+        console.log(`[Equipment] User ${player.odamage} unequipped item ${itemId}`);
+        socket.emit('equipment:unequipped', { success: true, itemId });
+      } catch (err) {
+        console.error('[Equipment] Unequip error:', err.message);
+        socket.emit('equipment:unequipped', { success: false, error: err.message });
+      }
+    });
+
     // INVENTORY
     socket.on('inventory:get', async () => {
       if (!player.odamage) {

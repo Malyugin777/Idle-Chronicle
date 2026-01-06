@@ -10,7 +10,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // ═══════════════════════════════════════════════════════════
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-type SlotType = 'weapon' | 'shield' | 'helmet' | 'armor' | 'gloves' | 'boots' | 'ring1' | 'ring2' | 'necklace';
+type SlotType = 'weapon' | 'shield' | 'helmet' | 'armor' | 'gloves' | 'legs' | 'boots' | 'ring1' | 'ring2' | 'necklace';
 
 interface ItemStats {
   pAtkFlat?: number;
@@ -75,6 +75,7 @@ const SLOT_ICONS: Record<SlotType, React.ReactNode> = {
   helmet: <Crown size={16} className="opacity-30" />,
   armor: <Shirt size={16} className="opacity-30" />,
   gloves: <Hand size={16} className="opacity-30" />,
+  legs: <span className="text-sm opacity-30">👖</span>,
   boots: <Footprints size={16} className="opacity-30" />,
   ring1: <CircleDot size={14} className="opacity-30" />,
   ring2: <CircleDot size={14} className="opacity-30" />,
@@ -117,7 +118,7 @@ const SLOT_MAP: Record<string, SlotType> = {
   chest: 'armor',
   armor: 'armor',
   gloves: 'gloves',
-  legs: 'boots',
+  legs: 'legs',
   boots: 'boots',
   ring: 'ring1',
   ring1: 'ring1',
@@ -443,17 +444,23 @@ export default function CharacterTab() {
     };
   }, []);
 
-  // Equip handler
+  // Equip handler - update local state AND save to server
   const handleEquip = useCallback((itemId: string) => {
     setHeroState(prev => equipItem(prev, itemId));
     setSelectedItem(null);
+    // Save to server
+    getSocket().emit('equipment:equip', { itemId });
   }, []);
 
-  // Unequip handler
+  // Unequip handler - update local state AND save to server
   const handleUnequip = useCallback((slotType: SlotType) => {
+    const item = heroState.equipment[slotType];
+    if (!item) return;
     setHeroState(prev => unequipItem(prev, slotType));
     setSelectedItem(null);
-  }, []);
+    // Save to server
+    getSocket().emit('equipment:unequip', { itemId: item.id });
+  }, [heroState.equipment]);
 
   // Click on equipped slot
   const handleEquippedSlotClick = useCallback((slotType: SlotType) => {
@@ -542,12 +549,17 @@ export default function CharacterTab() {
             />
           </div>
 
-          {/* Lower row: Gloves - Boots */}
+          {/* Lower row: Gloves - Legs - Boots */}
           <div className="flex justify-center gap-2 mb-2">
             <Slot
               slotType="gloves"
               item={heroState.equipment.gloves || null}
               onClick={() => handleEquippedSlotClick('gloves')}
+            />
+            <Slot
+              slotType="legs"
+              item={heroState.equipment.legs || null}
+              onClick={() => handleEquippedSlotClick('legs')}
             />
             <Slot
               slotType="boots"
