@@ -231,7 +231,7 @@ export const translations = {
     // Boss
     boss: {
       victory: 'ПОБЕДА!',
-      defeated: 'повержен',
+      defeated: 'пал!',
       nextBossIn: 'Следующий босс через',
       finalBlow: 'Добивание',
       topDamage: 'Топ Урон',

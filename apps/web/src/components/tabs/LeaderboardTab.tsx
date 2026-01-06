@@ -373,7 +373,7 @@ export default function LeaderboardTab() {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-white text-sm truncate">{entry.visitorName}</p>
               <div className="text-[10px] text-gray-500">
-                {entry.bossesKilled} {t.boss.defeated}
+                {entry.bossesParticipated || 0} {lang === 'ru' ? 'участий' : 'participations'}
               </div>
             </div>
             <div className="text-right">

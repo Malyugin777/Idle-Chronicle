@@ -71,7 +71,7 @@ const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: stri
 };
 
 const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
-const BOOST_COST = 1; // gold to boost chest opening by 30 min
+const BOOST_COST = 999; // crystals to boost chest opening by 30 min
 
 export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
@@ -137,13 +137,13 @@ export default function TreasuryTab() {
     });
 
     // Chest boosted (30 min acceleration)
-    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; gold?: number }) => {
+    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; crystals?: number }) => {
       setChests(prev => prev.map(c =>
         c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
       ));
-      // Update gold after boost
-      if (data.gold !== undefined) {
-        setGold(data.gold);
+      // Update crystals after boost
+      if (data.crystals !== undefined) {
+        setCrystals(data.crystals);
       }
       // Update selected chest if it's the one being boosted
       setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
@@ -259,7 +259,7 @@ export default function TreasuryTab() {
 
   // Boost chest opening by 30 min
   const boostChest = (chestId: string) => {
-    if (gold < BOOST_COST) return;
+    if (crystals < BOOST_COST) return;
     getSocket().emit('chest:boost', { chestId });
   };
 
@@ -635,9 +635,9 @@ export default function TreasuryTab() {
                       {/* Boost button */}
                       <button
                         onClick={() => boostChest(selectedChest.id)}
-                        disabled={gold < BOOST_COST}
+                        disabled={crystals < BOOST_COST}
                         className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
-                          gold >= BOOST_COST
+                          crystals >= BOOST_COST
                             ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 border border-purple-500/50'
                             : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
                         }`}
@@ -645,7 +645,7 @@ export default function TreasuryTab() {
                         <span>⚡</span>
                         <span>Ускорить 30 мин</span>
                         <span className="flex items-center gap-1">
-                          <Coins size={14} className="text-l2-gold" />
+                          <Gem size={14} className="text-cyan-400" />
                           {BOOST_COST}
                         </span>
                       </button>

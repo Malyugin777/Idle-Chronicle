@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.34';
+const APP_VERSION = 'v1.0.35';
 
 interface BossState {
   name: string;
@@ -67,6 +67,17 @@ interface VictoryData {
   finalBlowBy: string;
   topDamageBy: string;
   respawnAt: number;
+}
+
+interface PendingReward {
+  id: string;
+  bossName: string;
+  bossIcon: string;
+  rank: number | null;
+  chestsWooden: number;
+  chestsBronze: number;
+  chestsSilver: number;
+  chestsGold: number;
 }
 
 const SKILLS: Skill[] = [
@@ -143,6 +154,9 @@ export default function PhaserGame() {
   const [starterItems, setStarterItems] = useState<StarterItem[]>([]);
   const [starterOpening, setStarterOpening] = useState(false);
   const [showDropTable, setShowDropTable] = useState(false);
+  const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
+  const [claimingReward, setClaimingReward] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -393,12 +407,34 @@ export default function PhaserGame() {
         if (remaining > 0) setTimeout(updateCountdown, 1000);
       };
       updateCountdown();
+      // Запросить персональные награды
+      socket.emit('rewards:get');
     });
 
     socket.on('boss:respawn', () => {
       setSessionDamage(0);
       setVictoryData(null);
       setRespawnCountdown(0);
+      setPendingRewards([]);
+      setClaimError(null);
+    });
+
+    // Награды
+    socket.on('rewards:data', (data: any) => {
+      if (data?.rewards) {
+        setPendingRewards(data.rewards);
+      }
+    });
+
+    socket.on('rewards:claimed', () => {
+      setClaimingReward(false);
+      setPendingRewards([]);
+      setClaimError(null);
+    });
+
+    socket.on('rewards:error', (data: any) => {
+      setClaimingReward(false);
+      setClaimError(data?.message || 'Ошибка получения награды');
     });
 
     // Player data (sent on player:get request - used when tab remounts)
@@ -419,13 +455,20 @@ export default function PhaserGame() {
 
     if (socket.connected) {
       setConnected(true);
+      doAuth(); // Важно: вызываем авторизацию если сокет уже подключён
       socket.emit('player:get');
     }
 
     // Регенерация теперь только на сервере (player:state каждую секунду)
     // Клиентский интервал убран чтобы избежать двойной регенерации и скачков
 
+    // TZ Этап 2: Activity ping каждые 5 сек для eligibility наград босса
+    const activityPingInterval = setInterval(() => {
+      socket.emit('activity:ping');
+    }, 5000);
+
     return () => {
+      clearInterval(activityPingInterval);
       socket.off('connect');
       socket.off('disconnect');
       socket.off('boss:state');
@@ -442,6 +485,9 @@ export default function PhaserGame() {
       socket.off('player:data');
       socket.off('starter:opened');
       socket.off('starter:error');
+      socket.off('rewards:data');
+      socket.off('rewards:claimed');
+      socket.off('rewards:error');
 
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -627,10 +673,10 @@ export default function PhaserGame() {
             <div className="bg-black/40 rounded-lg p-3 mb-3 text-center">
               <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
               <div className="text-2xl font-bold text-white font-mono">
-                {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+                {Math.floor(respawnCountdown / 3600000)}:{String(Math.floor((respawnCountdown % 3600000) / 60000)).padStart(2, '0')}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 mb-3">
               <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 text-center">
                 <div className="text-xs text-red-400">{t.boss.finalBlow}</div>
                 <div className="text-sm font-bold text-white truncate">{victoryData.finalBlowBy}</div>
@@ -640,6 +686,61 @@ export default function PhaserGame() {
                 <div className="text-sm font-bold text-white truncate">{victoryData.topDamageBy}</div>
               </div>
             </div>
+
+            {/* Персональная награда */}
+            {pendingRewards.length > 0 && (
+              <div className="bg-l2-gold/10 border border-l2-gold/50 rounded-lg p-3 mb-3">
+                <div className="text-center mb-2">
+                  <div className="text-l2-gold font-bold text-sm">
+                    {lang === 'ru' ? 'Твоя награда' : 'Your Reward'}
+                    {pendingRewards[0].rank && ` (#${pendingRewards[0].rank})`}
+                  </div>
+                </div>
+                <div className="flex justify-center gap-2 text-sm">
+                  {pendingRewards[0].chestsWooden > 0 && (
+                    <span className="bg-amber-900/50 px-2 py-1 rounded">{pendingRewards[0].chestsWooden}x Wooden</span>
+                  )}
+                  {pendingRewards[0].chestsBronze > 0 && (
+                    <span className="bg-orange-900/50 px-2 py-1 rounded">{pendingRewards[0].chestsBronze}x Bronze</span>
+                  )}
+                  {pendingRewards[0].chestsSilver > 0 && (
+                    <span className="bg-gray-600/50 px-2 py-1 rounded">{pendingRewards[0].chestsSilver}x Silver</span>
+                  )}
+                  {pendingRewards[0].chestsGold > 0 && (
+                    <span className="bg-yellow-600/50 px-2 py-1 rounded">{pendingRewards[0].chestsGold}x Gold</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    if (!claimingReward && pendingRewards[0]) {
+                      setClaimingReward(true);
+                      setClaimError(null);
+                      getSocket().emit('rewards:claim', { rewardId: pendingRewards[0].id });
+                    }
+                  }}
+                  disabled={claimingReward}
+                  className={`w-full mt-3 py-2 rounded-lg font-bold text-sm transition-all ${
+                    claimingReward
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-l2-gold text-black hover:bg-l2-gold/80'
+                  }`}
+                >
+                  {claimingReward
+                    ? (lang === 'ru' ? 'Забираем...' : 'Claiming...')
+                    : (lang === 'ru' ? 'Забрать награду' : 'Claim Reward')}
+                </button>
+                {claimError && (
+                  <div className="text-red-400 text-xs text-center mt-2">{claimError}</div>
+                )}
+              </div>
+            )}
+
+            {/* Если нет награды */}
+            {pendingRewards.length === 0 && (
+              <div className="text-center text-gray-400 text-sm">
+                {lang === 'ru' ? 'Участвуй 30+ сек для награды' : 'Participate 30+ sec for rewards'}
+              </div>
+            )}
           </div>
         </div>
       )}

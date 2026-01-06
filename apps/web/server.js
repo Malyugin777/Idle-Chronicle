@@ -102,7 +102,7 @@ let previousBossSession = null;
 
 // Respawn timer (null = boss alive, Date = respawning)
 let bossRespawnAt = null;
-const BOSS_RESPAWN_TIME_MS = 5 * 60 * 1000; // 5 minutes
+const BOSS_RESPAWN_TIME_MS = 5 * 60 * 60 * 1000; // 5 часов
 
 const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
@@ -472,7 +472,7 @@ function updateRagePhase() {
 // Boss templates (names/icons/images)
 const BOSS_TEMPLATES = [
   { name: 'Serpent', nameRu: 'Змей', icon: '🐍', image: '/assets/bosses/boss_1.png' },
-  { name: 'Plague Rat', nameRu: 'Чумная Крыса', icon: '🐀', image: '/assets/bosses/boss_2.png' },
+  { name: 'Plague Rat', nameRu: 'Чумная Крыса', icon: '🐀', image: '/assets/bosses/boss_2.png', pDef: 50 },
   { name: 'Lizardman', nameRu: 'Ящер', icon: '🦎', image: '/assets/bosses/boss_3.png' },
   { name: 'Hell Hound', nameRu: 'Адский Пёс', icon: '🐕', image: '/assets/bosses/boss_4.png' },
   { name: 'Poison Toad', nameRu: 'Ядовитая Жаба', icon: '🐸', image: '/assets/bosses/boss_5.png' },
@@ -493,7 +493,7 @@ function getBossStats(index) {
   return {
     ...template,
     hp: Math.floor(500000 * hpMultiplier),
-    defense: Math.floor(index * 5),
+    defense: template.pDef ?? Math.floor(index * 5), // pDef из шаблона или по умолчанию
     thornsDamage: Math.floor(index * 2),
     goldReward: Math.floor(1000000 * multiplier),
     expReward: Math.floor(1000000 * multiplier),
@@ -744,6 +744,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           exp: { increment: BigInt(expReward) },
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: isFinalBlow ? 1 : 0 },
+          bossesParticipated: { increment: entry.isEligible ? 1 : 0 }, // Участие в убийстве босса
         },
       });
 
@@ -2319,6 +2320,7 @@ app.prepare().then(async () => {
             photoUrl: true,
             totalDamage: true,
             bossesKilled: true,
+            bossesParticipated: true,
             tonBalance: true,
           },
         });
@@ -2328,6 +2330,7 @@ app.prepare().then(async () => {
           photoUrl: u.photoUrl,
           damage: Number(u.totalDamage),
           bossesKilled: u.bossesKilled,
+          bossesParticipated: u.bossesParticipated,
           tonBalance: u.tonBalance,
         }));
         socket.emit('leaderboard:alltime', leaderboard);
@@ -2642,11 +2645,11 @@ app.prepare().then(async () => {
 
       const { chestId } = data;
       const BOOST_TIME = 30 * 60 * 1000; // 30 минут в мс
-      const BOOST_COST = 1; // 1 золотая монета для всех
+      const BOOST_COST = 999; // 999 кристаллов
 
       try {
-        if ((player.gold || 0) < BOOST_COST) {
-          socket.emit('chest:error', { message: 'Not enough gold' });
+        if ((player.crystals || 0) < BOOST_COST) {
+          socket.emit('chest:error', { message: 'Not enough crystals' });
           return;
         }
 
@@ -2667,8 +2670,8 @@ app.prepare().then(async () => {
         // Уменьшаем openingDuration на 30 минут
         const newDuration = Math.max(0, chest.openingDuration - BOOST_TIME);
 
-        // Списываем золото
-        player.gold -= BOOST_COST;
+        // Списываем кристаллы
+        player.crystals -= BOOST_COST;
         await prisma.$transaction([
           prisma.chest.update({
             where: { id: chestId },
@@ -2676,15 +2679,15 @@ app.prepare().then(async () => {
           }),
           prisma.user.update({
             where: { id: player.odamage },
-            data: { gold: BigInt(player.gold) },
+            data: { crystals: player.crystals },
           }),
         ]);
-        console.log(`[Chest] Boosted chest ${chestId} by 30min, cost ${BOOST_COST} gold`);
+        console.log(`[Chest] Boosted chest ${chestId} by 30min, cost ${BOOST_COST} crystals`);
 
         socket.emit('chest:boosted', {
           chestId,
           newDuration,
-          gold: player.gold,
+          crystals: player.crystals,
         });
       } catch (err) {
         console.error('[Chest] Boost error:', err.message);
