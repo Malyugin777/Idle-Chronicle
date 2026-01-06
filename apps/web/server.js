@@ -1570,10 +1570,12 @@ app.prepare().then(async () => {
             // Currency
             gold: Number(user.gold),
             ancientCoin: user.ancientCoin,
-            // Mana
-            mana: user.mana,
-            maxMana: user.maxMana,
+            // Mana & Stamina (from memory - current values)
+            mana: player.mana ?? user.mana,
+            maxMana: player.maxMana ?? user.maxMana,
             manaRegen: user.manaRegen,
+            stamina: player.stamina ?? user.stamina,
+            maxStamina: player.maxStamina ?? user.maxStamina,
             // Skills
             tapsPerSecond: user.tapsPerSecond,
             autoAttackSpeed: user.autoAttackSpeed,
