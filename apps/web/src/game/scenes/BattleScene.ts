@@ -117,6 +117,10 @@ export class BattleScene extends Phaser.Scene {
   // Animation state
   private isHit = false;
   private hitTime = 0;
+  private originalBossScale = 1;
+  private originalBossX = 0;
+  private originalBossY = 0;
+  private lastHitTime = 0;
 
   constructor() {
     super({ key: 'BattleScene' });
@@ -150,6 +154,9 @@ export class BattleScene extends Phaser.Scene {
     // Boss sprite (centered, scaled to fit screen)
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
+    // Store original position
+    this.originalBossX = width / 2;
+    this.originalBossY = height / 2;
     this.updateBossScale();
 
     // Fix: Recalculate boss scale after a short delay to handle race conditions
@@ -187,40 +194,15 @@ export class BattleScene extends Phaser.Scene {
     const barWidth = width - 40;
     const barHeight = 16;
 
-    // Online indicator (top right)
-    this.onlineText = this.add.text(width - 20, 20, '', {
-      fontFamily: 'system-ui',
-      fontSize: '12px',
-      color: '#9ca3af',
-    }).setOrigin(1, 0);
-    this.updateOnlineText();
-
-    // HP Bar background
+    // HP bar and boss name are now handled by React overlay
+    // Only create placeholder objects to avoid null errors
+    this.onlineText = this.add.text(0, 0, '').setVisible(false);
     this.hpBarBg = this.add.graphics();
-    this.hpBarBg.fillStyle(0x000000, 0.5);
-    this.hpBarBg.fillRoundedRect(20, 80, barWidth, barHeight, 8);
-
-    // HP Bar
     this.hpBar = this.add.graphics();
-    this.updateHpBar();
+    this.bossNameText = this.add.text(0, 0, '').setVisible(false);
+    this.hpText = this.add.text(0, 0, '').setVisible(false);
 
-    // Boss name
-    this.bossNameText = this.add.text(20, 50, this.bossState.name, {
-      fontFamily: 'system-ui',
-      fontSize: '18px',
-      color: '#d4af37',
-      fontStyle: 'bold',
-    });
-
-    // HP text
-    this.hpText = this.add.text(width - 20, 50, '', {
-      fontFamily: 'system-ui',
-      fontSize: '14px',
-      color: '#ffffff',
-    }).setOrigin(1, 0);
-    this.updateHpText();
-
-    // Damage feed (top right, below online)
+    // Damage feed (top right, below header - adjusted Y position)
     this.createDamageFeed();
 
     // === Bottom UI ===
@@ -274,9 +256,9 @@ export class BattleScene extends Phaser.Scene {
 
   private createDamageFeed() {
     const { width } = this.scale;
-    // Create 5 text slots for damage feed
+    // Create 5 text slots for damage feed (positioned below React header ~120px)
     for (let i = 0; i < 5; i++) {
-      const text = this.add.text(width - 20, 45 + i * 18, '', {
+      const text = this.add.text(width - 20, 120 + i * 18, '', {
         fontFamily: 'system-ui',
         fontSize: '11px',
         color: '#9ca3af',
@@ -741,23 +723,43 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private playHitAnimation() {
-    // Shake boss
+    // Cooldown to prevent animation accumulation on rapid taps
+    const now = Date.now();
+    if (now - this.lastHitTime < 150) return;
+    this.lastHitTime = now;
+
+    // Kill any existing boss tweens to prevent accumulation
+    this.tweens.killTweensOf(this.bossSprite);
+
+    // Reset to original position and scale first
+    this.bossSprite.setPosition(this.originalBossX, this.originalBossY);
+    this.bossSprite.setScale(this.originalBossScale);
+
+    // Shake boss (from original position)
     this.tweens.add({
       targets: this.bossSprite,
-      x: this.bossSprite.x + Phaser.Math.Between(-8, 8),
-      y: this.bossSprite.y + Phaser.Math.Between(-5, 5),
+      x: this.originalBossX + Phaser.Math.Between(-8, 8),
+      y: this.originalBossY + Phaser.Math.Between(-5, 5),
       duration: 50,
       yoyo: true,
       repeat: 2,
+      onComplete: () => {
+        // Ensure return to original position
+        this.bossSprite?.setPosition(this.originalBossX, this.originalBossY);
+      }
     });
 
-    // Scale punch
+    // Scale punch (from original scale, not current)
     this.tweens.add({
       targets: this.bossSprite,
-      scaleX: this.bossSprite.scaleX * 1.05,
-      scaleY: this.bossSprite.scaleY * 1.05,
+      scaleX: this.originalBossScale * 1.05,
+      scaleY: this.originalBossScale * 1.05,
       duration: 100,
       yoyo: true,
+      onComplete: () => {
+        // Ensure return to original scale
+        this.bossSprite?.setScale(this.originalBossScale);
+      }
     });
 
     // Flash effect
@@ -904,13 +906,19 @@ export class BattleScene extends Phaser.Scene {
     // Scale to fit: 62% of width, 50% of height (leave room for UI)
     const scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
     this.bossSprite.setScale(scaleFit);
+    // Store original values for animation reset
+    this.originalBossScale = scaleFit;
+    this.originalBossX = this.bossSprite.x;
+    this.originalBossY = this.bossSprite.y;
   }
 
   private handleResize(gameSize: Phaser.Structs.Size) {
     const { width, height } = gameSize;
 
     // Reposition and rescale boss
-    this.bossSprite?.setPosition(width / 2, height / 2);
+    this.originalBossX = width / 2;
+    this.originalBossY = height / 2;
+    this.bossSprite?.setPosition(this.originalBossX, this.originalBossY);
     this.updateBossScale();
 
     // Recreate UI elements with new dimensions
@@ -924,9 +932,9 @@ export class BattleScene extends Phaser.Scene {
     // Online indicator
     this.onlineText?.setPosition(width - 20, 20);
 
-    // Damage feed
+    // Damage feed (below React header ~120px)
     this.damageFeedTexts.forEach((text, i) => {
-      text.setPosition(width - 20, 45 + i * 18);
+      text.setPosition(width - 20, 120 + i * 18);
     });
 
     // Mana bar

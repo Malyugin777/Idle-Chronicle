@@ -109,6 +109,19 @@ const RARITY_STYLES: Record<Rarity, { border: string; glow: string; text: string
   },
 };
 
+// Starter items for new players - simple common items with +1 stats
+const STARTER_ITEMS: Item[] = [
+  { id: 'starter-sword', name: 'Wooden Sword', slotType: 'weapon', rarity: 'common', icon: '🗡️', stats: { pAtkFlat: 1 } },
+  { id: 'starter-shield', name: 'Wooden Shield', slotType: 'shield', rarity: 'common', icon: '🛡️', stats: { pDefFlat: 1 } },
+  { id: 'starter-helmet', name: 'Leather Cap', slotType: 'helmet', rarity: 'common', icon: '🪖', stats: { pDefFlat: 1 } },
+  { id: 'starter-armor', name: 'Cloth Tunic', slotType: 'armor', rarity: 'common', icon: '👕', stats: { pDefFlat: 1 } },
+  { id: 'starter-gloves', name: 'Cloth Gloves', slotType: 'gloves', rarity: 'common', icon: '🧤', stats: { atkSpdFlat: 1 } },
+  { id: 'starter-boots', name: 'Leather Boots', slotType: 'boots', rarity: 'common', icon: '👢', stats: { pDefFlat: 1 } },
+  { id: 'starter-ring1', name: 'Copper Ring', slotType: 'ring1', rarity: 'common', icon: '💍', stats: { critFlat: 0.01 } },
+  { id: 'starter-ring2', name: 'Iron Ring', slotType: 'ring2', rarity: 'common', icon: '💍', stats: { pAtkFlat: 1 } },
+  { id: 'starter-necklace', name: 'Bead Necklace', slotType: 'necklace', rarity: 'common', icon: '📿', stats: { mDefFlat: 1 } },
+];
+
 // ═══════════════════════════════════════════════════════════
 // STAT SYSTEM (local recalculation)
 // ═══════════════════════════════════════════════════════════
@@ -331,11 +344,12 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 export default function CharacterTab() {
   const [heroState, setHeroState] = useState<HeroState>({
     equipment: {},
-    inventory: [],
+    inventory: [...STARTER_ITEMS], // Give all players starter items
     baseStats: null,
     derivedStats: { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 },
   });
-  const [activeTab, setActiveTab] = useState<'stats' | 'skills'>('stats');
+  const [showStats, setShowStats] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
@@ -521,96 +535,97 @@ export default function CharacterTab() {
         </div>
       </div>
 
-      {/* Segmented Control for Stats/Skills */}
+      {/* Stats Section - Collapsible */}
       <div className="px-2 mb-2">
-        <div className="flex bg-black/30 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`flex-1 py-2 rounded text-xs font-bold transition-all ${
-              activeTab === 'stats'
-                ? 'bg-l2-gold text-black'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            📊 {t.character.stats}
-          </button>
-          <button
-            onClick={() => setActiveTab('skills')}
-            className={`flex-1 py-2 rounded text-xs font-bold transition-all ${
-              activeTab === 'skills'
-                ? 'bg-l2-gold text-black'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            ✨ {t.character.skills}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+            showStats
+              ? 'bg-l2-gold text-black'
+              : 'bg-black/30 text-gray-400 hover:text-white'
+          }`}
+        >
+          <span>📊 {t.character.stats}</span>
+          <span>{showStats ? '▲' : '▼'}</span>
+        </button>
+        {showStats && (
+          <div className="mt-2">
+            {/* Combat Stats */}
+            <div className="bg-l2-panel rounded-lg p-2 mb-2">
+              <div className="text-[10px] text-gray-400 mb-1">{t.character.combatStats}</div>
+              <div className="grid grid-cols-3 gap-1">
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
+                  <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
+                  <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
+                  <div className="text-xs font-bold text-yellow-400">{(derived.critChance * 100).toFixed(0)}%</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
+                  <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
+                  <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
+                  <div className="text-xs font-bold text-green-400">{derived.attackSpeed}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Base Stats */}
+            <div className="bg-l2-panel rounded-lg p-2">
+              <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
+              <div className="grid grid-cols-5 gap-1">
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.power}</div>
+                  <div className="text-xs font-bold text-white">{stats.power}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
+                  <div className="text-xs font-bold text-white">{stats.vitality}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.agility}</div>
+                  <div className="text-xs font-bold text-white">{stats.agility}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
+                  <div className="text-xs font-bold text-white">{stats.intellect}</div>
+                </div>
+                <div className="bg-black/30 rounded p-1.5 text-center">
+                  <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
+                  <div className="text-xs font-bold text-white">{stats.spirit}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Stats/Skills Content */}
-      {activeTab === 'stats' ? (
-        <div className="px-2 pb-2">
-          {/* Combat Stats */}
-          <div className="bg-l2-panel rounded-lg p-2 mb-2">
-            <div className="text-[10px] text-gray-400 mb-1">{t.character.combatStats}</div>
-            <div className="grid grid-cols-3 gap-1">
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
-                <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
-                <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
-                <div className="text-xs font-bold text-yellow-400">{(derived.critChance * 100).toFixed(0)}%</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
-                <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
-                <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
-                <div className="text-xs font-bold text-green-400">{derived.attackSpeed}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Base Stats */}
-          <div className="bg-l2-panel rounded-lg p-2">
-            <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
-            <div className="grid grid-cols-5 gap-1">
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[8px] text-gray-500">{t.character.power}</div>
-                <div className="text-xs font-bold text-white">{stats.power}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
-                <div className="text-xs font-bold text-white">{stats.vitality}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[8px] text-gray-500">{t.character.agility}</div>
-                <div className="text-xs font-bold text-white">{stats.agility}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
-                <div className="text-xs font-bold text-white">{stats.intellect}</div>
-              </div>
-              <div className="bg-black/30 rounded p-1.5 text-center">
-                <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
-                <div className="text-xs font-bold text-white">{stats.spirit}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="px-2 pb-2">
-          <div className="space-y-2">
+      {/* Skills Section - Collapsible */}
+      <div className="px-2 mb-2">
+        <button
+          onClick={() => setShowSkills(!showSkills)}
+          className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+            showSkills
+              ? 'bg-l2-gold text-black'
+              : 'bg-black/30 text-gray-400 hover:text-white'
+          }`}
+        >
+          <span>✨ {t.character.skills}</span>
+          <span>{showSkills ? '▲' : '▼'}</span>
+        </button>
+        {showSkills && (
+          <div className="mt-2 space-y-2">
             {skills.map((skill) => {
               const skillName = skill.id === 'fireball' ? t.character.skillFireball
                 : skill.id === 'iceball' ? t.character.skillIceball
@@ -633,8 +648,8 @@ export default function CharacterTab() {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Inventory */}
       <div className="px-2 pb-2">
