@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from '@/game/config';
+import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 // ═══════════════════════════════════════════════════════════
-// PHASER GAME REACT WRAPPER
-// L2-style Battle Scene with Socket.io integration
+// PHASER GAME + REACT UI
+//
+// Phaser: Boss sprite + damage numbers + effects ONLY
+// React: ALL UI (bars, buttons, feed, overlays)
+//
+// See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
 interface BossState {
@@ -19,8 +24,31 @@ interface BossState {
   maxHp: number;
   bossIndex: number;
   totalBosses: number;
-  defense?: number;
-  ragePhase?: number;
+}
+
+interface PlayerState {
+  stamina: number;
+  maxStamina: number;
+  mana: number;
+  maxMana: number;
+  exhaustedUntil: number | null;
+}
+
+interface Skill {
+  id: string;
+  name: string;
+  icon: string;
+  manaCost: number;
+  cooldown: number;
+  lastUsed: number;
+  color: string;
+}
+
+interface DamageFeedItem {
+  playerName: string;
+  damage: number;
+  isCrit: boolean;
+  timestamp: number;
 }
 
 interface VictoryData {
@@ -28,36 +56,31 @@ interface VictoryData {
   bossIcon: string;
   finalBlowBy: string;
   topDamageBy: string;
-  topDamage: number;
-  rewards: Array<{
-    visitorName: string;
-    damage: number;
-    damagePercent: number;
-    goldReward: number;
-    expReward: number;
-    isFinalBlow: boolean;
-    isTopDamage: boolean;
-  }>;
   respawnAt: number;
 }
 
+const SKILLS: Skill[] = [
+  { id: 'fireball', name: 'Fireball', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
+  { id: 'iceball', name: 'Ice Ball', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
+  { id: 'lightning', name: 'Lightning', icon: '⚡', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
+];
+
+const COOLDOWNS_KEY = 'battle_skill_cooldowns';
+
 export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null);
+  const sceneRef = useRef<BattleScene | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // UI State (handled in React, not Phaser)
-  const [connected, setConnected] = useState(false);
-  const [playersOnline, setPlayersOnline] = useState(0);
-  const [sessionDamage, setSessionDamage] = useState(0);
-  const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
-  const [respawnCountdown, setRespawnCountdown] = useState(0);
-  const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [showDropTable, setShowDropTable] = useState(false);
+  // Language
   const [lang, setLang] = useState<Language>('en');
   const t = useTranslation(lang);
 
-  // Boss state for header
+  // Connection
+  const [connected, setConnected] = useState(false);
+  const [playersOnline, setPlayersOnline] = useState(0);
+
+  // Boss
   const [bossState, setBossState] = useState<BossState>({
     name: 'Loading...',
     nameRu: '',
@@ -68,78 +91,127 @@ export default function PhaserGame() {
     totalBosses: 100,
   });
 
-  // Helper for compact number format
+  // Player
+  const [playerState, setPlayerState] = useState<PlayerState>({
+    stamina: 100,
+    maxStamina: 100,
+    mana: 1000,
+    maxMana: 1000,
+    exhaustedUntil: null,
+  });
+
+  // Skills
+  const [skills, setSkills] = useState<Skill[]>(() => {
+    // Restore cooldowns from storage
+    try {
+      const stored = sessionStorage.getItem(COOLDOWNS_KEY);
+      if (stored) {
+        const cooldowns = JSON.parse(stored);
+        return SKILLS.map(s => ({ ...s, lastUsed: cooldowns[s.id] || 0 }));
+      }
+    } catch {}
+    return [...SKILLS];
+  });
+
+  // Damage feed
+  const [damageFeed, setDamageFeed] = useState<DamageFeedItem[]>([]);
+
+  // Session
+  const [sessionDamage, setSessionDamage] = useState(0);
+
+  // Overlays
+  const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
+  const [respawnCountdown, setRespawnCountdown] = useState(0);
+  const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showDropTable, setShowDropTable] = useState(false);
+
+  // Check exhaustion
+  const isExhausted = useCallback(() => {
+    return playerState.exhaustedUntil !== null && Date.now() < playerState.exhaustedUntil;
+  }, [playerState.exhaustedUntil]);
+
+  // Use skill
+  const useSkill = useCallback((skill: Skill) => {
+    const now = Date.now();
+    if (now - skill.lastUsed < skill.cooldown) return;
+    if (playerState.mana < skill.manaCost) return;
+    if (bossState.hp <= 0) return;
+
+    // Update state
+    setPlayerState(p => ({ ...p, mana: p.mana - skill.manaCost }));
+    setSkills(prev => {
+      const updated = prev.map(s => s.id === skill.id ? { ...s, lastUsed: now } : s);
+      // Save cooldowns
+      try {
+        const cooldowns: Record<string, number> = {};
+        updated.forEach(s => cooldowns[s.id] = s.lastUsed);
+        sessionStorage.setItem(COOLDOWNS_KEY, JSON.stringify(cooldowns));
+      } catch {}
+      return updated;
+    });
+
+    // Emit to server
+    getSocket().emit('skill:use', { skillId: skill.id });
+
+    // Play Phaser effect
+    sceneRef.current?.playSkillEffect(skill.id);
+  }, [playerState.mana, bossState.hp]);
+
+  // Format helpers
   const formatCompact = (num: number) => {
     if (num >= 1000000) return Math.floor(num / 1000000) + 'M';
     if (num >= 1000) return Math.floor(num / 1000) + 'K';
     return num.toString();
   };
 
+  // Socket & Phaser setup
   useEffect(() => {
-    // Detect language
-    const detectedLang = detectLanguage();
-    setLang(detectedLang);
-
-    // Get socket
+    setLang(detectLanguage());
     const socket = getSocket();
 
-    // Initialize Phaser game
+    // Initialize Phaser
     if (containerRef.current && !gameRef.current) {
       const config = {
         ...gameConfig,
         parent: containerRef.current,
+        transparent: true, // Transparent background
         callbacks: {
           postBoot: (game: Phaser.Game) => {
-            // Pass socket to BattleScene
-            const scene = game.scene.getScene('BattleScene');
+            const scene = game.scene.getScene('BattleScene') as BattleScene;
             if (scene) {
+              sceneRef.current = scene;
               scene.scene.restart({ socket });
             }
           },
         },
       };
-
       gameRef.current = new Phaser.Game(config);
     }
 
-    // Socket event handlers for React UI (overlays, modals)
+    // Auth
     const doAuth = () => {
       if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
         const webApp = window.Telegram.WebApp;
         const user = webApp.initDataUnsafe?.user;
         if (user) {
-          const langCode = (user as { language_code?: string }).language_code;
           socket.emit('auth', {
             telegramId: user.id,
             username: user.username,
             firstName: user.first_name,
             photoUrl: user.photo_url,
-            languageCode: langCode,
+            languageCode: (user as any).language_code,
             initData: webApp.initData,
           });
         }
       }
     };
 
-    socket.on('connect', () => {
-      setConnected(true);
-      doAuth();
-    });
-
+    socket.on('connect', () => { setConnected(true); doAuth(); });
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('boss:state', (data: {
-      playersOnline: number;
-      name: string;
-      nameRu?: string;
-      icon?: string;
-      hp: number;
-      maxHp: number;
-      bossIndex?: number;
-      totalBosses?: number;
-      defense?: number;
-      ragePhase?: number;
-    }) => {
+    // Boss state
+    socket.on('boss:state', (data: any) => {
       setPlayersOnline(data.playersOnline);
       setBossState({
         name: data.name || 'Boss',
@@ -149,34 +221,73 @@ export default function PhaserGame() {
         maxHp: data.maxHp,
         bossIndex: data.bossIndex || 1,
         totalBosses: data.totalBosses || 100,
-        defense: data.defense,
-        ragePhase: data.ragePhase,
       });
     });
 
-    socket.on('tap:result', (data: { sessionDamage: number }) => {
-      setSessionDamage(data.sessionDamage);
+    // Tap result
+    socket.on('tap:result', (data: any) => {
+      setSessionDamage(data.sessionDamage || 0);
+      if (data.stamina !== undefined) {
+        setPlayerState(p => ({ ...p, stamina: data.stamina, maxStamina: data.maxStamina || p.maxStamina }));
+      }
     });
 
-    socket.on('auth:success', (data: { isFirstLogin?: boolean }) => {
+    // Player state
+    socket.on('player:state', (data: any) => {
+      setPlayerState(p => ({
+        ...p,
+        stamina: data.stamina ?? p.stamina,
+        maxStamina: data.maxStamina ?? p.maxStamina,
+        mana: data.mana ?? p.mana,
+        maxMana: data.maxMana ?? p.maxMana,
+        exhaustedUntil: data.exhaustedUntil ?? p.exhaustedUntil,
+      }));
+    });
+
+    // Auth success
+    socket.on('auth:success', (data: any) => {
       if (data.isFirstLogin) setShowWelcome(true);
+      if (data.user) {
+        setPlayerState({
+          stamina: data.user.stamina ?? 100,
+          maxStamina: data.user.maxStamina ?? 100,
+          mana: data.user.mana ?? 1000,
+          maxMana: data.user.maxMana ?? 1000,
+          exhaustedUntil: data.user.exhaustedUntil ?? null,
+        });
+      }
     });
 
+    // Exhaustion
+    socket.on('hero:exhausted', (data: { until: number; duration: number }) => {
+      setPlayerState(p => ({ ...p, exhaustedUntil: data.until, stamina: 0 }));
+      setTimeout(() => {
+        setPlayerState(p => ({ ...p, exhaustedUntil: null }));
+      }, data.duration);
+    });
+
+    // Damage feed
+    socket.on('damage:feed', (data: { playerName: string; damage: number; isCrit: boolean }) => {
+      setDamageFeed(prev => [
+        { ...data, timestamp: Date.now() },
+        ...prev.slice(0, 4),
+      ]);
+    });
+
+    // Offline earnings
     socket.on('offline:earnings', (data: { gold: number; hours: number }) => {
       setOfflineEarnings(data);
     });
 
+    // Boss killed
     socket.on('boss:killed', (data: any) => {
       setVictoryData({
         bossName: data.bossName,
         bossIcon: data.bossIcon || '👹',
         finalBlowBy: data.finalBlowBy,
         topDamageBy: data.topDamageBy,
-        topDamage: data.topDamage,
-        rewards: data.rewards || [],
         respawnAt: data.respawnAt,
       });
-      // Start countdown
       const updateCountdown = () => {
         const remaining = Math.max(0, data.respawnAt - Date.now());
         setRespawnCountdown(remaining);
@@ -196,18 +307,32 @@ export default function PhaserGame() {
       socket.emit('player:get');
     }
 
+    // Regen interval (client-side visual only)
+    const regenInterval = setInterval(() => {
+      setPlayerState(p => {
+        const exhausted = p.exhaustedUntil && Date.now() < p.exhaustedUntil;
+        return {
+          ...p,
+          stamina: exhausted ? p.stamina : Math.min(p.maxStamina, p.stamina + 1),
+          mana: Math.min(p.maxMana, p.mana + 5),
+        };
+      });
+    }, 1000);
+
     return () => {
-      // Cleanup
+      clearInterval(regenInterval);
       socket.off('connect');
       socket.off('disconnect');
       socket.off('boss:state');
       socket.off('tap:result');
+      socket.off('player:state');
       socket.off('auth:success');
+      socket.off('hero:exhausted');
+      socket.off('damage:feed');
       socket.off('offline:earnings');
       socket.off('boss:killed');
       socket.off('boss:respawn');
 
-      // Destroy Phaser game
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
@@ -215,45 +340,37 @@ export default function PhaserGame() {
     };
   }, []);
 
-  const handleWelcomeClose = () => {
-    setShowWelcome(false);
-    getSocket().emit('firstLogin:complete');
-  };
-
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
+  const staminaPercent = (playerState.stamina / playerState.maxStamina) * 100;
+  const manaPercent = (playerState.mana / playerState.maxMana) * 100;
   const bossDisplayName = lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name;
+  const exhausted = isExhausted();
 
   return (
-    <div className="flex flex-col h-full relative">
-      {/* Header with HP - React overlay */}
+    <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* HEADER - Boss HP Bar */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-2">
             <span className="text-lg">{bossState.icon}</span>
             <div>
-              <span className="font-bold text-sm text-l2-gold">
-                {bossDisplayName}
-              </span>
-              <span className="text-xs text-gray-500 ml-2">
-                ({bossState.bossIndex}/{bossState.totalBosses})
-              </span>
+              <span className="font-bold text-sm text-l2-gold">{bossDisplayName}</span>
+              <span className="text-xs text-gray-500 ml-2">({bossState.bossIndex}/{bossState.totalBosses})</span>
             </div>
           </div>
           <span className="text-xs text-gray-400">
             {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
           </span>
         </div>
-        <div className="flex justify-between items-center mb-1">
-          <span className="text-xs text-white">
-            {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
-          </span>
+        <div className="text-xs text-white mb-1">
+          {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
         </div>
         <div className="h-3 bg-black/50 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all duration-100 ${
-              hpPercent < 25 ? 'bg-red-600' :
-              hpPercent < 50 ? 'bg-orange-500' :
-              hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
+              hpPercent < 25 ? 'bg-red-600' : hpPercent < 50 ? 'bg-orange-500' : hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
             }`}
             style={{ width: `${hpPercent}%` }}
           />
@@ -266,16 +383,119 @@ export default function PhaserGame() {
         </button>
       </div>
 
-      {/* Phaser Game Container */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* PHASER CANVAS - Boss only */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       <div ref={containerRef} id="game-container" className="flex-1 w-full" />
 
-      {/* Session damage */}
-      <div className="absolute bottom-4 left-4 text-xs">
-        <span className="text-gray-400">{t.game.sessionDamage}</span>
-        <div className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</div>
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* DAMAGE FEED - Top right */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <div className="absolute top-28 right-3 z-10 text-right space-y-1">
+        {damageFeed.map((item, i) => (
+          <div
+            key={item.timestamp}
+            className={`text-xs ${item.isCrit ? 'text-red-400' : 'text-gray-400'}`}
+            style={{ opacity: 1 - i * 0.2 }}
+          >
+            {item.playerName}: -{item.damage.toLocaleString()}
+          </div>
+        ))}
       </div>
 
-      {/* Victory Screen */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* BOTTOM UI - Bars + Skills */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
+        {/* Mana Bar */}
+        <div className="mb-2">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-blue-400">💧 Mana</span>
+            <span className="text-blue-400">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
+          </div>
+          <div className="h-3 bg-black/50 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
+          </div>
+        </div>
+
+        {/* Stamina Bar */}
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
+              {exhausted ? '😵 EXHAUSTED' : '⚡ Stamina'}
+            </span>
+            <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
+              {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+            </span>
+          </div>
+          <div className="h-3 bg-black/50 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-100 ${
+                exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${staminaPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Skill Buttons */}
+        <div className="flex justify-center gap-3">
+          {skills.map(skill => {
+            const now = Date.now();
+            const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
+            const onCooldown = remaining > 0;
+            const canUse = !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
+
+            return (
+              <button
+                key={skill.id}
+                onClick={() => useSkill(skill)}
+                disabled={!canUse}
+                className={`
+                  relative w-14 h-14 rounded-lg border-2 ${skill.color}
+                  bg-gray-900/90 flex flex-col items-center justify-center
+                  ${canUse ? 'opacity-100' : 'opacity-50'}
+                  transition-all active:scale-95
+                `}
+              >
+                <span className="text-2xl">{skill.icon}</span>
+                {onCooldown && (
+                  <>
+                    <div
+                      className="absolute inset-0 bg-black/70 rounded-lg"
+                      style={{ height: `${(remaining / skill.cooldown) * 100}%`, top: 'auto', bottom: 0 }}
+                    />
+                    <span className="absolute text-xs font-bold text-white">
+                      {Math.ceil(remaining / 1000)}
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Session Damage */}
+        <div className="mt-2 text-center text-xs">
+          <span className="text-gray-400">{t.game.sessionDamage}: </span>
+          <span className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* EXHAUSTED OVERLAY */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {exhausted && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div className="text-4xl font-bold text-red-500 animate-pulse drop-shadow-lg">
+            EXHAUSTED!
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* VICTORY OVERLAY */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {victoryData && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="bg-l2-panel/95 rounded-lg p-4 m-2 max-w-sm w-full pointer-events-auto">
@@ -284,15 +504,13 @@ export default function PhaserGame() {
               <div className="text-l2-gold text-lg font-bold">{t.boss.victory}</div>
               <div className="text-gray-300 text-sm">{victoryData.bossName} {t.boss.defeated}</div>
             </div>
-
             <div className="bg-black/40 rounded-lg p-3 mb-3 text-center">
               <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
               <div className="text-2xl font-bold text-white font-mono">
                 {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-2 gap-2">
               <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 text-center">
                 <div className="text-xs text-red-400">{t.boss.finalBlow}</div>
                 <div className="text-sm font-bold text-white truncate">{victoryData.finalBlowBy}</div>
@@ -306,17 +524,19 @@ export default function PhaserGame() {
         </div>
       )}
 
-      {/* Welcome Popup */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* WELCOME OVERLAY */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {showWelcome && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30">
             <div className="text-center mb-4">
-              <div className="text-4xl mb-2">&#9876;</div>
+              <div className="text-4xl mb-2">⚔️</div>
               <h1 className="text-xl font-bold text-l2-gold mb-1">{t.welcome.title}</h1>
               <p className="text-gray-300 text-sm">{t.welcome.subtitle}</p>
             </div>
             <button
-              onClick={handleWelcomeClose}
+              onClick={() => { setShowWelcome(false); getSocket().emit('firstLogin:complete'); }}
               className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg"
             >
               {t.welcome.startButton}
@@ -325,7 +545,9 @@ export default function PhaserGame() {
         </div>
       )}
 
-      {/* Offline Earnings */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* OFFLINE EARNINGS OVERLAY */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {offlineEarnings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-l2-panel rounded-lg p-6 m-4 max-w-sm text-center">
@@ -345,109 +567,31 @@ export default function PhaserGame() {
         </div>
       )}
 
-      {/* Drop Table Popup */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* DROP TABLE OVERLAY */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {showDropTable && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setShowDropTable(false)}
-        >
-          <div
-            className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowDropTable(false)}>
+          <div className="bg-l2-panel rounded-xl p-4 max-w-sm w-full border border-purple-500/30" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
               <div className="text-2xl mb-1">🎁</div>
-              <div className="text-lg font-bold text-purple-400">
-                {lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}
-              </div>
-              <div className="text-xs text-gray-500">
-                {bossDisplayName} ({bossState.bossIndex}/{bossState.totalBosses})
-              </div>
+              <div className="text-lg font-bold text-purple-400">{lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}</div>
             </div>
-
             <div className="space-y-2">
-              {/* Gold */}
-              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🪙</span>
-                  <span className="text-sm text-gray-300">Gold</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-l2-gold font-bold text-sm">
-                    {formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}
-                  </div>
-                  <div className="text-[10px] text-gray-500">100%</div>
-                </div>
+              <div className="flex justify-between bg-black/30 rounded-lg p-2">
+                <span>🪙 Gold</span>
+                <span className="text-l2-gold font-bold">{formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}</span>
               </div>
-
-              {/* EXP */}
-              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⭐</span>
-                  <span className="text-sm text-gray-300">EXP</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-green-400 font-bold text-sm">
-                    {formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}
-                  </div>
-                  <div className="text-[10px] text-gray-500">100%</div>
-                </div>
+              <div className="flex justify-between bg-black/30 rounded-lg p-2">
+                <span>⭐ EXP</span>
+                <span className="text-green-400 font-bold">{formatCompact(1000000 * Math.pow(2, bossState.bossIndex - 1))}</span>
               </div>
-
-              {/* TON */}
-              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">💎</span>
-                  <span className="text-sm text-gray-300">TON</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-blue-400 font-bold text-sm">
-                    {10 * Math.pow(2, bossState.bossIndex - 1)}
-                  </div>
-                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
-                </div>
-              </div>
-
-              {/* Chests */}
-              <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📦</span>
-                  <span className="text-sm text-gray-300">{lang === 'ru' ? 'Сундуки' : 'Chests'}</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-purple-400 font-bold text-sm">
-                    {10 * Math.pow(2, bossState.bossIndex - 1)}
-                  </div>
-                  <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>
-                </div>
+              <div className="flex justify-between bg-black/30 rounded-lg p-2">
+                <span>📦 Chests</span>
+                <span className="text-purple-400 font-bold">{10 * Math.pow(2, bossState.bossIndex - 1)}</span>
               </div>
             </div>
-
-            {/* Chest Rarity */}
-            <div className="mt-3 p-2 bg-black/20 rounded-lg">
-              <div className="text-xs text-gray-400 mb-2 text-center">
-                {lang === 'ru' ? 'Шанс редкости сундука' : 'Chest Rarity Chances'}
-              </div>
-              <div className="grid grid-cols-5 gap-1 text-center text-[9px]">
-                <div><div className="text-gray-300">📦</div><div className="text-gray-400">50%</div></div>
-                <div><div className="text-green-400">🎁</div><div className="text-gray-400">30%</div></div>
-                <div><div className="text-blue-400">💎</div><div className="text-gray-400">15%</div></div>
-                <div><div className="text-purple-400">👑</div><div className="text-gray-400">4%</div></div>
-                <div><div className="text-orange-400">🏆</div><div className="text-gray-400">1%</div></div>
-              </div>
-            </div>
-
-            {/* Info */}
-            <div className="mt-3 text-center text-[10px] text-gray-500">
-              {lang === 'ru'
-                ? 'FB = Добивание, TD = Топ урон'
-                : 'FB = Final Blow, TD = Top Damage'}
-            </div>
-
-            <button
-              onClick={() => setShowDropTable(false)}
-              className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg font-bold text-sm"
-            >
+            <button onClick={() => setShowDropTable(false)} className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg">
               {lang === 'ru' ? 'Закрыть' : 'Close'}
             </button>
           </div>

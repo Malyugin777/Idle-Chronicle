@@ -7,7 +7,7 @@ const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  backgroundColor: '#0e141b',
+  transparent: true, // Background handled by React
   scale: {
     mode: Phaser.Scale.RESIZE,
     width: '100%',
