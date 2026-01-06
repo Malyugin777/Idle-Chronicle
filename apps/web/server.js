@@ -812,6 +812,20 @@ app.prepare().then(async () => {
         res.end(JSON.stringify(data));
       };
 
+      // CORS for admin endpoints
+      if (parsedUrl.pathname.startsWith('/api/admin')) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Password');
+
+        // Handle preflight
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+      }
+
       // Admin auth
       if (parsedUrl.pathname === '/api/admin/auth' && req.method === 'POST') {
         const body = await parseBody();
