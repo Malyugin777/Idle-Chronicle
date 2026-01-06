@@ -16,6 +16,8 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
+const APP_VERSION = 'v1.0.1';
+
 interface BossState {
   name: string;
   nameRu?: string;
@@ -400,9 +402,12 @@ export default function PhaserGame() {
               <span className="text-xs text-gray-500 ml-2">({bossState.bossIndex}/{bossState.totalBosses})</span>
             </div>
           </div>
-          <span className="text-xs text-gray-400">
-            {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-          </span>
+          <div className="text-right">
+            <span className="text-xs text-gray-400">
+              {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+            </span>
+            <div className="text-[10px] text-gray-600">{APP_VERSION}</div>
+          </div>
         </div>
         <div className="text-xs text-white mb-1">
           {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
