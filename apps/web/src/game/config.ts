@@ -16,6 +16,11 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     zoom: 1 / dpr,  // Handle high-DPI displays
   },
   scene: [BattleScene],
+  // FPS limit to reduce GPU load
+  fps: {
+    target: 30,        // 30 FPS достаточно для idle кликера
+    forceSetTimeOut: true,  // Более стабильное ограничение
+  },
   physics: {
     default: 'arcade',
     arcade: {
@@ -26,6 +31,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   render: {
     pixelArt: false,
     antialias: true,
+    powerPreference: 'low-power',  // Экономия GPU
   },
   audio: {
     disableWebAudio: true,
