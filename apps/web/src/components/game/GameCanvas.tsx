@@ -388,6 +388,9 @@ export default function GameCanvas() {
     socket.on('starter:error', (data: { message: string }) => {
       console.error('[Starter] Error:', data.message);
       setOpeningChest(false);
+      // If already opened or other error, just close welcome and let them play
+      setShowWelcome(false);
+      setWelcomeStage(1);
     });
 
     // Tap batching - flush every 100ms
@@ -832,7 +835,7 @@ export default function GameCanvas() {
         </div>
       )}
 
-      {/* Welcome Popup for First-Time Players - Two Stages */}
+      {/* Welcome Popup for First-Time Players - Three Stages */}
       {showWelcome && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
           {welcomeStage === 1 ? (
