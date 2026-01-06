@@ -266,13 +266,53 @@ const BUFFS = {
 };
 
 // Chest config (opening durations in ms)
+// Types: WOODEN, BRONZE, SILVER, GOLD
 const CHEST_CONFIG = {
-  COMMON: { duration: 5 * 60 * 1000 },        // 5 min
-  UNCOMMON: { duration: 30 * 60 * 1000 },     // 30 min
-  RARE: { duration: 4 * 60 * 60 * 1000 },     // 4 hours
-  EPIC: { duration: 8 * 60 * 60 * 1000 },     // 8 hours
-  LEGENDARY: { duration: 24 * 60 * 60 * 1000 }, // 24 hours
+  WOODEN: { duration: 5 * 60 * 1000, icon: '🪵', name: 'Деревянный' },       // 5 min
+  BRONZE: { duration: 30 * 60 * 1000, icon: '🟫', name: 'Бронзовый' },       // 30 min
+  SILVER: { duration: 4 * 60 * 60 * 1000, icon: '🪙', name: 'Серебряный' },  // 4 hours
+  GOLD: { duration: 8 * 60 * 60 * 1000, icon: '🟨', name: 'Золотой' },       // 8 hours
 };
+
+// Drop rates for each chest type
+// Item rarities: COMMON (white), UNCOMMON (green), RARE (purple), EPIC (orange)
+const CHEST_DROP_RATES = {
+  WOODEN: {
+    items: { COMMON: 0.80, UNCOMMON: 0.05, RARE: 0, EPIC: 0 },
+    gold: { min: 100, max: 500 },
+    enchantChance: 0.03,
+    enchantQty: [1, 1],
+  },
+  BRONZE: {
+    items: { COMMON: 0.80, UNCOMMON: 0.20, RARE: 0.03, EPIC: 0 },
+    gold: { min: 500, max: 2000 },
+    enchantChance: 0.15,
+    enchantQty: [1, 1],
+  },
+  SILVER: {
+    items: { COMMON: 0, UNCOMMON: 0.40, RARE: 0.10, EPIC: 0.03 },
+    gold: { min: 2000, max: 10000 },
+    enchantChance: 0.25,
+    enchantQty: [1, 5],
+  },
+  GOLD: {
+    items: { COMMON: 0, UNCOMMON: 0, RARE: 0.15, EPIC: 0.05 },
+    gold: { min: 10000, max: 50000 },
+    enchantChance: 0.45,
+    enchantQty: [1, 5],
+  },
+};
+
+// Starter equipment set codes
+const STARTER_EQUIPMENT = [
+  { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 10 },
+  { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2 },
+  { code: 'starter-chest', slot: 'CHEST', name: 'Нагрудник новичка', icon: '🎽', pDef: 3 },
+  { code: 'starter-gloves', slot: 'GLOVES', name: 'Перчатки новичка', icon: '🧤', pDef: 1 },
+  { code: 'starter-legs', slot: 'LEGS', name: 'Поножи новичка', icon: '👖', pDef: 2 },
+  { code: 'starter-boots', slot: 'BOOTS', name: 'Ботинки новичка', icon: '👢', pDef: 1 },
+  { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2 },
+];
 
 // Stat upgrade cost formula
 function getUpgradeCost(level) {
@@ -567,25 +607,27 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   const finalBlowPlayer = killerPlayer;
 
   // Prize pool from boss config
-  const tonPool = bossState.tonReward || 10;
+  const diamondPool = bossState.tonReward || 10; // Using tonReward field for diamonds (Ancient Coins)
   const chestsPool = bossState.chestsReward || 10;
   const expPool = bossState.expReward || 1000000;
   const adenaPool = bossState.adenaReward || 5000;
 
-  // TON and Chests: 50% to final blow, 50% to top damage
-  const tonForFinalBlow = tonPool / 2;
-  const tonForTopDamage = tonPool / 2;
+  // Diamonds and Chests: 50% to final blow, 50% to top damage
+  const diamondsForFinalBlow = Math.floor(diamondPool / 2);
+  const diamondsForTopDamage = Math.ceil(diamondPool / 2);
   const chestsForFinalBlow = Math.floor(chestsPool / 2);
   const chestsForTopDamage = Math.ceil(chestsPool / 2);
 
-  // Helper: generate random chest rarity
-  const getRandomChestRarity = () => {
+  // Helper: generate random chest TYPE (based on boss index)
+  const getRandomChestType = () => {
     const roll = Math.random();
-    if (roll < 0.50) return 'COMMON';
-    if (roll < 0.80) return 'UNCOMMON';
-    if (roll < 0.95) return 'RARE';
-    if (roll < 0.99) return 'EPIC';
-    return 'LEGENDARY';
+    // Higher boss index = better chest chances
+    const bossBonus = Math.min(currentBossIndex * 0.02, 0.3); // Max 30% bonus
+
+    if (roll < 0.50 - bossBonus) return 'WOODEN';
+    if (roll < 0.80 - bossBonus / 2) return 'BRONZE';
+    if (roll < 0.95) return 'SILVER';
+    return 'GOLD';
   };
 
   // Distribute rewards to all participants
@@ -594,20 +636,20 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     const damagePercent = entry.damage / totalDamageDealt;
     let adenaReward = Math.floor(adenaPool * damagePercent);
     let expReward = Math.floor(expPool * damagePercent);
-    let tonReward = 0;
+    let diamondReward = 0; // Ancient Coins (Алмазики)
     let chestsReward = 0;
 
-    // Final blow gets 50% TON and chests
+    // Final blow gets 50% Diamonds and chests
     const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
     if (isFinalBlow) {
-      tonReward += tonForFinalBlow;
+      diamondReward += diamondsForFinalBlow;
       chestsReward += chestsForFinalBlow;
     }
 
-    // Top damage gets 50% TON and chests
+    // Top damage gets 50% Diamonds and chests
     const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
     if (isTopDamage) {
-      tonReward += tonForTopDamage;
+      diamondReward += diamondsForTopDamage;
       chestsReward += chestsForTopDamage;
     }
 
@@ -619,7 +661,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       damagePercent: Math.round(damagePercent * 100),
       adenaReward,
       expReward,
-      tonReward,
+      diamondReward, // Ancient Coins (Алмазики)
       chestsReward,
       isFinalBlow,
       isTopDamage,
@@ -632,7 +674,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
         data: {
           adena: { increment: BigInt(adenaReward) },
           exp: { increment: BigInt(expReward) },
-          tonBalance: { increment: tonReward },
+          ancientCoin: { increment: diamondReward }, // Ancient Coins (Алмазики)
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: isFinalBlow ? 1 : 0 },
         },
@@ -654,32 +696,18 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
 
         if (chestsToCreate > 0) {
           const chestCreates = [];
-          const rarityIncrements = { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 };
 
           for (let i = 0; i < chestsToCreate; i++) {
-            const rarity = getRandomChestRarity();
-            rarityIncrements[rarity]++;
+            const chestType = getRandomChestType();
             chestCreates.push({
               userId: entry.odamage,
-              rarity: rarity,
-              openingDuration: CHEST_CONFIG[rarity].duration,
+              chestType: chestType,
+              openingDuration: CHEST_CONFIG[chestType].duration,
               fromBossId: bossState.id,
               fromSessionId: bossState.sessionId,
             });
           }
           await prisma.chest.createMany({ data: chestCreates });
-
-          // Update total chests counters
-          await prisma.user.update({
-            where: { id: entry.odamage },
-            data: {
-              totalChestsCommon: { increment: rarityIncrements.COMMON },
-              totalChestsUncommon: { increment: rarityIncrements.UNCOMMON },
-              totalChestsRare: { increment: rarityIncrements.RARE },
-              totalChestsEpic: { increment: rarityIncrements.EPIC },
-              totalChestsLegendary: { increment: rarityIncrements.LEGENDARY },
-            },
-          });
         }
       }
 
@@ -1023,7 +1051,7 @@ app.prepare().then(async () => {
         // Give chests
         if (parsedUrl.pathname === '/api/admin/chests/give' && req.method === 'POST') {
           const body = await parseBody();
-          const { userId, rarity, quantity } = body;
+          const { userId, chestType, quantity } = body;
 
           const user = await prisma.user.findUnique({ where: { id: userId } });
           if (!user) {
@@ -1031,16 +1059,112 @@ app.prepare().then(async () => {
             return;
           }
 
+          const type = chestType || 'WOODEN';
           const chestCreates = [];
           for (let i = 0; i < (quantity || 1); i++) {
             chestCreates.push({
               userId: userId,
-              rarity: rarity || 'COMMON',
-              openingDuration: CHEST_CONFIG[rarity || 'COMMON'].duration,
+              chestType: type,
+              openingDuration: CHEST_CONFIG[type].duration,
             });
           }
           await prisma.chest.createMany({ data: chestCreates });
           sendJson({ success: true, quantity: chestCreates.length });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // EQUIPMENT MANAGEMENT
+        // ═══════════════════════════════════════════════════════════
+
+        // Create equipment template
+        if (parsedUrl.pathname === '/api/admin/equipment/create' && req.method === 'POST') {
+          const body = await parseBody();
+          const { code, name, nameRu, icon, slot, rarity, pAtkMin, pAtkMax, pDefMin, pDefMax } = body;
+
+          if (!code || !name || !slot) {
+            sendJson({ success: false, error: 'code, name and slot are required' }, 400);
+            return;
+          }
+
+          // Check if code already exists
+          const existing = await prisma.equipment.findUnique({ where: { code } });
+          if (existing) {
+            sendJson({ success: false, error: 'Equipment with this code already exists' }, 400);
+            return;
+          }
+
+          const equipment = await prisma.equipment.create({
+            data: {
+              code,
+              name,
+              nameRu: nameRu || name,
+              icon: icon || '📦',
+              slot,
+              rarity: rarity || 'COMMON',
+              pAtkMin: pAtkMin || 0,
+              pAtkMax: pAtkMax || 0,
+              pDefMin: pDefMin || 0,
+              pDefMax: pDefMax || 0,
+              droppable: true,
+            },
+          });
+
+          sendJson({ success: true, equipment });
+          return;
+        }
+
+        // List all equipment templates
+        if (parsedUrl.pathname === '/api/admin/equipment/list' && req.method === 'GET') {
+          const equipment = await prisma.equipment.findMany({
+            orderBy: [{ slot: 'asc' }, { rarity: 'asc' }, { name: 'asc' }],
+          });
+          sendJson({ success: true, equipment });
+          return;
+        }
+
+        // Give equipment to user
+        if (parsedUrl.pathname === '/api/admin/equipment/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { userId, code, enchant, isEquipped } = body;
+
+          if (!userId || !code) {
+            sendJson({ success: false, error: 'userId and code are required' }, 400);
+            return;
+          }
+
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+
+          const equipment = await prisma.equipment.findUnique({ where: { code } });
+          if (!equipment) {
+            sendJson({ success: false, error: 'Equipment not found' }, 404);
+            return;
+          }
+
+          // Roll stats
+          const rolledPAtk = equipment.pAtkMax > 0
+            ? Math.floor(Math.random() * (equipment.pAtkMax - equipment.pAtkMin + 1)) + equipment.pAtkMin
+            : 0;
+          const rolledPDef = equipment.pDefMax > 0
+            ? Math.floor(Math.random() * (equipment.pDefMax - equipment.pDefMin + 1)) + equipment.pDefMin
+            : 0;
+
+          const userEquip = await prisma.userEquipment.create({
+            data: {
+              userId,
+              equipmentId: equipment.id,
+              pAtk: rolledPAtk,
+              pDef: rolledPDef,
+              enchant: enchant || 0,
+              isEquipped: isEquipped || false,
+            },
+          });
+
+          sendJson({ success: true, userEquipment: userEquip, equipment });
           return;
         }
 
@@ -1437,6 +1561,64 @@ app.prepare().then(async () => {
             },
           });
           console.log(`[Auth] New user created: ${data.telegramId}, lang: ${userLang}`);
+
+          // ═══════════════════════════════════════════════════════════
+          // STARTER PACK - Give new users starter equipment + chest
+          // ═══════════════════════════════════════════════════════════
+          try {
+            // 1. Create starter equipment templates if they don't exist
+            for (const starter of STARTER_EQUIPMENT) {
+              let equipment = await prisma.equipment.findUnique({
+                where: { code: starter.code },
+              });
+
+              if (!equipment) {
+                equipment = await prisma.equipment.create({
+                  data: {
+                    code: starter.code,
+                    name: starter.name,
+                    nameRu: starter.name,
+                    icon: starter.icon,
+                    slot: starter.slot,
+                    rarity: 'COMMON',
+                    pAtkMin: starter.pAtk || 0,
+                    pAtkMax: starter.pAtk || 0,
+                    pDefMin: starter.pDef || 0,
+                    pDefMax: starter.pDef || 0,
+                    droppable: false, // Starter items don't drop from chests
+                  },
+                });
+                console.log(`[Starter] Created equipment template: ${starter.code}`);
+              }
+
+              // 2. Give equipment to user and auto-equip
+              await prisma.userEquipment.create({
+                data: {
+                  userId: user.id,
+                  equipmentId: equipment.id,
+                  pAtk: starter.pAtk || 0,
+                  pDef: starter.pDef || 0,
+                  enchant: 0,
+                  isEquipped: true, // Auto-equip starter gear
+                },
+              });
+            }
+            console.log(`[Starter] Gave ${STARTER_EQUIPMENT.length} starter items to user ${user.id}`);
+
+            // 3. Give starter WOODEN chest
+            await prisma.chest.create({
+              data: {
+                userId: user.id,
+                chestType: 'WOODEN',
+                openingDuration: CHEST_CONFIG.WOODEN.duration,
+              },
+            });
+            console.log(`[Starter] Gave starter WOODEN chest to user ${user.id}`);
+
+          } catch (starterErr) {
+            console.error('[Starter] Error giving starter pack:', starterErr.message);
+          }
+
         } else {
           // Update language if changed
           if (user.language !== userLang) {
@@ -1447,22 +1629,6 @@ app.prepare().then(async () => {
             user.language = userLang;
           }
           console.log(`[Auth] Existing user: ${data.telegramId}, lang: ${userLang}`);
-        }
-
-        // Calculate offline earnings
-        const offlineEarnings = calculateOfflineEarnings(user, user.lastOnline);
-        let offlineAdena = 0;
-
-        if (offlineEarnings.adena > 0) {
-          offlineAdena = offlineEarnings.adena;
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              adena: { increment: BigInt(offlineAdena) },
-              offlineEarnings: { increment: BigInt(offlineAdena) },
-            },
-          });
-          user.adena = BigInt(Number(user.adena) + offlineAdena);
         }
 
         // Update player state from DB
@@ -1523,14 +1689,6 @@ app.prepare().then(async () => {
           value: b.value,
           expiresAt: b.expiresAt.getTime(),
         }));
-
-        // Send offline earnings notification if any
-        if (offlineAdena > 0) {
-          socket.emit('offline:earnings', {
-            adena: offlineAdena,
-            hours: offlineEarnings.hours,
-          });
-        }
 
         // Calculate expToNext based on level
         const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
@@ -1876,7 +2034,7 @@ app.prepare().then(async () => {
         socket.emit('chest:data', {
           chests: chests.map(c => ({
             id: c.id,
-            rarity: c.rarity,
+            chestType: c.chestType,
             openingStarted: c.openingStarted?.getTime() || null,
             openingDuration: c.openingDuration,
           })),
@@ -1922,7 +2080,7 @@ app.prepare().then(async () => {
 
         socket.emit('chest:opened', {
           id: chest.id,
-          rarity: chest.rarity,
+          chestType: chest.chestType,
           openingStarted: chest.openingStarted.getTime(),
           openingDuration: chest.openingDuration,
         });
@@ -1962,23 +2120,107 @@ app.prepare().then(async () => {
           return;
         }
 
-        // Generate loot based on rarity
-        const lootTable = {
-          COMMON: { adena: [100, 500], exp: [1000, 5000] },
-          UNCOMMON: { adena: [500, 2000], exp: [5000, 20000] },
-          RARE: { adena: [2000, 10000], exp: [20000, 100000] },
-          EPIC: { adena: [10000, 50000], exp: [100000, 500000] },
-          LEGENDARY: { adena: [50000, 200000], exp: [500000, 2000000], ton: [0.1, 1] },
-        };
+        // Generate loot based on chest TYPE (WOODEN, BRONZE, SILVER, GOLD)
+        const chestType = chest.chestType || 'WOODEN';
+        const dropRates = CHEST_DROP_RATES[chestType];
 
-        const loot = lootTable[chest.rarity];
-        const adenaReward = Math.floor(Math.random() * (loot.adena[1] - loot.adena[0]) + loot.adena[0]);
-        const expReward = Math.floor(Math.random() * (loot.exp[1] - loot.exp[0]) + loot.exp[0]);
-        let tonReward = 0;
+        // Gold reward
+        const adenaReward = Math.floor(Math.random() * (dropRates.gold.max - dropRates.gold.min) + dropRates.gold.min);
+        const expReward = adenaReward * 10; // EXP = gold * 10
 
-        if (loot.ton) {
-          tonReward = Math.round((Math.random() * (loot.ton[1] - loot.ton[0]) + loot.ton[0]) * 100) / 100;
+        // Enchant scrolls
+        let enchantScrolls = 0;
+        if (Math.random() < dropRates.enchantChance) {
+          const [minQty, maxQty] = dropRates.enchantQty;
+          enchantScrolls = Math.floor(Math.random() * (maxQty - minQty + 1)) + minQty;
         }
+
+        // Item drop (roll for rarity)
+        let droppedItem = null;
+        let droppedItemRarity = null;
+        const itemRoll = Math.random();
+        let cumulative = 0;
+
+        for (const [rarity, chance] of Object.entries(dropRates.items)) {
+          cumulative += chance;
+          if (itemRoll < cumulative && chance > 0) {
+            droppedItemRarity = rarity;
+            break;
+          }
+        }
+
+        // If item dropped, create random equipment piece
+        if (droppedItemRarity) {
+          // Get all equipment of this rarity or create generic
+          const slots = ['WEAPON', 'HELMET', 'CHEST', 'GLOVES', 'LEGS', 'BOOTS', 'SHIELD'];
+          const randomSlot = slots[Math.floor(Math.random() * slots.length)];
+
+          // Find or create equipment template
+          let equipment = await prisma.equipment.findFirst({
+            where: { slot: randomSlot, rarity: droppedItemRarity },
+          });
+
+          if (!equipment) {
+            // Create equipment template on-the-fly
+            const slotNames = {
+              WEAPON: { name: 'Меч', icon: '🗡️', pAtk: true },
+              HELMET: { name: 'Шлем', icon: '⛑️', pDef: true },
+              CHEST: { name: 'Нагрудник', icon: '🎽', pDef: true },
+              GLOVES: { name: 'Перчатки', icon: '🧤', pDef: true },
+              LEGS: { name: 'Поножи', icon: '👖', pDef: true },
+              BOOTS: { name: 'Ботинки', icon: '👢', pDef: true },
+              SHIELD: { name: 'Щит', icon: '🛡️', pDef: true },
+            };
+            const slotInfo = slotNames[randomSlot];
+            const rarityMultiplier = { COMMON: 1, UNCOMMON: 1.2, RARE: 1.5, EPIC: 1.8 };
+            const mult = rarityMultiplier[droppedItemRarity] || 1;
+
+            equipment = await prisma.equipment.create({
+              data: {
+                code: `${randomSlot.toLowerCase()}-${droppedItemRarity.toLowerCase()}-${Date.now()}`,
+                name: slotInfo.name,
+                nameRu: slotInfo.name,
+                icon: slotInfo.icon,
+                slot: randomSlot,
+                rarity: droppedItemRarity,
+                pAtkMin: slotInfo.pAtk ? Math.floor(10 * mult) : 0,
+                pAtkMax: slotInfo.pAtk ? Math.floor(20 * mult) : 0,
+                pDefMin: slotInfo.pDef ? Math.floor(1 * mult) : 0,
+                pDefMax: slotInfo.pDef ? Math.floor(5 * mult) : 0,
+              },
+            });
+          }
+
+          // Roll stats for user equipment
+          const rolledPAtk = equipment.pAtkMax > 0
+            ? Math.floor(Math.random() * (equipment.pAtkMax - equipment.pAtkMin + 1)) + equipment.pAtkMin
+            : 0;
+          const rolledPDef = equipment.pDefMax > 0
+            ? Math.floor(Math.random() * (equipment.pDefMax - equipment.pDefMin + 1)) + equipment.pDefMin
+            : 0;
+
+          await prisma.userEquipment.create({
+            data: {
+              userId: player.odamage,
+              equipmentId: equipment.id,
+              pAtk: rolledPAtk,
+              pDef: rolledPDef,
+              enchant: 0,
+              isEquipped: false,
+            },
+          });
+
+          droppedItem = {
+            name: equipment.name,
+            icon: equipment.icon,
+            rarity: droppedItemRarity,
+            pAtk: rolledPAtk,
+            pDef: rolledPDef,
+          };
+        }
+
+        // Update chest type counter
+        const chestTypeCounterField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
 
         // Delete chest and give rewards
         await prisma.chest.delete({ where: { id: chestId } });
@@ -1988,8 +2230,9 @@ app.prepare().then(async () => {
           data: {
             adena: { increment: BigInt(adenaReward) },
             exp: { increment: BigInt(expReward) },
-            tonBalance: { increment: tonReward },
             totalGoldEarned: { increment: BigInt(adenaReward) },
+            enchantScrolls: { increment: enchantScrolls },
+            [chestTypeCounterField]: { increment: 1 },
           },
         });
 
@@ -1997,11 +2240,12 @@ app.prepare().then(async () => {
 
         socket.emit('chest:claimed', {
           chestId,
-          rarity: chest.rarity,
+          chestType,
           rewards: {
             adena: adenaReward,
             exp: expReward,
-            ton: tonReward,
+            enchantScrolls,
+            item: droppedItem,
           },
         });
       } catch (err) {
@@ -2050,7 +2294,8 @@ app.prepare().then(async () => {
         socket.emit('loot:stats', {
           totalGoldEarned: 0,
           chestSlots: 5,
-          totalChests: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+          enchantScrolls: 0,
+          totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
         });
         return;
       }
@@ -2061,23 +2306,23 @@ app.prepare().then(async () => {
           select: {
             totalGoldEarned: true,
             chestSlots: true,
-            totalChestsCommon: true,
-            totalChestsUncommon: true,
-            totalChestsRare: true,
-            totalChestsEpic: true,
-            totalChestsLegendary: true,
+            enchantScrolls: true,
+            totalChestsWooden: true,
+            totalChestsBronze: true,
+            totalChestsSilver: true,
+            totalChestsGold: true,
           },
         });
 
         socket.emit('loot:stats', {
           totalGoldEarned: Number(user?.totalGoldEarned || 0),
           chestSlots: user?.chestSlots || 5,
+          enchantScrolls: user?.enchantScrolls || 0,
           totalChests: {
-            COMMON: user?.totalChestsCommon || 0,
-            UNCOMMON: user?.totalChestsUncommon || 0,
-            RARE: user?.totalChestsRare || 0,
-            EPIC: user?.totalChestsEpic || 0,
-            LEGENDARY: user?.totalChestsLegendary || 0,
+            WOODEN: user?.totalChestsWooden || 0,
+            BRONZE: user?.totalChestsBronze || 0,
+            SILVER: user?.totalChestsSilver || 0,
+            GOLD: user?.totalChestsGold || 0,
           },
         });
       } catch (err) {
@@ -2085,7 +2330,8 @@ app.prepare().then(async () => {
         socket.emit('loot:stats', {
           totalGoldEarned: 0,
           chestSlots: 5,
-          totalChests: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+          enchantScrolls: 0,
+          totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
         });
       }
     });

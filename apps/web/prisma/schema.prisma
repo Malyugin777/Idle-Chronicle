@@ -75,11 +75,15 @@ model User {
   // Chest Slots System
   chestSlots      Int      @default(5)    // Unlocked chest slots (5-10), buy more for 999 crystals
   totalGoldEarned BigInt   @default(0)    // Total adena earned all-time
-  totalChestsCommon   Int  @default(0)    // Total common chests earned
-  totalChestsUncommon Int  @default(0)    // Total uncommon chests earned
-  totalChestsRare     Int  @default(0)    // Total rare chests earned
-  totalChestsEpic     Int  @default(0)    // Total epic chests earned
-  totalChestsLegendary Int @default(0)    // Total legendary chests earned
+
+  // Total chests opened by TYPE
+  totalChestsWooden   Int  @default(0)
+  totalChestsBronze   Int  @default(0)
+  totalChestsSilver   Int  @default(0)
+  totalChestsGold     Int  @default(0)
+
+  // Enchant scrolls
+  enchantScrolls  Int      @default(0)    // Свитки заточки
 
   // Consumables
   soulshotNG      Int      @default(100)
@@ -92,7 +96,7 @@ model User {
 
   activeSoulshot  String?
 
-  // Equipment
+  // Equipment (legacy weapon)
   weaponId        String?
   weapon          Weapon?  @relation(fields: [weaponId], references: [id])
   weaponEnchant   Int      @default(0)
@@ -111,6 +115,7 @@ model User {
   updatedAt       DateTime @updatedAt
 
   inventory       InventoryItem[]
+  equipment       UserEquipment[]
   damageLog       DamageLog[]
   buffs           ActiveBuff[]
   tasks           UserTask[]
@@ -121,7 +126,74 @@ model User {
 }
 
 // ═══════════════════════════════════════════════════════════
-// WEAPONS
+// EQUIPMENT SYSTEM
+// ═══════════════════════════════════════════════════════════
+
+model Equipment {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  nameRu      String        @default("")
+  icon        String        @default("🗡️")
+
+  slot        EquipmentSlot
+  rarity      ItemRarity    @default(COMMON)
+
+  // Base stats (varies by rarity)
+  pAtkMin     Int           @default(0)
+  pAtkMax     Int           @default(0)
+  pDefMin     Int           @default(0)
+  pDefMax     Int           @default(0)
+
+  // Can drop from chests
+  droppable   Boolean       @default(true)
+
+  userEquipment UserEquipment[]
+}
+
+model UserEquipment {
+  id          String        @id @default(cuid())
+  userId      String
+  equipmentId String
+
+  // Rolled stats (fixed when obtained)
+  pAtk        Int           @default(0)
+  pDef        Int           @default(0)
+
+  // Enchant level (+1, +2, etc.)
+  enchant     Int           @default(0)
+
+  // Is currently equipped?
+  isEquipped  Boolean       @default(false)
+
+  createdAt   DateTime      @default(now())
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipment   Equipment     @relation(fields: [equipmentId], references: [id])
+
+  @@index([userId])
+  @@index([equipmentId])
+}
+
+enum EquipmentSlot {
+  WEAPON      // Оружие
+  HELMET      // Шлем
+  CHEST       // Нагрудник
+  GLOVES      // Перчатки
+  LEGS        // Поножи
+  BOOTS       // Ботинки
+  SHIELD      // Щит
+}
+
+enum ItemRarity {
+  COMMON      // Белый, без glow
+  UNCOMMON    // Зеленый, с glow
+  RARE        // Фиолетовый, с glow
+  EPIC        // Оранжевый, с glow
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEAPONS (legacy - keep for compatibility)
 // ═══════════════════════════════════════════════════════════
 
 model Weapon {
@@ -179,9 +251,9 @@ enum BuffType {
 // ═══════════════════════════════════════════════════════════
 
 model Chest {
-  id              String      @id @default(cuid())
+  id              String    @id @default(cuid())
   userId          String
-  rarity          ChestRarity @default(COMMON)
+  chestType       ChestType @default(WOODEN)
 
   openingStarted  DateTime?   // null = not opening, set = timer started
   openingDuration Int         // Duration in ms to open
@@ -196,12 +268,11 @@ model Chest {
   @@index([userId])
 }
 
-enum ChestRarity {
-  COMMON      // 5 min
-  UNCOMMON    // 30 min
-  RARE        // 4 hours
-  EPIC        // 8 hours
-  LEGENDARY   // 24 hours
+enum ChestType {
+  WOODEN      // 🪵 Деревянный - 5 min
+  BRONZE      // 🟫 Бронзовый - 30 min
+  SILVER      // 🪙 Серебряный - 4 hours
+  GOLD        // 🟨 Золотой - 8 hours
 }
 
 // ═══════════════════════════════════════════════════════════

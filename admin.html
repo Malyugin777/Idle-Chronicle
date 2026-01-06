@@ -6,136 +6,371 @@
   <title>Admin Panel - Idle Chronicle</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      color: #fff;
+
+    :root {
+      --bg-dark: #0d0d0d;
+      --bg-panel: #1a1a1a;
+      --bg-card: #242424;
+      --bg-input: #2d2d2d;
+      --border: #333;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --gold: #f7b731;
+      --gold-dark: #c9941f;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --info: #3b82f6;
+      --purple: #a855f7;
     }
-    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    .header {
-      background: rgba(0,0,0,0.3);
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-dark);
+      min-height: 100vh;
+      color: var(--text);
+      display: flex;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      height: 100vh;
+      z-index: 100;
+    }
+
+    .sidebar-header {
       padding: 20px;
-      border-radius: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header h1 {
+      color: var(--gold);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sidebar-header h1::before {
+      content: '\2694';
+      font-size: 24px;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 15px 10px;
+      overflow-y: auto;
+    }
+
+    .nav-section {
       margin-bottom: 20px;
+    }
+    .nav-section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 10px;
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s;
+      font-size: 14px;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover {
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .nav-item.active {
+      background: rgba(247, 183, 49, 0.15);
+      color: var(--gold);
+    }
+    .nav-item .icon {
+      font-size: 18px;
+      width: 24px;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 15px;
+      border-top: 1px solid var(--border);
+    }
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+    .status-dot.online { background: var(--success); }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      margin-left: 240px;
+      padding: 30px;
+      min-height: 100vh;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+    }
+    .page-header h2 {
+      font-size: 24px;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+    .page-header p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-    .header h1 { color: #f7b731; font-size: 24px; }
-    .status { display: flex; gap: 15px; align-items: center; }
-    .status-item { font-size: 12px; color: #888; }
-    .status-item.online { color: #2ed573; }
-
-    .tabs {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-    .tab {
-      padding: 10px 20px;
-      background: rgba(255,255,255,0.1);
-      border: none;
-      border-radius: 8px 8px 0 0;
-      color: #aaa;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    .tab:hover { background: rgba(255,255,255,0.15); color: #fff; }
-    .tab.active { background: rgba(247,183,49,0.2); color: #f7b731; }
-
-    .panel {
-      background: rgba(0,0,0,0.3);
-      border-radius: 10px;
-      padding: 20px;
-      display: none;
-    }
-    .panel.active { display: block; }
-
-    .section {
-      background: rgba(255,255,255,0.05);
-      border-radius: 8px;
-      padding: 15px;
       margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border);
     }
-    .section h3 {
-      color: #f7b731;
-      font-size: 14px;
-      margin-bottom: 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      padding-bottom: 5px;
-    }
-
-    .form-group {
-      margin-bottom: 10px;
-    }
-    .form-group label {
-      display: block;
-      font-size: 12px;
-      color: #888;
-      margin-bottom: 4px;
-    }
-    .form-group input, .form-group select, .form-group textarea {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 6px;
-      background: rgba(0,0,0,0.3);
-      color: #fff;
-      font-size: 14px;
-    }
-    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-      outline: none;
-      border-color: #f7b731;
-    }
-    .form-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    .card-header h3 {
+      font-size: 16px;
+      color: var(--gold);
+      display: flex;
+      align-items: center;
       gap: 10px;
     }
 
+    /* Forms */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-input);
+      color: var(--text);
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+    .form-group input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Buttons */
     .btn {
       padding: 10px 20px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 14px;
       font-weight: 600;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
-    .btn-primary { background: #f7b731; color: #000; }
-    .btn-primary:hover { background: #f5a623; }
-    .btn-danger { background: #e74c3c; color: #fff; }
-    .btn-danger:hover { background: #c0392b; }
-    .btn-success { background: #2ed573; color: #000; }
-    .btn-success:hover { background: #26c064; }
-    .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
-    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+    .btn-primary {
+      background: var(--gold);
+      color: #000;
+    }
+    .btn-primary:hover { background: var(--gold-dark); }
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+    .btn-success:hover { background: #16a34a; }
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-input); }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
 
-    .btn-group { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
 
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 13px;
     }
     th, td {
-      padding: 8px;
+      padding: 12px;
       text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      border-bottom: 1px solid var(--border);
     }
-    th { color: #888; font-weight: 600; }
-    tr:hover { background: rgba(255,255,255,0.05); }
-
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    tr:hover td {
+      background: var(--bg-card);
+    }
     .user-photo {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       object-fit: cover;
     }
 
+    /* Search */
+    .search-box {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 12px 15px 12px 45px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-input);
+      color: var(--text);
+      font-size: 14px;
+    }
+    .search-box::before {
+      content: '\1F50D';
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-gold { background: rgba(247, 183, 49, 0.2); color: var(--gold); }
+    .badge-success { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .badge-purple { background: rgba(168, 85, 247, 0.2); color: var(--purple); }
+
+    /* Chest types */
+    .chest-wooden { color: #b45309; }
+    .chest-bronze { color: #ea580c; }
+    .chest-silver { color: #94a3b8; }
+    .chest-gold { color: #eab308; }
+
+    /* Rarity colors */
+    .rarity-common { color: #9ca3af; }
+    .rarity-uncommon { color: #22c55e; }
+    .rarity-rare { color: #a855f7; }
+    .rarity-epic { color: #f97316; }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 5px;
+    }
+
+    /* Alerts */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+    .alert-success { background: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid rgba(34, 197, 94, 0.3); }
+    .alert-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .alert-info { background: rgba(59, 130, 246, 0.15); color: var(--info); border: 1px solid rgba(59, 130, 246, 0.3); }
+
+    /* Modal */
     .modal {
       display: none;
       position: fixed;
@@ -143,196 +378,282 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0, 0, 0, 0.8);
       z-index: 1000;
       align-items: center;
       justify-content: center;
     }
     .modal.active { display: flex; }
     .modal-content {
-      background: #1a1a2e;
-      border-radius: 10px;
-      padding: 20px;
-      max-width: 500px;
-      width: 90%;
-      max-height: 80vh;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 25px;
+      max-width: 600px;
+      width: 95%;
+      max-height: 85vh;
       overflow-y: auto;
     }
     .modal-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
     }
-    .modal-header h2 { color: #f7b731; font-size: 18px; }
+    .modal-header h2 {
+      color: var(--gold);
+      font-size: 20px;
+    }
     .modal-close {
       background: none;
       border: none;
-      color: #888;
-      font-size: 24px;
+      color: var(--text-muted);
+      font-size: 28px;
       cursor: pointer;
+      padding: 5px;
+      line-height: 1;
     }
+    .modal-close:hover { color: var(--text); }
 
-    .alert {
-      padding: 10px 15px;
-      border-radius: 6px;
-      margin-bottom: 15px;
-      font-size: 13px;
-    }
-    .alert-success { background: rgba(46,213,115,0.2); color: #2ed573; }
-    .alert-error { background: rgba(231,76,60,0.2); color: #e74c3c; }
-    .alert-info { background: rgba(52,152,219,0.2); color: #3498db; }
-
-    .loading {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      border-top-color: #f7b731;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .boss-card {
-      background: rgba(255,255,255,0.05);
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-    .boss-card.active { border: 2px solid #f7b731; }
-    .boss-icon { font-size: 40px; }
-    .boss-info { flex: 1; }
-    .boss-name { font-weight: 600; color: #fff; }
-    .boss-stats { font-size: 12px; color: #888; }
-
-    .search-box {
-      margin-bottom: 15px;
-    }
-    .search-box input {
-      width: 100%;
-      padding: 10px 15px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 6px;
-      background: rgba(0,0,0,0.3);
-      color: #fff;
-      font-size: 14px;
-    }
-
-    .broadcast-preview {
-      background: rgba(0,0,0,0.3);
-      border-radius: 8px;
-      padding: 15px;
-      margin-top: 10px;
-    }
-    .broadcast-preview h4 { font-size: 12px; color: #888; margin-bottom: 8px; }
-    .broadcast-msg {
-      background: rgba(255,255,255,0.05);
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-
+    /* Auth overlay */
     #authOverlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      background: var(--bg-dark);
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 9999;
     }
     .auth-box {
-      background: rgba(0,0,0,0.3);
-      padding: 30px;
-      border-radius: 10px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      padding: 40px;
+      border-radius: 16px;
       text-align: center;
       max-width: 400px;
+      width: 90%;
     }
-    .auth-box h2 { color: #f7b731; margin-bottom: 20px; }
+    .auth-box h2 {
+      color: var(--gold);
+      margin-bottom: 10px;
+      font-size: 24px;
+    }
+    .auth-box p {
+      color: var(--text-muted);
+      margin-bottom: 25px;
+      font-size: 14px;
+    }
     .auth-box input {
       width: 100%;
-      padding: 12px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 6px;
-      background: rgba(0,0,0,0.3);
-      color: #fff;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-input);
+      color: var(--text);
       font-size: 16px;
       margin-bottom: 15px;
+      text-align: center;
     }
-    .auth-error { color: #e74c3c; font-size: 14px; margin-bottom: 10px; }
+    .auth-error {
+      color: var(--danger);
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
 
     .domain-error {
       text-align: center;
       padding: 50px;
     }
-    .domain-error h1 { color: #e74c3c; margin-bottom: 10px; }
+    .domain-error h1 { color: var(--danger); margin-bottom: 10px; }
+
+    /* Panel visibility */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Boss card */
+    .boss-card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      border: 2px solid transparent;
+    }
+    .boss-card.active { border-color: var(--gold); }
+    .boss-icon { font-size: 50px; }
+    .boss-info { flex: 1; }
+    .boss-name { font-size: 18px; font-weight: 600; }
+    .boss-stats { font-size: 13px; color: var(--text-muted); margin-top: 5px; }
+
+    /* Equipment slot colors */
+    .slot-weapon { color: #ef4444; }
+    .slot-helmet { color: #3b82f6; }
+    .slot-chest { color: #8b5cf6; }
+    .slot-gloves { color: #22c55e; }
+    .slot-legs { color: #f59e0b; }
+    .slot-boots { color: #06b6d4; }
+    .slot-shield { color: #ec4899; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 60px;
+      }
+      .sidebar-header h1 span,
+      .nav-section-title,
+      .nav-item span:not(.icon),
+      .sidebar-footer .server-status span {
+        display: none;
+      }
+      .main-content {
+        margin-left: 60px;
+        padding: 15px;
+      }
+    }
   </style>
 </head>
 <body>
   <!-- Domain Check Error -->
   <div id="domainError" style="display:none" class="domain-error">
     <h1>Access Denied</h1>
-    <p>This admin panel can only be accessed from tnsb.fun domain.</p>
+    <p>This admin panel can only be accessed from allowed domains.</p>
   </div>
 
   <!-- Auth Overlay -->
   <div id="authOverlay">
     <div class="auth-box">
-      <h2>Admin Panel</h2>
-      <p style="color:#888;margin-bottom:20px">Enter admin password</p>
-      <input type="password" id="adminPassword" placeholder="Password" onkeypress="if(event.key==='Enter')checkAuth()">
+      <h2>Idle Chronicle</h2>
+      <p>Admin Panel</p>
+      <input type="password" id="adminPassword" placeholder="Enter password" onkeypress="if(event.key==='Enter')checkAuth()">
       <div id="authError" class="auth-error" style="display:none"></div>
       <button class="btn btn-primary" onclick="checkAuth()" style="width:100%">Login</button>
     </div>
   </div>
 
-  <!-- Main Content -->
+  <!-- Main Layout -->
   <div id="mainContent" style="display:none">
-    <div class="container">
-      <div class="header">
-        <h1>Idle Chronicle Admin</h1>
-        <div class="status">
-          <span class="status-item" id="serverStatus">Server: Connecting...</span>
-          <span class="status-item" id="playersOnline">Players: 0</span>
-          <span class="status-item" id="currentBoss">Boss: Loading...</span>
-        </div>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1><span>Idle Chronicle</span></h1>
       </div>
 
-      <div class="tabs">
-        <button class="tab active" onclick="showTab('boss')">Boss</button>
-        <button class="tab" onclick="showTab('users')">Users</button>
-        <button class="tab" onclick="showTab('broadcast')">Broadcast</button>
-        <button class="tab" onclick="showTab('drops')">Drops</button>
-        <button class="tab" onclick="showTab('chests')">Chests</button>
-        <button class="tab" onclick="showTab('danger')">Danger Zone</button>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Overview</div>
+          <button class="nav-item active" onclick="showTab('dashboard')">
+            <span class="icon">&#128200;</span>
+            <span>Dashboard</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Game</div>
+          <button class="nav-item" onclick="showTab('boss')">
+            <span class="icon">&#128121;</span>
+            <span>Boss</span>
+          </button>
+          <button class="nav-item" onclick="showTab('users')">
+            <span class="icon">&#128100;</span>
+            <span>Users</span>
+          </button>
+          <button class="nav-item" onclick="showTab('chests')">
+            <span class="icon">&#127873;</span>
+            <span>Chests</span>
+          </button>
+          <button class="nav-item" onclick="showTab('equipment')">
+            <span class="icon">&#128737;</span>
+            <span>Equipment</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Communication</div>
+          <button class="nav-item" onclick="showTab('broadcast')">
+            <span class="icon">&#128227;</span>
+            <span>Broadcast</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">System</div>
+          <button class="nav-item" onclick="showTab('danger')">
+            <span class="icon">&#9888;</span>
+            <span>Danger Zone</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="server-status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="serverStatusText">Connecting...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Dashboard Panel -->
+      <div id="dashboardPanel" class="panel active">
+        <div class="page-header">
+          <h2>Dashboard</h2>
+          <p>Overview of game statistics</p>
+        </div>
+
+        <div class="stats-grid" id="dashboardStats">
+          <div class="stat-card">
+            <div class="stat-value" id="statPlayers">-</div>
+            <div class="stat-label">Players Online</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statTotalUsers">-</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statBossIndex">-</div>
+            <div class="stat-label">Current Boss</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statBossHp">-</div>
+            <div class="stat-label">Boss HP %</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128121; Current Boss</h3>
+          </div>
+          <div id="dashboardBossInfo">Loading...</div>
+        </div>
       </div>
 
       <!-- Boss Panel -->
-      <div id="bossPanel" class="panel active">
-        <div class="section">
-          <h3>Current Boss</h3>
+      <div id="bossPanel" class="panel">
+        <div class="page-header">
+          <h2>Boss Management</h2>
+          <p>Configure world boss settings</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127775; Current Boss</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadBossInfo()">Refresh</button>
+          </div>
           <div id="currentBossInfo">Loading...</div>
         </div>
 
-        <div class="section">
-          <h3>Change Active Boss</h3>
-          <div class="form-group">
-            <label>Select Boss Index (1-100)</label>
-            <input type="number" id="bossIndex" min="1" max="100" value="1">
+        <div class="card">
+          <div class="card-header">
+            <h3>&#9881; Boss Settings</h3>
           </div>
-          <div class="btn-group">
-            <button class="btn btn-primary" onclick="changeBoss()">Set as Active Boss</button>
-            <button class="btn btn-secondary" onclick="respawnBoss()">Force Respawn Current</button>
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>Edit Current Boss Stats</h3>
-          <div class="form-row">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Boss Index (1-100)</label>
+              <input type="number" id="bossIndex" min="1" max="100" value="1">
+            </div>
             <div class="form-group">
               <label>Name (EN)</label>
               <input type="text" id="bossName" placeholder="Serpent">
@@ -345,8 +666,6 @@
               <label>Icon</label>
               <input type="text" id="bossIcon" placeholder="emoji">
             </div>
-          </div>
-          <div class="form-row">
             <div class="form-group">
               <label>Current HP</label>
               <input type="number" id="bossHp">
@@ -359,15 +678,23 @@
               <label>Defense</label>
               <input type="number" id="bossDefense">
             </div>
+            <div class="form-group">
+              <label>Thorns Damage</label>
+              <input type="number" id="bossThorns" value="0">
+            </div>
           </div>
           <div class="btn-group">
-            <button class="btn btn-success" onclick="updateBossStats()">Save Boss Stats</button>
+            <button class="btn btn-primary" onclick="changeBoss()">Change Boss</button>
+            <button class="btn btn-success" onclick="updateBossStats()">Save Stats</button>
+            <button class="btn btn-secondary" onclick="respawnBoss()">Force Respawn</button>
           </div>
         </div>
 
-        <div class="section">
-          <h3>Boss Rewards</h3>
-          <div class="form-row">
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127873; Boss Rewards</h3>
+          </div>
+          <div class="form-grid">
             <div class="form-group">
               <label>Adena Reward</label>
               <input type="number" id="bossAdenaReward">
@@ -377,8 +704,8 @@
               <input type="number" id="bossExpReward">
             </div>
             <div class="form-group">
-              <label>TON Reward</label>
-              <input type="number" id="bossTonReward">
+              <label>Diamonds (Алмазики)</label>
+              <input type="number" id="bossTonReward" step="1">
             </div>
             <div class="form-group">
               <label>Chests Reward</label>
@@ -393,37 +720,279 @@
 
       <!-- Users Panel -->
       <div id="usersPanel" class="panel">
-        <div class="section">
-          <h3>Search Users</h3>
+        <div class="page-header">
+          <h2>Users</h2>
+          <p>Manage player accounts</p>
+        </div>
+
+        <div class="card">
           <div class="search-box">
             <input type="text" id="userSearch" placeholder="Search by name, username, or telegramId..." oninput="searchUsers()">
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Photo</th>
-                <th>Name</th>
-                <th>Level</th>
-                <th>Adena</th>
-                <th>Total Damage</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="usersTable">
-              <tr><td colspan="6" style="text-align:center">Loading...</td></tr>
-            </tbody>
-          </table>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Photo</th>
+                  <th>Name</th>
+                  <th>Level</th>
+                  <th>Adena</th>
+                  <th>Total Damage</th>
+                  <th>Chests</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable">
+                <tr><td colspan="7" style="text-align:center">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="loadMoreUsers()">Load More</button>
           </div>
         </div>
       </div>
 
+      <!-- Chests Panel -->
+      <div id="chestsPanel" class="panel">
+        <div class="page-header">
+          <h2>Chests</h2>
+          <p>Manage chest drops and distribution</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127873; Give Chests to User</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="chestUserId" placeholder="Paste user ID from users table">
+            </div>
+            <div class="form-group">
+              <label>Chest Type</label>
+              <select id="chestType">
+                <option value="WOODEN" class="chest-wooden">&#129717; Wooden (5 min)</option>
+                <option value="BRONZE" class="chest-bronze">&#129003; Bronze (30 min)</option>
+                <option value="SILVER" class="chest-silver">&#129689; Silver (4 hours)</option>
+                <option value="GOLD" class="chest-gold">&#129000; Gold (8 hours)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="chestQuantity" value="1" min="1" max="100">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveChests()">Give Chests</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128218; Chest Drop Rates</h3>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Chest Type</th>
+                  <th>Open Time</th>
+                  <th>Gold</th>
+                  <th>Common</th>
+                  <th>Uncommon</th>
+                  <th>Rare</th>
+                  <th>Epic</th>
+                  <th>Enchant Scroll</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="chest-wooden">&#129717; Wooden</td>
+                  <td>5 min</td>
+                  <td>100-500</td>
+                  <td>80%</td>
+                  <td>5%</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>3%</td>
+                </tr>
+                <tr>
+                  <td class="chest-bronze">&#129003; Bronze</td>
+                  <td>30 min</td>
+                  <td>500-2K</td>
+                  <td>80%</td>
+                  <td>20%</td>
+                  <td>3%</td>
+                  <td>-</td>
+                  <td>15%</td>
+                </tr>
+                <tr>
+                  <td class="chest-silver">&#129689; Silver</td>
+                  <td>4 hours</td>
+                  <td>2K-10K</td>
+                  <td>-</td>
+                  <td>40%</td>
+                  <td>10%</td>
+                  <td>3%</td>
+                  <td>25% (1-5)</td>
+                </tr>
+                <tr>
+                  <td class="chest-gold">&#129000; Gold</td>
+                  <td>8 hours</td>
+                  <td>10K-50K</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>15%</td>
+                  <td>5%</td>
+                  <td>45% (1-5)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Equipment Panel -->
+      <div id="equipmentPanel" class="panel">
+        <div class="page-header">
+          <h2>Equipment</h2>
+          <p>Create and manage equipment items</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128737; Create Equipment</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Code (unique)</label>
+              <input type="text" id="equipCode" placeholder="sword-epic-fire">
+            </div>
+            <div class="form-group">
+              <label>Name</label>
+              <input type="text" id="equipName" placeholder="Fiery Sword">
+            </div>
+            <div class="form-group">
+              <label>Name (RU)</label>
+              <input type="text" id="equipNameRu" placeholder="Огненный Меч">
+            </div>
+            <div class="form-group">
+              <label>Icon</label>
+              <input type="text" id="equipIcon" placeholder="&#128481;">
+            </div>
+            <div class="form-group">
+              <label>Slot</label>
+              <select id="equipSlot">
+                <option value="WEAPON">&#128481; Weapon</option>
+                <option value="HELMET">&#9937; Helmet</option>
+                <option value="CHEST">&#128085; Chest</option>
+                <option value="GLOVES">&#129511; Gloves</option>
+                <option value="LEGS">&#128086; Legs</option>
+                <option value="BOOTS">&#128098; Boots</option>
+                <option value="SHIELD">&#128737; Shield</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Rarity</label>
+              <select id="equipRarity">
+                <option value="COMMON" class="rarity-common">Common (White)</option>
+                <option value="UNCOMMON" class="rarity-uncommon">Uncommon (Green)</option>
+                <option value="RARE" class="rarity-rare">Rare (Purple)</option>
+                <option value="EPIC" class="rarity-epic">Epic (Orange)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>P.Atk Min</label>
+              <input type="number" id="equipPAtkMin" value="0">
+            </div>
+            <div class="form-group">
+              <label>P.Atk Max</label>
+              <input type="number" id="equipPAtkMax" value="0">
+            </div>
+            <div class="form-group">
+              <label>P.Def Min</label>
+              <input type="number" id="equipPDefMin" value="0">
+            </div>
+            <div class="form-group">
+              <label>P.Def Max</label>
+              <input type="number" id="equipPDefMax" value="0">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="createEquipment()">Create Equipment Template</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127873; Give Equipment to User</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="giveEquipUserId" placeholder="Paste user ID">
+            </div>
+            <div class="form-group">
+              <label>Equipment Code</label>
+              <input type="text" id="giveEquipCode" placeholder="Equipment code (e.g. starter-sword)">
+            </div>
+            <div class="form-group">
+              <label>Enchant Level</label>
+              <input type="number" id="giveEquipEnchant" value="0" min="0" max="20">
+            </div>
+            <div class="form-group">
+              <label>Auto Equip?</label>
+              <select id="giveEquipAutoEquip">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveEquipment()">Give Equipment</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128218; Equipment List</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadEquipmentList()">Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Icon</th>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Slot</th>
+                  <th>Rarity</th>
+                  <th>P.Atk</th>
+                  <th>P.Def</th>
+                </tr>
+              </thead>
+              <tbody id="equipmentTable">
+                <tr><td colspan="7" style="text-align:center">Click Refresh to load</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Broadcast Panel -->
       <div id="broadcastPanel" class="panel">
-        <div class="section">
-          <h3>Send Broadcast Message</h3>
-          <div class="form-row">
+        <div class="page-header">
+          <h2>Broadcast</h2>
+          <p>Send messages to all players</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128227; Send Broadcast</h3>
+          </div>
+          <div class="form-grid">
             <div class="form-group">
               <label>Message (Russian)</label>
               <textarea id="broadcastRu" rows="4" placeholder="Message in Russian..."></textarea>
@@ -433,7 +1002,7 @@
               <textarea id="broadcastEn" rows="4" placeholder="Message in English..."></textarea>
             </div>
           </div>
-          <div class="form-row">
+          <div class="form-grid">
             <div class="form-group">
               <label>Button Text (RU)</label>
               <input type="text" id="buttonTextRu" placeholder="Play">
@@ -453,109 +1022,34 @@
           </div>
           <div class="form-group">
             <label>Send Speed: <span id="speedValue">30</span> msg/sec</label>
-            <input type="range" id="sendSpeed" min="1" max="30" value="30" oninput="document.getElementById('speedValue').textContent=this.value">
+            <input type="range" id="sendSpeed" min="1" max="30" value="30" oninput="document.getElementById('speedValue').textContent=this.value" style="width:100%">
           </div>
-
-          <div class="broadcast-preview">
-            <h4>Preview (Russian)</h4>
-            <div class="broadcast-msg" id="previewRu">Enter message above</div>
-          </div>
-
           <div class="btn-group">
             <button class="btn btn-primary" onclick="sendBroadcast()">Send to All Users</button>
-            <button class="btn btn-secondary" onclick="sendTestBroadcast()">Send Test (to Admin)</button>
+            <button class="btn btn-secondary" onclick="sendTestBroadcast()">Send Test</button>
           </div>
           <div id="broadcastStatus" style="margin-top:15px"></div>
         </div>
       </div>
 
-      <!-- Drops Panel -->
-      <div id="dropsPanel" class="panel">
-        <div class="section">
-          <h3>Boss Drop Tables</h3>
-          <p style="color:#888;font-size:13px;margin-bottom:15px">
-            Drop rates are calculated dynamically based on boss index:
-            <br>Rewards multiply by x2 each boss (starting from 1M adena, 1M exp, 10 TON, 10 chests)
-          </p>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Base Adena (Boss 1)</label>
-              <input type="number" id="baseAdena" value="1000000">
-            </div>
-            <div class="form-group">
-              <label>Base EXP (Boss 1)</label>
-              <input type="number" id="baseExp" value="1000000">
-            </div>
-            <div class="form-group">
-              <label>Base TON (Boss 1)</label>
-              <input type="number" id="baseTon" value="10">
-            </div>
-            <div class="form-group">
-              <label>Base Chests (Boss 1)</label>
-              <input type="number" id="baseChests" value="10">
-            </div>
-          </div>
-          <div class="alert alert-info">
-            Boss 1: 1M adena | Boss 2: 2M | Boss 3: 4M | Boss 10: 512M | etc.
-          </div>
-        </div>
-      </div>
-
-      <!-- Chests Panel -->
-      <div id="chestsPanel" class="panel">
-        <div class="section">
-          <h3>Give Chests to User</h3>
-          <div class="form-row">
-            <div class="form-group">
-              <label>User ID</label>
-              <input type="text" id="chestUserId" placeholder="User ID from users table">
-            </div>
-            <div class="form-group">
-              <label>Rarity</label>
-              <select id="chestRarity">
-                <option value="COMMON">Common (5 min)</option>
-                <option value="UNCOMMON">Uncommon (30 min)</option>
-                <option value="RARE">Rare (4 hours)</option>
-                <option value="EPIC">Epic (8 hours)</option>
-                <option value="LEGENDARY">Legendary (24 hours)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Quantity</label>
-              <input type="number" id="chestQuantity" value="1" min="1" max="100">
-            </div>
-          </div>
-          <div class="btn-group">
-            <button class="btn btn-success" onclick="giveChests()">Give Chests</button>
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>Chest Opening Times</h3>
-          <table>
-            <tr><th>Rarity</th><th>Time</th><th>Adena</th><th>EXP</th><th>TON</th></tr>
-            <tr><td>Common</td><td>5 min</td><td>100-500</td><td>1K-5K</td><td>-</td></tr>
-            <tr><td>Uncommon</td><td>30 min</td><td>500-2K</td><td>5K-20K</td><td>-</td></tr>
-            <tr><td>Rare</td><td>4 hours</td><td>2K-10K</td><td>20K-100K</td><td>-</td></tr>
-            <tr><td>Epic</td><td>8 hours</td><td>10K-50K</td><td>100K-500K</td><td>-</td></tr>
-            <tr><td style="color:#f7b731">Legendary</td><td>24 hours</td><td>50K-200K</td><td>500K-2M</td><td>0.1-1</td></tr>
-          </table>
-        </div>
-      </div>
-
       <!-- Danger Zone Panel -->
       <div id="dangerPanel" class="panel">
-        <div class="section" style="border: 2px solid #e74c3c;">
-          <h3 style="color:#e74c3c">Danger Zone</h3>
-          <p style="color:#888;font-size:13px;margin-bottom:15px">
-            These actions are irreversible. Use with caution.
-          </p>
+        <div class="page-header">
+          <h2>Danger Zone</h2>
+          <p>Irreversible actions - use with extreme caution</p>
+        </div>
 
-          <div class="form-group">
-            <label>Enter Password to Enable Reset: 1993</label>
-            <input type="password" id="resetPassword" placeholder="Enter 1993 to confirm">
+        <div class="card" style="border-color: var(--danger);">
+          <div class="card-header">
+            <h3 style="color: var(--danger);">&#9888; Destructive Actions</h3>
           </div>
-
+          <div class="alert alert-danger">
+            These actions cannot be undone. Make sure you understand the consequences.
+          </div>
+          <div class="form-group">
+            <label>Password (1993)</label>
+            <input type="password" id="resetPassword" placeholder="Enter 1993 to enable">
+          </div>
           <div class="btn-group">
             <button class="btn btn-danger" onclick="resetDatabase()">Reset Entire Database</button>
             <button class="btn btn-danger" onclick="resetAllUsers()">Reset All Users Progress</button>
@@ -563,7 +1057,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </main>
   </div>
 
   <!-- User Edit Modal -->
@@ -579,16 +1073,12 @@
 
   <script>
     // ═══════════════════════════════════════════════════════════
-    // НАСТРОЙКИ - ИЗМЕНИ ПОД СВОЙ СЕРВЕР
+    // CONFIG
     // ═══════════════════════════════════════════════════════════
-    const API_BASE = 'https://rb-v7zx.onrender.com'; // URL сервера игры на Render
-
-    // Domain protection - домены с которых можно открыть админку
+    const API_BASE = 'https://rb-v7zx.onrender.com';
     const ALLOWED_DOMAINS = ['tnsb.fun', 'www.tnsb.fun', 'localhost', '127.0.0.1'];
-    const ADMIN_PASSWORD = 'admin123'; // Will be checked server-side
 
     let isAuthed = false;
-    let socket = null;
     let users = [];
     let usersOffset = 0;
 
@@ -603,10 +1093,9 @@
       return true;
     }
 
-    // Auth check
+    // Auth
     function checkAuth() {
       const password = document.getElementById('adminPassword').value;
-
       fetch(API_BASE + '/api/admin/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -617,7 +1106,7 @@
         if (data.success) {
           isAuthed = true;
           document.getElementById('authOverlay').style.display = 'none';
-          document.getElementById('mainContent').style.display = 'block';
+          document.getElementById('mainContent').style.display = 'flex';
           sessionStorage.setItem('adminAuth', password);
           initAdmin();
         } else {
@@ -631,7 +1120,6 @@
       });
     }
 
-    // Check saved auth
     function checkSavedAuth() {
       const savedPass = sessionStorage.getItem('adminAuth');
       if (savedPass) {
@@ -645,28 +1133,25 @@
           if (data.success) {
             isAuthed = true;
             document.getElementById('authOverlay').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
+            document.getElementById('mainContent').style.display = 'flex';
             initAdmin();
           }
         });
       }
     }
 
-    // Init admin panel
+    // Init
     function initAdmin() {
       loadBossInfo();
       loadUsers();
-
-      // Update preview on input
-      document.getElementById('broadcastRu').addEventListener('input', updatePreview);
-      document.getElementById('broadcastEn').addEventListener('input', updatePreview);
+      document.getElementById('statusDot').classList.add('online');
+      document.getElementById('serverStatusText').textContent = 'Online';
     }
 
     // Tab switching
     function showTab(tab) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-
       document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
       document.getElementById(tab + 'Panel').classList.add('active');
     }
@@ -682,33 +1167,40 @@
         }
       };
       if (body) opts.body = JSON.stringify(body);
-
       const res = await fetch(API_BASE + '/api/admin/' + endpoint, opts);
       return res.json();
     }
 
-    // Load boss info
+    // Boss
     async function loadBossInfo() {
       const data = await api('boss');
       if (data.success) {
         const boss = data.boss;
-        document.getElementById('currentBossInfo').innerHTML = `
+        const hpPercent = Math.round((boss.currentHp / boss.maxHp) * 100);
+
+        // Dashboard stats
+        document.getElementById('statPlayers').textContent = data.playersOnline || 0;
+        document.getElementById('statBossIndex').textContent = '#' + boss.bossIndex;
+        document.getElementById('statBossHp').textContent = hpPercent + '%';
+
+        // Dashboard boss info
+        document.getElementById('dashboardBossInfo').innerHTML = `
           <div class="boss-card active">
             <span class="boss-icon">${boss.icon}</span>
             <div class="boss-info">
-              <div class="boss-name">${boss.name} / ${boss.nameRu}</div>
+              <div class="boss-name">${boss.name} / ${boss.nameRu || '-'}</div>
               <div class="boss-stats">
-                HP: ${boss.currentHp.toLocaleString()} / ${boss.maxHp.toLocaleString()} |
-                Index: ${boss.bossIndex}/${boss.totalBosses} |
-                Defense: ${boss.defense}
+                HP: ${boss.currentHp.toLocaleString()} / ${boss.maxHp.toLocaleString()} (${hpPercent}%)
               </div>
               <div class="boss-stats">
-                Rewards: ${boss.adenaReward?.toLocaleString()} Adena, ${boss.expReward?.toLocaleString()} EXP,
-                ${boss.tonReward} TON, ${boss.chestsReward} Chests
+                Index: ${boss.bossIndex}/${boss.totalBosses} | Defense: ${boss.defense} | Thorns: ${boss.thorns || 0}
               </div>
             </div>
           </div>
         `;
+
+        // Boss panel info
+        document.getElementById('currentBossInfo').innerHTML = document.getElementById('dashboardBossInfo').innerHTML;
 
         // Fill form
         document.getElementById('bossIndex').value = boss.bossIndex;
@@ -718,43 +1210,27 @@
         document.getElementById('bossHp').value = boss.currentHp;
         document.getElementById('bossMaxHp').value = boss.maxHp;
         document.getElementById('bossDefense').value = boss.defense;
+        document.getElementById('bossThorns').value = boss.thorns || 0;
         document.getElementById('bossAdenaReward').value = boss.adenaReward;
         document.getElementById('bossExpReward').value = boss.expReward;
         document.getElementById('bossTonReward').value = boss.tonReward;
         document.getElementById('bossChestsReward').value = boss.chestsReward;
-
-        // Update header
-        document.getElementById('currentBoss').textContent = `Boss: ${boss.name}`;
-        document.getElementById('playersOnline').textContent = `Players: ${data.playersOnline}`;
-        document.getElementById('serverStatus').classList.add('online');
-        document.getElementById('serverStatus').textContent = 'Server: Online';
       }
     }
 
-    // Change boss
     async function changeBoss() {
       const index = parseInt(document.getElementById('bossIndex').value) - 1;
       const data = await api('boss/change', 'POST', { bossIndex: index });
-      if (data.success) {
-        alert('Boss changed to #' + (index + 1));
-        loadBossInfo();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Boss changed to #' + (index + 1) : 'Error: ' + data.error);
+      if (data.success) loadBossInfo();
     }
 
-    // Respawn boss
     async function respawnBoss() {
       const data = await api('boss/respawn', 'POST');
-      if (data.success) {
-        alert('Boss respawned');
-        loadBossInfo();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Boss respawned' : 'Error: ' + data.error);
+      if (data.success) loadBossInfo();
     }
 
-    // Update boss stats
     async function updateBossStats() {
       const data = await api('boss/update', 'POST', {
         name: document.getElementById('bossName').value,
@@ -763,41 +1239,32 @@
         currentHp: parseInt(document.getElementById('bossHp').value),
         maxHp: parseInt(document.getElementById('bossMaxHp').value),
         defense: parseInt(document.getElementById('bossDefense').value),
+        thorns: parseInt(document.getElementById('bossThorns').value),
       });
-      if (data.success) {
-        alert('Boss stats updated');
-        loadBossInfo();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Boss stats updated' : 'Error: ' + data.error);
+      if (data.success) loadBossInfo();
     }
 
-    // Update boss rewards
     async function updateBossRewards() {
       const data = await api('boss/rewards', 'POST', {
         adenaReward: parseInt(document.getElementById('bossAdenaReward').value),
         expReward: parseInt(document.getElementById('bossExpReward').value),
-        tonReward: parseInt(document.getElementById('bossTonReward').value),
+        tonReward: parseFloat(document.getElementById('bossTonReward').value),
         chestsReward: parseInt(document.getElementById('bossChestsReward').value),
       });
-      if (data.success) {
-        alert('Boss rewards updated');
-        loadBossInfo();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Rewards updated' : 'Error: ' + data.error);
     }
 
-    // Load users
+    // Users
     async function loadUsers(search = '') {
       const data = await api('users?search=' + encodeURIComponent(search) + '&offset=' + usersOffset);
       if (data.success) {
         users = data.users;
+        document.getElementById('statTotalUsers').textContent = data.total || users.length;
         renderUsers();
       }
     }
 
-    // Search users
     let searchTimeout;
     function searchUsers() {
       clearTimeout(searchTimeout);
@@ -807,115 +1274,131 @@
       }, 300);
     }
 
-    // Load more users
     function loadMoreUsers() {
       usersOffset += 50;
       loadUsers(document.getElementById('userSearch').value);
     }
 
-    // Render users table
     function renderUsers() {
       const tbody = document.getElementById('usersTable');
       if (users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No users found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No users found</td></tr>';
         return;
       }
-
       tbody.innerHTML = users.map(u => `
         <tr>
           <td>${u.photoUrl ? `<img src="${u.photoUrl}" class="user-photo">` : '-'}</td>
-          <td>${u.firstName || u.username || 'Anonymous'}</td>
-          <td>${u.level}</td>
+          <td>${u.firstName || u.username || 'Anonymous'}<br><small style="color:var(--text-muted)">${u.id.substring(0,8)}...</small></td>
+          <td><span class="badge badge-gold">Lv.${u.level}</span></td>
           <td>${Number(u.adena).toLocaleString()}</td>
           <td>${Number(u.totalDamage).toLocaleString()}</td>
+          <td>${u._count?.chests || 0}</td>
           <td>
-            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="editUser('${u.id}')">Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="editUser('${u.id}')">Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="copyUserId('${u.id}')">Copy ID</button>
           </td>
         </tr>
       `).join('');
     }
 
-    // Edit user
+    function copyUserId(id) {
+      navigator.clipboard.writeText(id);
+      alert('User ID copied: ' + id);
+    }
+
     async function editUser(userId) {
       const data = await api('users/' + userId);
       if (!data.success) {
-        alert('User not found');
+        alert('Error: ' + (data.error || 'User not found'));
         return;
       }
-
       const u = data.user;
       document.getElementById('userModalContent').innerHTML = `
         <input type="hidden" id="editUserId" value="${u.id}">
-        <div class="form-row">
+        <div class="form-grid">
           <div class="form-group">
             <label>Name</label>
-            <input type="text" id="editName" value="${u.firstName || ''}" readonly>
+            <input type="text" value="${u.firstName || ''}" disabled>
           </div>
+          <div class="form-group">
+            <label>Telegram ID</label>
+            <input type="text" value="${u.telegramId}" disabled>
+          </div>
+        </div>
+        <div class="form-grid">
           <div class="form-group">
             <label>Level</label>
             <input type="number" id="editLevel" value="${u.level}" min="1">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Adena</label>
-            <input type="number" id="editAdena" value="${u.adena}">
           </div>
           <div class="form-group">
             <label>EXP</label>
             <input type="number" id="editExp" value="${u.exp}">
           </div>
+          <div class="form-group">
+            <label>Adena</label>
+            <input type="number" id="editAdena" value="${u.adena}">
+          </div>
+          <div class="form-group">
+            <label>Ancient Coin</label>
+            <input type="number" id="editAncientCoin" value="${u.ancientCoin || 0}">
+          </div>
         </div>
-        <div class="form-row">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Power</label>
+            <input type="number" id="editPower" value="${u.power}" min="1">
+          </div>
+          <div class="form-group">
+            <label>Agility</label>
+            <input type="number" id="editAgility" value="${u.agility}" min="1">
+          </div>
+          <div class="form-group">
+            <label>Vitality</label>
+            <input type="number" id="editVitality" value="${u.vitality}" min="1">
+          </div>
+          <div class="form-group">
+            <label>Intellect</label>
+            <input type="number" id="editIntellect" value="${u.intellect}" min="1">
+          </div>
+          <div class="form-group">
+            <label>Spirit</label>
+            <input type="number" id="editSpirit" value="${u.spirit}" min="1">
+          </div>
+        </div>
+        <div class="form-grid">
           <div class="form-group">
             <label>Stamina</label>
             <input type="number" id="editStamina" value="${u.stamina}">
           </div>
           <div class="form-group">
             <label>Max Stamina</label>
-            <input type="number" id="editMaxStamina" value="${u.maxStamina}" readonly>
+            <input type="number" value="${u.maxStamina}" disabled>
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label>Mana</label>
             <input type="number" id="editMana" value="${u.mana}">
           </div>
           <div class="form-group">
-            <label>Max Mana</label>
-            <input type="number" id="editMaxMana" value="${u.maxMana}">
+            <label>Enchant Scrolls</label>
+            <input type="number" id="editEnchantScrolls" value="${u.enchantScrolls || 0}">
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Power</label>
-            <input type="number" id="editPower" value="${u.power}" min="1" max="99">
-          </div>
-          <div class="form-group">
-            <label>Agility</label>
-            <input type="number" id="editAgility" value="${u.agility}" min="1" max="99">
-          </div>
-          <div class="form-group">
-            <label>Vitality</label>
-            <input type="number" id="editVitality" value="${u.vitality}" min="1" max="99">
-          </div>
-          <div class="form-group">
-            <label>Intellect</label>
-            <input type="number" id="editIntellect" value="${u.intellect}" min="1" max="99">
-          </div>
-          <div class="form-group">
-            <label>Spirit</label>
-            <input type="number" id="editSpirit" value="${u.spirit}" min="1" max="99">
-          </div>
-        </div>
-        <div class="form-row">
+        <div class="form-grid">
           <div class="form-group">
             <label>Total Damage</label>
             <input type="number" id="editTotalDamage" value="${u.totalDamage}">
           </div>
           <div class="form-group">
+            <label>Bosses Killed</label>
+            <input type="number" id="editBossesKilled" value="${u.bossesKilled || 0}">
+          </div>
+          <div class="form-group">
             <label>TON Balance</label>
-            <input type="number" id="editTonBalance" value="${u.tonBalance}" step="0.01">
+            <input type="number" id="editTonBalance" value="${u.tonBalance || 0}" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Chest Slots</label>
+            <input type="number" id="editChestSlots" value="${u.chestSlots || 5}" min="5" max="10">
           </div>
         </div>
         <div class="btn-group">
@@ -923,29 +1406,29 @@
           <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
         </div>
       `;
-
       document.getElementById('userModal').classList.add('active');
     }
 
-    // Save user
     async function saveUser() {
       const userId = document.getElementById('editUserId').value;
       const data = await api('users/' + userId, 'POST', {
         level: parseInt(document.getElementById('editLevel').value),
-        adena: parseInt(document.getElementById('editAdena').value),
         exp: parseInt(document.getElementById('editExp').value),
-        stamina: parseInt(document.getElementById('editStamina').value),
-        mana: parseInt(document.getElementById('editMana').value),
-        maxMana: parseInt(document.getElementById('editMaxMana').value),
+        adena: parseInt(document.getElementById('editAdena').value),
+        ancientCoin: parseInt(document.getElementById('editAncientCoin').value),
         power: parseInt(document.getElementById('editPower').value),
         agility: parseInt(document.getElementById('editAgility').value),
         vitality: parseInt(document.getElementById('editVitality').value),
         intellect: parseInt(document.getElementById('editIntellect').value),
         spirit: parseInt(document.getElementById('editSpirit').value),
+        stamina: parseInt(document.getElementById('editStamina').value),
+        mana: parseInt(document.getElementById('editMana').value),
+        enchantScrolls: parseInt(document.getElementById('editEnchantScrolls').value),
         totalDamage: parseInt(document.getElementById('editTotalDamage').value),
+        bossesKilled: parseInt(document.getElementById('editBossesKilled').value),
         tonBalance: parseFloat(document.getElementById('editTonBalance').value),
+        chestSlots: parseInt(document.getElementById('editChestSlots').value),
       });
-
       if (data.success) {
         alert('User saved');
         closeUserModal();
@@ -959,15 +1442,67 @@
       document.getElementById('userModal').classList.remove('active');
     }
 
-    // Update preview
-    function updatePreview() {
-      document.getElementById('previewRu').textContent = document.getElementById('broadcastRu').value || 'Enter message above';
+    // Chests
+    async function giveChests() {
+      const data = await api('chests/give', 'POST', {
+        userId: document.getElementById('chestUserId').value,
+        chestType: document.getElementById('chestType').value,
+        quantity: parseInt(document.getElementById('chestQuantity').value),
+      });
+      alert(data.success ? `${data.quantity} chests given` : 'Error: ' + data.error);
     }
 
-    // Send broadcast
-    async function sendBroadcast() {
-      if (!confirm('Send broadcast to ALL users? This cannot be undone.')) return;
+    // Equipment
+    async function createEquipment() {
+      const data = await api('equipment/create', 'POST', {
+        code: document.getElementById('equipCode').value,
+        name: document.getElementById('equipName').value,
+        nameRu: document.getElementById('equipNameRu').value,
+        icon: document.getElementById('equipIcon').value,
+        slot: document.getElementById('equipSlot').value,
+        rarity: document.getElementById('equipRarity').value,
+        pAtkMin: parseInt(document.getElementById('equipPAtkMin').value),
+        pAtkMax: parseInt(document.getElementById('equipPAtkMax').value),
+        pDefMin: parseInt(document.getElementById('equipPDefMin').value),
+        pDefMax: parseInt(document.getElementById('equipPDefMax').value),
+      });
+      alert(data.success ? 'Equipment created: ' + data.equipment?.code : 'Error: ' + data.error);
+      if (data.success) loadEquipmentList();
+    }
 
+    async function giveEquipment() {
+      const data = await api('equipment/give', 'POST', {
+        userId: document.getElementById('giveEquipUserId').value,
+        code: document.getElementById('giveEquipCode').value,
+        enchant: parseInt(document.getElementById('giveEquipEnchant').value),
+        isEquipped: document.getElementById('giveEquipAutoEquip').value === 'true',
+      });
+      alert(data.success ? 'Equipment given!' : 'Error: ' + data.error);
+    }
+
+    async function loadEquipmentList() {
+      const data = await api('equipment/list');
+      const tbody = document.getElementById('equipmentTable');
+      if (!data.success || !data.equipment?.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No equipment found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.equipment.map(e => `
+        <tr>
+          <td>${e.icon}</td>
+          <td><small>${e.code}</small></td>
+          <td>${e.name}</td>
+          <td><span class="slot-${e.slot.toLowerCase()}">${e.slot}</span></td>
+          <td><span class="rarity-${e.rarity.toLowerCase()}">${e.rarity}</span></td>
+          <td>${e.pAtkMin}-${e.pAtkMax}</td>
+          <td>${e.pDefMin}-${e.pDefMax}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Broadcast
+    async function sendBroadcast() {
+      if (!confirm('Send broadcast to ALL users?')) return;
       const data = await api('broadcast', 'POST', {
         messageRu: document.getElementById('broadcastRu').value,
         messageEn: document.getElementById('broadcastEn').value,
@@ -977,13 +1512,11 @@
         imageUrl: document.getElementById('broadcastImage').value,
         speed: parseInt(document.getElementById('sendSpeed').value),
       });
-
       document.getElementById('broadcastStatus').innerHTML = data.success
         ? `<div class="alert alert-success">Broadcast started! Sending to ${data.totalUsers} users...</div>`
-        : `<div class="alert alert-error">Error: ${data.error}</div>`;
+        : `<div class="alert alert-danger">Error: ${data.error}</div>`;
     }
 
-    // Send test broadcast
     async function sendTestBroadcast() {
       const data = await api('broadcast/test', 'POST', {
         messageRu: document.getElementById('broadcastRu').value,
@@ -993,78 +1526,44 @@
         buttonUrl: document.getElementById('buttonUrl').value,
         imageUrl: document.getElementById('broadcastImage').value,
       });
-
       document.getElementById('broadcastStatus').innerHTML = data.success
-        ? `<div class="alert alert-success">Test message sent!</div>`
-        : `<div class="alert alert-error">Error: ${data.error}</div>`;
-    }
-
-    // Give chests
-    async function giveChests() {
-      const data = await api('chests/give', 'POST', {
-        userId: document.getElementById('chestUserId').value,
-        rarity: document.getElementById('chestRarity').value,
-        quantity: parseInt(document.getElementById('chestQuantity').value),
-      });
-
-      if (data.success) {
-        alert(`${data.quantity} chests given to user`);
-      } else {
-        alert('Error: ' + data.error);
-      }
+        ? `<div class="alert alert-success">Test sent!</div>`
+        : `<div class="alert alert-danger">Error: ${data.error}</div>`;
     }
 
     // Danger zone
     async function resetDatabase() {
-      const pass = document.getElementById('resetPassword').value;
-      if (pass !== '1993') {
-        alert('Invalid reset password');
+      if (document.getElementById('resetPassword').value !== '1993') {
+        alert('Invalid password');
         return;
       }
-      if (!confirm('This will DELETE ALL DATA. Are you absolutely sure?')) return;
-      if (!confirm('LAST WARNING: All users, bosses, chests will be deleted. Continue?')) return;
-
+      if (!confirm('DELETE ALL DATA?')) return;
+      if (!confirm('LAST WARNING: Continue?')) return;
       const data = await api('danger/reset-all', 'POST', { confirmPassword: '1993' });
-      if (data.success) {
-        alert('Database reset complete');
-        location.reload();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Database reset' : 'Error: ' + data.error);
+      if (data.success) location.reload();
     }
 
     async function resetAllUsers() {
-      const pass = document.getElementById('resetPassword').value;
-      if (pass !== '1993') {
-        alert('Invalid reset password');
+      if (document.getElementById('resetPassword').value !== '1993') {
+        alert('Invalid password');
         return;
       }
-      if (!confirm('Reset all user progress? Users will keep accounts but lose stats.')) return;
-
+      if (!confirm('Reset all users?')) return;
       const data = await api('danger/reset-users', 'POST', { confirmPassword: '1993' });
-      if (data.success) {
-        alert('All users reset');
-        loadUsers();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Users reset' : 'Error: ' + data.error);
+      if (data.success) loadUsers();
     }
 
     async function resetBossToFirst() {
-      const pass = document.getElementById('resetPassword').value;
-      if (pass !== '1993') {
-        alert('Invalid reset password');
+      if (document.getElementById('resetPassword').value !== '1993') {
+        alert('Invalid password');
         return;
       }
       if (!confirm('Reset boss to #1?')) return;
-
       const data = await api('danger/reset-boss', 'POST', { confirmPassword: '1993' });
-      if (data.success) {
-        alert('Boss reset to #1');
-        loadBossInfo();
-      } else {
-        alert('Error: ' + data.error);
-      }
+      alert(data.success ? 'Boss reset' : 'Error: ' + data.error);
+      if (data.success) loadBossInfo();
     }
 
     // Init

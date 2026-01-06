@@ -72,10 +72,11 @@ export default function GameCanvas() {
   const [sessionDamage, setSessionDamage] = useState(0);
   const [connected, setConnected] = useState(false);
   const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
-  const [offlineEarnings, setOfflineEarnings] = useState<{ adena: number; hours: number } | null>(null);
   const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(0);
+  const [waitingForRespawn, setWaitingForRespawn] = useState(false); // Keep showing countdown screen until boss respawns
   const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeStage, setWelcomeStage] = useState(1); // 1 = intro, 2 = details
   const [autoAttackDamage, setAutoAttackDamage] = useState(0);
   const [lang, setLang] = useState<Language>('en');
   const [showDropTable, setShowDropTable] = useState(false);
@@ -194,12 +195,12 @@ export default function GameCanvas() {
       // Handle respawn timer from persistent state (when page loads during respawn)
       if (data.isRespawning && data.respawnAt && !victoryData) {
         const remaining = Math.max(0, data.respawnAt - Date.now());
-        if (remaining > 0) {
-          setRespawnCountdown(remaining);
-        }
-      } else if (!data.isRespawning && respawnCountdown > 0 && !victoryData) {
-        // Boss respawned while we had countdown - clear it
+        setRespawnCountdown(remaining);
+        setWaitingForRespawn(true); // Keep showing until boss respawns
+      } else if (!data.isRespawning && !victoryData) {
+        // Boss is alive - clear waiting state
         setRespawnCountdown(0);
+        setWaitingForRespawn(false);
       }
     });
 
@@ -286,6 +287,7 @@ export default function GameCanvas() {
         rewards: data.rewards || [],
         respawnAt: data.respawnAt,
       });
+      setWaitingForRespawn(true); // Keep showing until boss respawns
       // Start countdown
       const updateCountdown = () => {
         const remaining = Math.max(0, data.respawnAt - Date.now());
@@ -303,6 +305,7 @@ export default function GameCanvas() {
       setSessionDamage(0);
       setVictoryData(null);
       setRespawnCountdown(0);
+      setWaitingForRespawn(false); // Boss is back - clear waiting state
     });
 
     // Boss rage phase
@@ -354,11 +357,6 @@ export default function GameCanvas() {
       if (data.exhaustedUntil !== undefined) setExhaustedUntil(data.exhaustedUntil);
     });
 
-    // Offline earnings notification
-    socket.on('offline:earnings', (data: { adena: number; hours: number }) => {
-      setOfflineEarnings(data);
-    });
-
     // Tap batching - flush every 100ms
     tapFlushIntervalRef.current = setInterval(() => {
       if (tapQueueRef.current > 0) {
@@ -383,7 +381,6 @@ export default function GameCanvas() {
       socket.off('boss:rage');
       socket.off('player:state');
       socket.off('player:data');
-      socket.off('offline:earnings');
       socket.off('auth:success');
       socket.off('auth:error');
       socket.off('hero:exhausted');  // L2 (NEW)
@@ -678,16 +675,21 @@ export default function GameCanvas() {
   const manaPercent = (mana / maxMana) * 100;
   const staminaPercent = (stamina / maxStamina) * 100;  // L2 (NEW)
 
-  // Handle welcome popup close
-  const handleWelcomeClose = () => {
-    setShowWelcome(false);
-    getSocket().emit('firstLogin:complete');
+  // Handle welcome popup navigation
+  const handleWelcomeNext = () => {
+    if (welcomeStage === 1) {
+      setWelcomeStage(2);
+    } else {
+      setShowWelcome(false);
+      setWelcomeStage(1);
+      getSocket().emit('firstLogin:complete');
+    }
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Respawn Countdown Screen (when loaded during respawn) */}
-      {!victoryData && respawnCountdown > 0 && (
+      {/* Respawn Countdown Screen (when loaded during respawn or waiting for boss) */}
+      {!victoryData && waitingForRespawn && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="bg-l2-panel/95 rounded-lg p-6 m-4 max-w-sm w-full pointer-events-auto text-center">
             <div className="text-4xl mb-3">{bossState.icon || '👹'}</div>
@@ -696,9 +698,15 @@ export default function GameCanvas() {
             </div>
             <div className="bg-black/40 rounded-lg p-4 mb-3">
               <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
-              <div className="text-3xl font-bold text-l2-gold font-mono">
-                {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
-              </div>
+              {respawnCountdown > 0 ? (
+                <div className="text-3xl font-bold text-l2-gold font-mono">
+                  {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+                </div>
+              ) : (
+                <div className="text-xl font-bold text-l2-gold animate-pulse">
+                  {lang === 'ru' ? 'Скоро появится...' : 'Spawning soon...'}
+                </div>
+              )}
             </div>
             <div className="text-xs text-gray-500">
               {t.leaderboard.waitForKill}
@@ -721,9 +729,15 @@ export default function GameCanvas() {
             {/* Countdown */}
             <div className="bg-black/40 rounded-lg p-3 mb-3 text-center">
               <div className="text-xs text-gray-400 mb-1">{t.boss.nextBossIn}</div>
-              <div className="text-2xl font-bold text-white font-mono">
-                {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
-              </div>
+              {respawnCountdown > 0 ? (
+                <div className="text-2xl font-bold text-white font-mono">
+                  {Math.floor(respawnCountdown / 60000)}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+                </div>
+              ) : (
+                <div className="text-xl font-bold text-l2-gold animate-pulse">
+                  {lang === 'ru' ? 'Скоро появится...' : 'Spawning soon...'}
+                </div>
+              )}
             </div>
 
             {/* Bonuses */}
@@ -776,92 +790,144 @@ export default function GameCanvas() {
         </div>
       )}
 
-      {/* Welcome Popup for First-Time Players */}
+      {/* Welcome Popup for First-Time Players - Two Stages */}
       {showWelcome && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30">
-            {/* Header */}
-            <div className="text-center mb-4">
-              <div className="text-4xl mb-2">&#9876;</div>
-              <h1 className="text-xl font-bold text-l2-gold mb-1">
-                {t.welcome.title}
-              </h1>
-              <p className="text-gray-300 text-sm">
-                {t.welcome.subtitle}
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
+          {welcomeStage === 1 ? (
+            /* Stage 1: Welcome Intro */
+            <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-6 m-3 max-w-sm w-full border border-l2-gold/50 shadow-2xl shadow-l2-gold/20">
+              {/* Animated glow effect */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-l2-gold/10 via-transparent to-l2-gold/10 animate-pulse pointer-events-none" />
+
+              {/* Header */}
+              <div className="text-center mb-6 relative">
+                <div className="text-6xl mb-4 animate-bounce">&#9876;</div>
+                <h1 className="text-2xl font-bold text-l2-gold mb-3">
+                  {lang === 'ru' ? 'Добро пожаловать, Герой!' : 'Welcome, Hero!'}
+                </h1>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  {lang === 'ru'
+                    ? 'Ты попал в самое загадочное место — мир, где древние боссы пробудились ото сна и угрожают всему живому.'
+                    : 'You have arrived at the most mysterious place — a world where ancient bosses have awakened and threaten all living things.'}
+                </p>
+              </div>
+
+              {/* Mystical decorative line */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-l2-gold/50 to-transparent" />
+                <span className="text-l2-gold text-xs">&#10022;</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-l2-gold/50 to-transparent" />
+              </div>
+
+              <p className="text-gray-400 text-xs text-center mb-6">
+                {lang === 'ru'
+                  ? 'Объединись с другими воинами, сражайся с монстрами и стань легендой!'
+                  : 'Unite with other warriors, fight monsters and become a legend!'}
               </p>
+
+              {/* CTA Button */}
+              <button
+                onClick={handleWelcomeNext}
+                className="w-full py-4 bg-gradient-to-r from-l2-gold via-yellow-500 to-l2-gold text-black font-bold rounded-lg hover:from-yellow-400 hover:to-yellow-500 transition-all text-lg shadow-lg shadow-l2-gold/30"
+              >
+                {lang === 'ru' ? 'Начать игру' : 'Start Game'} &#10140;
+              </button>
             </div>
-
-            {/* Features */}
-            <div className="space-y-3 mb-4">
-              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-l2-gold">
-                <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-1">
-                  <span>&#128081;</span> {t.welcome.bosses}
-                </div>
-                <p className="text-gray-400 text-xs">
-                  {t.welcome.bossesDesc}
-                </p>
+          ) : (
+            /* Stage 2: Game Mechanics Info */
+            <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30 max-h-[85vh] overflow-y-auto">
+              {/* Header */}
+              <div className="text-center mb-4">
+                <div className="text-3xl mb-2">&#128214;</div>
+                <h2 className="text-lg font-bold text-l2-gold">
+                  {lang === 'ru' ? 'Как играть' : 'How to Play'}
+                </h2>
               </div>
 
-              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-purple-500">
-                <div className="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1">
-                  <span>&#128176;</span> {t.welcome.rewards}
+              {/* Game mechanics */}
+              <div className="space-y-3 mb-4">
+                {/* Bosses */}
+                <div className="bg-black/40 rounded-lg p-3 border-l-2 border-red-500">
+                  <div className="flex items-center gap-2 text-red-400 font-bold text-sm mb-1">
+                    <span>&#128121;</span> {lang === 'ru' ? 'Мировые Боссы' : 'World Bosses'}
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    {lang === 'ru'
+                      ? 'Тапай по боссу вместе с другими игроками! Чем больше урона нанесёшь — тем больше награда.'
+                      : 'Tap the boss with other players! More damage = bigger rewards.'}
+                  </p>
                 </div>
-                <p className="text-gray-400 text-xs">
-                  {t.welcome.rewardsDesc}
-                </p>
+
+                {/* Stamina */}
+                <div className="bg-black/40 rounded-lg p-3 border-l-2 border-green-500">
+                  <div className="flex items-center gap-2 text-green-400 font-bold text-sm mb-1">
+                    <span>&#9889;</span> {lang === 'ru' ? 'Выносливость' : 'Stamina'}
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    {lang === 'ru'
+                      ? 'Каждый удар тратит 1 выносливость. Восстанавливается со временем. Прокачивай Vitality!'
+                      : 'Each hit costs 1 stamina. Regenerates over time. Upgrade Vitality!'}
+                  </p>
+                </div>
+
+                {/* Chests */}
+                <div className="bg-black/40 rounded-lg p-3 border-l-2 border-amber-500">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm mb-1">
+                    <span>&#127873;</span> {lang === 'ru' ? 'Сундуки' : 'Chests'}
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    {lang === 'ru'
+                      ? '🪵 Деревянный (5мин), 🟫 Бронзовый (30мин), 🪙 Серебряный (4ч), 🟨 Золотой (8ч). Чем дольше — тем лучше лут!'
+                      : '🪵 Wooden (5m), 🟫 Bronze (30m), 🪙 Silver (4h), 🟨 Gold (8h). Longer = better loot!'}
+                  </p>
+                </div>
+
+                {/* Equipment */}
+                <div className="bg-black/40 rounded-lg p-3 border-l-2 border-purple-500">
+                  <div className="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1">
+                    <span>&#128737;</span> {lang === 'ru' ? 'Экипировка' : 'Equipment'}
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    {lang === 'ru'
+                      ? 'Из сундуков падает экипировка: Обычная (белая), Необычная (зелёная), Редкая (фиолетовая), Эпическая (оранжевая).'
+                      : 'Chests drop equipment: Common (white), Uncommon (green), Rare (purple), Epic (orange).'}
+                  </p>
+                </div>
+
+                {/* Stats */}
+                <div className="bg-black/40 rounded-lg p-3 border-l-2 border-blue-500">
+                  <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-1">
+                    <span>&#128200;</span> {lang === 'ru' ? 'Характеристики' : 'Stats'}
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    {lang === 'ru'
+                      ? 'Power = урон, Agility = скорость атаки и крит, Vitality = здоровье и выносливость.'
+                      : 'Power = damage, Agility = attack speed & crit, Vitality = health & stamina.'}
+                  </p>
+                </div>
+
+                {/* Starter Pack */}
+                <div className="bg-gradient-to-r from-l2-gold/20 to-transparent rounded-lg p-3 border border-l2-gold/30">
+                  <div className="flex items-center gap-2 text-l2-gold font-bold text-sm mb-1">
+                    <span>&#127873;</span> {lang === 'ru' ? 'Стартовый набор' : 'Starter Pack'}
+                  </div>
+                  <p className="text-gray-300 text-xs">
+                    {lang === 'ru'
+                      ? 'Тебе уже выдан полный сет экипировки новичка и деревянный сундук. Загляни в инвентарь!'
+                      : 'You already have a full starter equipment set and a wooden chest. Check your inventory!'}
+                  </p>
+                </div>
               </div>
 
-              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-blue-500">
-                <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-1">
-                  <span>&#9889;</span> {t.welcome.autoBattle}
-                </div>
-                <p className="text-gray-400 text-xs">
-                  {t.welcome.autoBattleDesc}
-                </p>
-              </div>
-
-              <div className="bg-black/40 rounded-lg p-3 border-l-2 border-green-500">
-                <div className="flex items-center gap-2 text-green-400 font-bold text-sm mb-1">
-                  <span>&#128200;</span> {t.welcome.upgrade}
-                </div>
-                <p className="text-gray-400 text-xs">
-                  {t.welcome.upgradeDesc}
-                </p>
-              </div>
+              {/* CTA Button */}
+              <button
+                onClick={handleWelcomeNext}
+                className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-500 hover:to-l2-gold transition-all text-lg"
+              >
+                {lang === 'ru' ? 'В бой!' : 'To Battle!'} &#9876;
+              </button>
             </div>
-
-            {/* CTA Button */}
-            <button
-              onClick={handleWelcomeClose}
-              className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-500 hover:to-l2-gold transition-all text-lg"
-            >
-              {t.welcome.startButton}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Offline Earnings Modal */}
-      {offlineEarnings && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="bg-l2-panel rounded-lg p-6 m-4 max-w-sm text-center">
-            <div className="text-l2-gold text-lg font-bold mb-2">{t.offline.welcomeBack}</div>
-            <p className="text-gray-300 text-sm mb-4">
-              {t.offline.awayFor} {offlineEarnings.hours} {t.offline.hours}
-            </p>
-            <div className="bg-black/30 rounded-lg p-4 mb-4">
-              <div className="text-xs text-gray-400 mb-1">{t.offline.earnings}</div>
-              <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.adena.toLocaleString()} {t.character.gold}
-              </div>
-            </div>
-            <button
-              onClick={() => setOfflineEarnings(null)}
-              className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg hover:bg-l2-gold/80 transition-colors"
-            >
-              {t.offline.collect}
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -969,14 +1035,14 @@ export default function GameCanvas() {
                 </div>
               </div>
 
-              {/* TON */}
+              {/* Алмазики (Ancient Coins) */}
               <div className="flex items-center justify-between bg-black/30 rounded-lg p-2">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">💎</span>
-                  <span className="text-sm text-gray-300">TON</span>
+                  <span className="text-sm text-gray-300">{lang === 'ru' ? 'Алмазики' : 'Diamonds'}</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-blue-400 font-bold text-sm">
+                  <div className="text-purple-400 font-bold text-sm">
                     {10 * Math.pow(2, (bossState.bossIndex || 1) - 1)}
                   </div>
                   <div className="text-[10px] text-gray-500">50% FB + 50% TD</div>

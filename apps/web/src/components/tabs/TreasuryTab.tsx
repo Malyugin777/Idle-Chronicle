@@ -2,25 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Package, Gem, Coins, Lock, X } from 'lucide-react';
+import { Package, Gem, Coins, Lock, X, ScrollText } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
-type ChestRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
 
 interface Chest {
   id: string;
-  rarity: ChestRarity;
+  chestType: ChestType;
   openingStarted: number | null;
   openingDuration: number;
 }
 
+interface EquipmentReward {
+  name: string;
+  icon: string;
+  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC';
+  slot: string;
+  pAtk?: number;
+  pDef?: number;
+}
+
 interface ClaimedReward {
   chestId: string;
-  rarity: ChestRarity;
+  chestType: ChestType;
   rewards: {
     adena: number;
-    exp: number;
-    ton: number;
+    equipment?: EquipmentReward;
+    enchantScrolls?: number;
   };
 }
 
@@ -28,21 +37,27 @@ interface LootStats {
   totalGoldEarned: number;
   chestSlots: number;
   totalChests: {
-    COMMON: number;
-    UNCOMMON: number;
-    RARE: number;
-    EPIC: number;
-    LEGENDARY: number;
+    WOODEN: number;
+    BRONZE: number;
+    SILVER: number;
+    GOLD: number;
   };
 }
 
-// Chest config
-const CHEST_CONFIG: Record<ChestRarity, { icon: string; color: string; bgColor: string; borderColor: string; duration: number }> = {
-  COMMON: { icon: '📦', color: 'text-gray-300', bgColor: 'bg-gray-600/30', borderColor: 'border-gray-500', duration: 5 * 60 * 1000 },
-  UNCOMMON: { icon: '🎁', color: 'text-green-400', bgColor: 'bg-green-600/30', borderColor: 'border-green-500', duration: 30 * 60 * 1000 },
-  RARE: { icon: '💎', color: 'text-blue-400', bgColor: 'bg-blue-600/30', borderColor: 'border-blue-500', duration: 4 * 60 * 60 * 1000 },
-  EPIC: { icon: '👑', color: 'text-purple-400', bgColor: 'bg-purple-600/30', borderColor: 'border-purple-500', duration: 8 * 60 * 60 * 1000 },
-  LEGENDARY: { icon: '🏆', color: 'text-orange-400', bgColor: 'bg-orange-600/30', borderColor: 'border-orange-500', duration: 24 * 60 * 60 * 1000 },
+// Chest config - Types (not rarities!)
+const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: string; color: string; bgColor: string; borderColor: string; duration: number }> = {
+  WOODEN: { icon: '🪵', name: 'Wooden', nameRu: 'Деревянный', color: 'text-amber-600', bgColor: 'bg-amber-900/30', borderColor: 'border-amber-700', duration: 5 * 60 * 1000 },
+  BRONZE: { icon: '🟫', name: 'Bronze', nameRu: 'Бронзовый', color: 'text-orange-400', bgColor: 'bg-orange-900/30', borderColor: 'border-orange-600', duration: 30 * 60 * 1000 },
+  SILVER: { icon: '🪙', name: 'Silver', nameRu: 'Серебряный', color: 'text-gray-300', bgColor: 'bg-gray-500/30', borderColor: 'border-gray-400', duration: 4 * 60 * 60 * 1000 },
+  GOLD: { icon: '🟨', name: 'Gold', nameRu: 'Золотой', color: 'text-yellow-400', bgColor: 'bg-yellow-600/30', borderColor: 'border-yellow-500', duration: 8 * 60 * 60 * 1000 },
+};
+
+// Item rarity colors for equipment rewards
+const RARITY_COLORS: Record<string, { color: string; glow: string }> = {
+  COMMON: { color: 'text-gray-300', glow: '' },
+  UNCOMMON: { color: 'text-green-400', glow: 'drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]' },
+  RARE: { color: 'text-purple-400', glow: 'drop-shadow-[0_0_8px_rgba(192,132,252,0.5)]' },
+  EPIC: { color: 'text-orange-400', glow: 'drop-shadow-[0_0_8px_rgba(251,146,60,0.5)]' },
 };
 
 const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
@@ -56,7 +71,7 @@ export default function TreasuryTab() {
   const [lootStats, setLootStats] = useState<LootStats>({
     totalGoldEarned: 0,
     chestSlots: 5,
-    totalChests: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+    totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
   });
   const [now, setNow] = useState(Date.now());
   const [claimedReward, setClaimedReward] = useState<ClaimedReward | null>(null);
@@ -100,7 +115,7 @@ export default function TreasuryTab() {
       setClaimedReward(data);
       // Refresh stats
       socket.emit('loot:stats:get');
-      setTimeout(() => setClaimedReward(null), 3000);
+      setTimeout(() => setClaimedReward(null), 4000);
     });
 
     // Chest deleted
@@ -204,16 +219,9 @@ export default function TreasuryTab() {
     return `${seconds}с`;
   };
 
-  // Get rarity label
-  const getRarityLabel = (rarity: ChestRarity) => {
-    const labels: Record<ChestRarity, string> = {
-      COMMON: 'Обычный',
-      UNCOMMON: 'Необычный',
-      RARE: 'Редкий',
-      EPIC: 'Эпический',
-      LEGENDARY: 'Легендарный',
-    };
-    return labels[rarity];
+  // Get chest type label
+  const getChestLabel = (chestType: ChestType) => {
+    return lang === 'ru' ? CHEST_CONFIG[chestType].nameRu : CHEST_CONFIG[chestType].name;
   };
 
   // Format number
@@ -232,10 +240,10 @@ export default function TreasuryTab() {
       {/* Claimed Reward Popup */}
       {claimedReward && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className={`${CHEST_CONFIG[claimedReward.rarity].bgColor} rounded-xl p-6 text-center mx-4 animate-bounce`}>
-            <div className="text-5xl mb-3">{CHEST_CONFIG[claimedReward.rarity].icon}</div>
-            <div className={`text-lg font-bold ${CHEST_CONFIG[claimedReward.rarity].color} mb-4`}>
-              {getRarityLabel(claimedReward.rarity)}!
+          <div className={`${CHEST_CONFIG[claimedReward.chestType].bgColor} rounded-xl p-6 text-center mx-4 animate-bounce`}>
+            <div className="text-5xl mb-3">{CHEST_CONFIG[claimedReward.chestType].icon}</div>
+            <div className={`text-lg font-bold ${CHEST_CONFIG[claimedReward.chestType].color} mb-4`}>
+              {getChestLabel(claimedReward.chestType)}!
             </div>
             <div className="space-y-2">
               {claimedReward.rewards.adena > 0 && (
@@ -244,16 +252,20 @@ export default function TreasuryTab() {
                   <span className="text-l2-gold font-bold">+{formatNumber(claimedReward.rewards.adena)}</span>
                 </div>
               )}
-              {claimedReward.rewards.exp > 0 && (
+              {claimedReward.rewards.equipment && (
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-green-400">⭐</span>
-                  <span className="text-green-400 font-bold">+{formatNumber(claimedReward.rewards.exp)} EXP</span>
+                  <span className={`text-2xl ${RARITY_COLORS[claimedReward.rewards.equipment.rarity]?.glow}`}>
+                    {claimedReward.rewards.equipment.icon}
+                  </span>
+                  <span className={`font-bold ${RARITY_COLORS[claimedReward.rewards.equipment.rarity]?.color || 'text-white'}`}>
+                    {claimedReward.rewards.equipment.name}
+                  </span>
                 </div>
               )}
-              {claimedReward.rewards.ton > 0 && (
+              {claimedReward.rewards.enchantScrolls && claimedReward.rewards.enchantScrolls > 0 && (
                 <div className="flex items-center justify-center gap-2">
-                  <Gem className="text-blue-400" size={18} />
-                  <span className="text-blue-400 font-bold">+{claimedReward.rewards.ton} TON</span>
+                  <ScrollText className="text-blue-400" size={18} />
+                  <span className="text-blue-400 font-bold">+{claimedReward.rewards.enchantScrolls} Свиток заточки</span>
                 </div>
               )}
             </div>
@@ -284,11 +296,12 @@ export default function TreasuryTab() {
             </div>
           </div>
           <div className="bg-black/30 rounded p-2">
-            <div className="text-gray-500 mb-1">Сундуки получено</div>
-            <div className="flex gap-1 flex-wrap">
-              <span className="text-gray-300">{lootStats.totalChests.COMMON}📦</span>
-              <span className="text-green-400">{lootStats.totalChests.UNCOMMON}🎁</span>
-              <span className="text-blue-400">{lootStats.totalChests.RARE}💎</span>
+            <div className="text-gray-500 mb-1">Сундуки открыто</div>
+            <div className="flex gap-1 flex-wrap text-[10px]">
+              <span className="text-amber-600">{lootStats.totalChests.WOODEN}🪵</span>
+              <span className="text-orange-400">{lootStats.totalChests.BRONZE}🟫</span>
+              <span className="text-gray-300">{lootStats.totalChests.SILVER}🪙</span>
+              <span className="text-yellow-400">{lootStats.totalChests.GOLD}🟨</span>
             </div>
           </div>
         </div>
@@ -333,7 +346,7 @@ export default function TreasuryTab() {
             }
 
             // Slot with chest
-            const config = CHEST_CONFIG[chest.rarity];
+            const config = CHEST_CONFIG[chest.chestType];
             const isOpening = chest.openingStarted !== null;
             const elapsed = isOpening ? now - chest.openingStarted! : 0;
             const remaining = chest.openingDuration - elapsed;
@@ -388,13 +401,13 @@ export default function TreasuryTab() {
       {selectedChest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setSelectedChest(null)}>
           <div
-            className={`${CHEST_CONFIG[selectedChest.rarity].bgColor} rounded-xl p-4 w-full max-w-xs border-2 ${CHEST_CONFIG[selectedChest.rarity].borderColor}`}
+            className={`${CHEST_CONFIG[selectedChest.chestType].bgColor} rounded-xl p-4 w-full max-w-xs border-2 ${CHEST_CONFIG[selectedChest.chestType].borderColor}`}
             onClick={e => e.stopPropagation()}
           >
             <div className="text-center mb-4">
-              <div className="text-5xl mb-2">{CHEST_CONFIG[selectedChest.rarity].icon}</div>
-              <div className={`text-lg font-bold ${CHEST_CONFIG[selectedChest.rarity].color}`}>
-                {getRarityLabel(selectedChest.rarity)}
+              <div className="text-5xl mb-2">{CHEST_CONFIG[selectedChest.chestType].icon}</div>
+              <div className={`text-lg font-bold ${CHEST_CONFIG[selectedChest.chestType].color}`}>
+                {getChestLabel(selectedChest.chestType)}
               </div>
               {(() => {
                 const isOpening = selectedChest.openingStarted !== null;
@@ -410,6 +423,39 @@ export default function TreasuryTab() {
                   return <div className="text-gray-500 text-sm mt-1">Время открытия: {formatTime(selectedChest.openingDuration)}</div>;
                 }
               })()}
+            </div>
+
+            {/* Drop rates info */}
+            <div className="bg-black/30 rounded-lg p-2 mb-3 text-xs">
+              <div className="text-gray-500 mb-1">Возможный дроп:</div>
+              {selectedChest.chestType === 'WOODEN' && (
+                <div className="text-gray-400">
+                  <div>💰 100-500 золота</div>
+                  <div>📦 80% Обычная экипировка</div>
+                  <div>📦 5% Необычная экипировка</div>
+                </div>
+              )}
+              {selectedChest.chestType === 'BRONZE' && (
+                <div className="text-gray-400">
+                  <div>💰 500-2000 золота</div>
+                  <div>📦 80% Обычная, 20% Необычная</div>
+                  <div>📦 3% Редкая экипировка</div>
+                </div>
+              )}
+              {selectedChest.chestType === 'SILVER' && (
+                <div className="text-gray-400">
+                  <div>💰 2000-10000 золота</div>
+                  <div>📦 40% Необычная, 10% Редкая</div>
+                  <div>📦 3% Эпическая экипировка</div>
+                </div>
+              )}
+              {selectedChest.chestType === 'GOLD' && (
+                <div className="text-gray-400">
+                  <div>💰 10000-50000 золота</div>
+                  <div>📦 15% Редкая экипировка</div>
+                  <div>📦 5% Эпическая экипировка</div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
