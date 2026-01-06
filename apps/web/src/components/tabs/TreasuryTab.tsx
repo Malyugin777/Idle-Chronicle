@@ -259,7 +259,7 @@ export default function TreasuryTab() {
 
   // Boost chest opening by 30 min
   const boostChest = (chestId: string) => {
-    if (crystals < BOOST_COST) return;
+    if (gold < BOOST_COST) return;
     getSocket().emit('chest:boost', { chestId });
   };
 
