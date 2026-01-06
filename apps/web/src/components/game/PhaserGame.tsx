@@ -119,11 +119,16 @@ export default function PhaserGame() {
   // Session
   const [sessionDamage, setSessionDamage] = useState(0);
 
+  // Debug: triple tap counter
+  const tapCountRef = useRef(0);
+  const lastTapTimeRef = useRef(0);
+
   // Overlays
   const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(0);
   const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeStep, setWelcomeStep] = useState(0); // 0, 1, 2 for 3-screen carousel
   const [showDropTable, setShowDropTable] = useState(false);
 
   // Check exhaustion
@@ -165,10 +170,37 @@ export default function PhaserGame() {
     return num.toString();
   };
 
+  // Debug: triple tap to reset isFirstLogin and show welcome
+  const handleHeaderTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapTimeRef.current < 500) {
+      tapCountRef.current++;
+      if (tapCountRef.current >= 3) {
+        console.log('[Debug] Triple tap - resetting isFirstLogin');
+        getSocket().emit('admin:resetFirstLogin');
+        setShowWelcome(true);
+        setWelcomeStep(0);
+        tapCountRef.current = 0;
+      }
+    } else {
+      tapCountRef.current = 1;
+    }
+    lastTapTimeRef.current = now;
+  }, []);
+
   // Socket & Phaser setup
   useEffect(() => {
     setLang(detectLanguage());
     const socket = getSocket();
+
+    // Check for ?welcome=1 query param to force show welcome
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('welcome') === '1') {
+        setShowWelcome(true);
+        setWelcomeStep(0);
+      }
+    }
 
     // Initialize Phaser
     if (containerRef.current && !gameRef.current) {
@@ -246,7 +278,12 @@ export default function PhaserGame() {
 
     // Auth success
     socket.on('auth:success', (data: any) => {
-      if (data.isFirstLogin) setShowWelcome(true);
+      console.log('[Auth] Success! isFirstLogin:', data.isFirstLogin);
+      if (data.isFirstLogin) {
+        console.log('[Welcome] Showing welcome carousel');
+        setShowWelcome(true);
+        setWelcomeStep(0);
+      }
       if (data.user) {
         setPlayerState({
           stamina: data.user.stamina ?? 100,
@@ -349,9 +386,12 @@ export default function PhaserGame() {
   return (
     <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* HEADER - Boss HP Bar */}
+      {/* HEADER - Boss HP Bar (triple tap = show welcome) */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">
+      <div
+        className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent"
+        onClick={handleHeaderTap}
+      >
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-2">
             <span className="text-lg">{bossState.icon}</span>
@@ -440,6 +480,18 @@ export default function PhaserGame() {
 
         {/* Skill Buttons */}
         <div className="flex justify-center gap-3">
+          {/* Debug: Show welcome button */}
+          <button
+            onClick={() => {
+              console.log('[Debug] Show welcome clicked');
+              getSocket().emit('admin:resetFirstLogin');
+              setShowWelcome(true);
+              setWelcomeStep(0);
+            }}
+            className="w-14 h-14 rounded-lg border-2 border-purple-500 bg-purple-900/50 flex items-center justify-center text-2xl"
+          >
+            ❓
+          </button>
           {skills.map(skill => {
             const now = Date.now();
             const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
@@ -525,22 +577,98 @@ export default function PhaserGame() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* WELCOME OVERLAY */}
+      {/* WELCOME CAROUSEL (3 screens) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {showWelcome && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
           <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 m-3 max-w-sm w-full border border-l2-gold/30">
-            <div className="text-center mb-4">
-              <div className="text-4xl mb-2">⚔️</div>
-              <h1 className="text-xl font-bold text-l2-gold mb-1">{t.welcome.title}</h1>
-              <p className="text-gray-300 text-sm">{t.welcome.subtitle}</p>
+            {/* Progress dots */}
+            <div className="flex justify-center gap-2 mb-4">
+              {[0, 1, 2].map(i => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    i === welcomeStep ? 'bg-l2-gold w-6' : 'bg-gray-600'
+                  }`}
+                />
+              ))}
             </div>
-            <button
-              onClick={() => { setShowWelcome(false); getSocket().emit('firstLogin:complete'); }}
-              className="w-full py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg"
-            >
-              {t.welcome.startButton}
-            </button>
+
+            {/* Screen 0: Welcome intro */}
+            {welcomeStep === 0 && (
+              <div className="text-center mb-6">
+                <div className="text-5xl mb-3">⚔️</div>
+                <h1 className="text-2xl font-bold text-l2-gold mb-2">{t.welcome.title}</h1>
+                <p className="text-gray-300">{t.welcome.subtitle}</p>
+              </div>
+            )}
+
+            {/* Screen 1: Bosses + Rewards */}
+            {welcomeStep === 1 && (
+              <div className="space-y-4 mb-6">
+                <div className="bg-black/40 rounded-lg p-4 border border-red-500/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">👹</span>
+                    <h2 className="text-lg font-bold text-red-400">{t.welcome.bosses}</h2>
+                  </div>
+                  <p className="text-gray-300 text-sm">{t.welcome.bossesDesc}</p>
+                </div>
+                <div className="bg-black/40 rounded-lg p-4 border border-l2-gold/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">🪙</span>
+                    <h2 className="text-lg font-bold text-l2-gold">{t.welcome.rewards}</h2>
+                  </div>
+                  <p className="text-gray-300 text-sm">{t.welcome.rewardsDesc}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Screen 2: Auto-Battle + Upgrade */}
+            {welcomeStep === 2 && (
+              <div className="space-y-4 mb-6">
+                <div className="bg-black/40 rounded-lg p-4 border border-blue-500/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">🤖</span>
+                    <h2 className="text-lg font-bold text-blue-400">{t.welcome.autoBattle}</h2>
+                  </div>
+                  <p className="text-gray-300 text-sm">{t.welcome.autoBattleDesc}</p>
+                </div>
+                <div className="bg-black/40 rounded-lg p-4 border border-green-500/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-3xl">📈</span>
+                    <h2 className="text-lg font-bold text-green-400">{t.welcome.upgrade}</h2>
+                  </div>
+                  <p className="text-gray-300 text-sm">{t.welcome.upgradeDesc}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation buttons */}
+            <div className="flex gap-3">
+              {welcomeStep > 0 && (
+                <button
+                  onClick={() => { console.log('[Welcome] Back to step', welcomeStep - 1); setWelcomeStep(s => s - 1); }}
+                  className="flex-1 py-3 bg-gray-700 text-white font-bold rounded-lg active:scale-95 transition-transform"
+                >
+                  {lang === 'ru' ? 'Назад' : 'Back'}
+                </button>
+              )}
+              {welcomeStep < 2 ? (
+                <button
+                  onClick={() => { console.log('[Welcome] Next to step', welcomeStep + 1); setWelcomeStep(s => s + 1); }}
+                  className="flex-1 py-3 bg-l2-gold text-black font-bold rounded-lg active:scale-95 transition-transform"
+                >
+                  {lang === 'ru' ? 'Далее' : 'Next'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => { console.log('[Welcome] Complete!'); setShowWelcome(false); setWelcomeStep(0); getSocket().emit('firstLogin:complete'); }}
+                  className="flex-1 py-3 bg-gradient-to-r from-l2-gold to-yellow-600 text-black font-bold rounded-lg animate-pulse active:scale-95 transition-transform"
+                >
+                  {t.welcome.startButton}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

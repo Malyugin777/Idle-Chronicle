@@ -2873,6 +2873,23 @@ app.prepare().then(async () => {
       }
     });
 
+    // ADMIN: Reset first login (for testing welcome screens)
+    socket.on('admin:resetFirstLogin', async () => {
+      if (!player.odamage) return;
+
+      try {
+        player.isFirstLogin = true;
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { isFirstLogin: true },
+        });
+        console.log(`[Admin] Reset isFirstLogin for user ${player.username}`);
+        socket.emit('admin:resetFirstLogin:success');
+      } catch (err) {
+        console.error('[Admin] Reset error:', err.message);
+      }
+    });
+
     // STARTER CHEST OPEN - Give starter equipment when user opens starter chest in welcome popup
     socket.on('starter:open', async () => {
       if (!player.odamage) {
