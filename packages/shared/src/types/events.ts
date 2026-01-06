@@ -76,6 +76,7 @@ export interface UserState {
   photoUrl: string | null;
   level: number;
   exp: string;
+  // Legacy stats
   str: number;
   dex: number;
   luck: number;
@@ -83,9 +84,29 @@ export interface UserState {
   critChance: number;
   critDamage: number;
   attackSpeed: number;
+  // L2 Core Attributes (NEW)
+  power: number;
+  agility: number;
+  vitality: number;
+  intellect: number;
+  spirit: number;
+  // L2 Derived Stats (NEW)
+  physicalPower: number;
+  maxHealth: number;
+  physicalDefense: number;
+  // L2 Stamina System (NEW)
+  stamina: number;
+  maxStamina: number;
+  exhaustedUntil: number | null;  // timestamp when exhaustion ends
+  // Legacy energy (kept for backward compatibility)
   energy: number;
   maxEnergy: number;
   energyRegen: number;
+  // Mana (for future skills)
+  mana: number;
+  maxMana: number;
+  manaRegen: number;
+  // Currencies
   adena: string;
   ancientCoin: number;
   soulshotNG: number;
@@ -108,6 +129,7 @@ export interface BossState {
   maxHp: string;
   hpPercent: number;
   defense: number;
+  thornsDamage: number;  // L2: обратка босса (тратит stamina игрока)
   ragePhase: number;
 }
 
@@ -150,6 +172,32 @@ export interface S2C_TapResult {
     soulshotsUsed: number;
     newEnergy: number;
     newBossHp: string;
+    // L2 Stamina (NEW)
+    stamina: number;
+    maxStamina: number;
+    thornsTaken: number;
+    staminaCost: number;
+  };
+}
+
+// L2: Hero exhausted event (NEW)
+export interface S2C_HeroExhausted {
+  event: 'hero:exhausted';
+  data: {
+    until: number;      // timestamp when exhaustion ends
+    duration: number;   // duration in ms
+  };
+}
+
+// L2: Combat tick event (NEW) - for auto-attack results
+export interface S2C_CombatTick {
+  event: 'combat:tick';
+  data: {
+    damage: number;
+    stamina: number;
+    maxStamina: number;
+    thornsTaken: number;
+    sessionDamage: number;
   };
 }
 
@@ -212,4 +260,6 @@ export type ServerToClientEvent =
   | S2C_BossKilled
   | S2C_RagePhase
   | S2C_UserUpdate
-  | S2C_Error;
+  | S2C_Error
+  | S2C_HeroExhausted   // L2 (NEW)
+  | S2C_CombatTick;     // L2 (NEW)

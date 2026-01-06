@@ -25,18 +25,36 @@ model User {
   level           Int      @default(1)
   exp             BigInt   @default(0)
 
-  // Base Stats (upgradeable)
+  // Base Stats (legacy - for backward compatibility)
   str             Int      @default(1)
   dex             Int      @default(1)
   luck            Int      @default(1)
 
-  // Derived Stats
+  // L2 Core Attributes (NEW)
+  power           Int      @default(10)    // → Physical Power (P.Atk)
+  agility         Int      @default(10)    // → Attack Speed, Crit Chance
+  vitality        Int      @default(10)    // → Max Health, Max Stamina
+  intellect       Int      @default(10)    // → Magic Power (future)
+  spirit          Int      @default(10)    // → Max Mana (future)
+
+  // Derived Stats (legacy)
   pAtk            Int      @default(10)
   critChance      Float    @default(0.05)
   critDamage      Float    @default(2.0)
   attackSpeed     Float    @default(1.0)
 
-  // Mana System (renamed from Energy)
+  // L2 Derived Stats (NEW - cached from calculateDerived)
+  physicalPower   Int      @default(15)    // floor(basePower * powerMod)
+  maxHealth       Int      @default(100)   // floor(baseHealth * vitalityMod)
+  physicalDefense Int      @default(40)    // P.Def for thorns reduction
+
+  // Stamina System (NEW - replaces Mana for combat)
+  stamina         Int      @default(30)    // Current stamina
+  maxStamina      Int      @default(30)    // max(30, floor(maxHealth * 10))
+  lastStaminaTick DateTime @default(now())
+  exhaustedUntil  DateTime?               // null = not exhausted
+
+  // Mana System (kept for skills/magic - future use)
   mana            Int      @default(1000)
   maxMana         Int      @default(1000)
   manaRegen       Float    @default(0.2)  // 1 per 5 seconds = 0.2/sec, upgradeable to 10/sec
@@ -208,6 +226,7 @@ model Boss {
 
   baseHp      BigInt
   defense     Int      @default(0)
+  thornsDamage Int     @default(0)   // Обратка босса - тратит stamina игрока
 
   ragePhases  Json
 

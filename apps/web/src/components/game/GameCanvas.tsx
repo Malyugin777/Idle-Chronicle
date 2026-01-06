@@ -57,8 +57,13 @@ export default function GameCanvas() {
     playersOnline: 0,
   });
 
+  // Legacy mana (for skills - future)
   const [mana, setMana] = useState(1000);
   const [maxMana] = useState(1000);
+  // L2 Stamina System (NEW)
+  const [stamina, setStamina] = useState(30);
+  const [maxStamina, setMaxStamina] = useState(30);
+  const [exhaustedUntil, setExhaustedUntil] = useState<number | null>(null);
   const [sessionDamage, setSessionDamage] = useState(0);
   const [connected, setConnected] = useState(false);
   const [damageFeed, setDamageFeed] = useState<DamageFeed[]>([]);
@@ -175,9 +180,22 @@ export default function GameCanvas() {
     });
 
     // Tap results - show actual damage from server
-    socket.on('tap:result', (data: { damage: number; crits: number; mana: number; sessionDamage: number }) => {
+    socket.on('tap:result', (data: {
+      damage: number;
+      crits: number;
+      mana: number;
+      sessionDamage: number;
+      // L2 Stamina (NEW)
+      stamina?: number;
+      maxStamina?: number;
+      thornsTaken?: number;
+      staminaCost?: number;
+    }) => {
       setMana(data.mana);
       setSessionDamage(data.sessionDamage);
+      // L2 Stamina (NEW)
+      if (data.stamina !== undefined) setStamina(data.stamina);
+      if (data.maxStamina !== undefined) setMaxStamina(data.maxStamina);
 
       // Show actual damage number from server
       const canvas = document.querySelector('canvas');
@@ -196,6 +214,16 @@ export default function GameCanvas() {
           crit: data.crits > 0,
         });
       }
+    });
+
+    // L2: Hero exhausted event (NEW)
+    socket.on('hero:exhausted', (data: { until: number; duration: number }) => {
+      console.log('[Hero] Exhausted until:', new Date(data.until).toLocaleTimeString());
+      setExhaustedUntil(data.until);
+      // Auto-clear exhaustion when it expires
+      setTimeout(() => {
+        setExhaustedUntil(null);
+      }, data.duration);
     });
 
     // Auto-attack results
@@ -259,9 +287,22 @@ export default function GameCanvas() {
     });
 
     // Player state
-    socket.on('player:state', (data: { mana: number; maxMana: number; sessionDamage: number; isFirstLogin?: boolean }) => {
+    socket.on('player:state', (data: {
+      mana: number;
+      maxMana: number;
+      sessionDamage: number;
+      isFirstLogin?: boolean;
+      // L2 Stamina (NEW)
+      stamina?: number;
+      maxStamina?: number;
+      exhaustedUntil?: number | null;
+    }) => {
       setMana(data.mana);
       setSessionDamage(data.sessionDamage);
+      // L2 Stamina (NEW)
+      if (data.stamina !== undefined) setStamina(data.stamina);
+      if (data.maxStamina !== undefined) setMaxStamina(data.maxStamina);
+      if (data.exhaustedUntil !== undefined) setExhaustedUntil(data.exhaustedUntil);
       if (data.isFirstLogin) {
         setShowWelcome(true);
       }
@@ -283,6 +324,10 @@ export default function GameCanvas() {
         setShowWelcome(true);
       }
       setMana(data.mana || 1000);
+      // L2 Stamina (NEW)
+      if (data.stamina !== undefined) setStamina(data.stamina);
+      if (data.maxStamina !== undefined) setMaxStamina(data.maxStamina);
+      if (data.exhaustedUntil !== undefined) setExhaustedUntil(data.exhaustedUntil);
     });
 
     // Offline earnings notification
@@ -317,6 +362,7 @@ export default function GameCanvas() {
       socket.off('offline:earnings');
       socket.off('auth:success');
       socket.off('auth:error');
+      socket.off('hero:exhausted');  // L2 (NEW)
     };
   }, []);
 
@@ -555,10 +601,15 @@ export default function GameCanvas() {
     };
   }, [bossState.hp]);
 
+  // Check if currently exhausted (L2)
+  const isExhausted = exhaustedUntil !== null && Date.now() < exhaustedUntil;
+
   // Handle tap/click
   const handleTap = useCallback(() => {
     if (bossState.hp <= 0) return;
-    if (mana <= 0) return;
+    // L2: Check exhaustion first, then stamina
+    if (isExhausted) return;
+    if (stamina <= 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -570,8 +621,8 @@ export default function GameCanvas() {
     // Queue tap for batching
     tapQueueRef.current++;
 
-    // Optimistic UI update for mana only
-    setMana(prev => Math.max(0, prev - 1));
+    // Optimistic UI update for stamina (server will correct if wrong)
+    setStamina(prev => Math.max(0, prev - 1));
 
     // Trigger hit animation
     hitT0Ref.current = performance.now();
@@ -583,10 +634,11 @@ export default function GameCanvas() {
       born: performance.now(),
       life: 260,
     });
-  }, [bossState.hp, mana]);
+  }, [bossState.hp, stamina, isExhausted]);
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
   const manaPercent = (mana / maxMana) * 100;
+  const staminaPercent = (stamina / maxStamina) * 100;  // L2 (NEW)
 
   // Handle welcome popup close
   const handleWelcomeClose = () => {
@@ -827,16 +879,21 @@ export default function GameCanvas() {
 
       {/* Stats footer */}
       <div className="p-4 bg-l2-panel/80">
-        {/* Mana bar */}
+        {/* L2 Stamina bar (NEW) */}
         <div className="mb-3">
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-blue-400">{t.game.mana}</span>
-            <span>{Math.floor(mana)} / {maxMana}</span>
+            <span className={`${isExhausted ? 'text-red-400' : 'text-green-400'}`}>
+              {isExhausted ? '⚡ EXHAUSTED' : '⚡ Stamina'}
+            </span>
+            <span>{Math.floor(stamina)} / {maxStamina}</span>
           </div>
           <div className="h-2 bg-black/50 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 transition-all duration-100"
-              style={{ width: `${manaPercent}%` }}
+              className={`h-full transition-all duration-100 ${
+                isExhausted ? 'bg-red-500 animate-pulse' :
+                staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${staminaPercent}%` }}
             />
           </div>
         </div>

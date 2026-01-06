@@ -5,6 +5,9 @@ const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 
+// L2 Stats Service
+const StatsService = require('./services/StatsService');
+
 // ═══════════════════════════════════════════════════════════
 // TELEGRAM VERIFICATION
 // ═══════════════════════════════════════════════════════════
@@ -75,6 +78,7 @@ let bossState = {
   maxHp: 500000,
   currentHp: 500000,
   defense: 0,
+  thornsDamage: 0,  // L2: обратка босса (тратит stamina игрока)
   ragePhase: 0,
   sessionId: null,
   icon: '🦎',
@@ -146,22 +150,22 @@ function getManaRegenCost(currentRegen) {
   return Math.floor(1000 * Math.pow(2, level));
 }
 
-// Offline progress constants
-const OFFLINE_ADENA_PER_HOUR = 50; // Base adena per hour offline
-const MAX_OFFLINE_HOURS = 8; // Maximum hours to accumulate
-
+// Offline progress constants (L2: использует StatsService для расчёта)
+// Legacy function kept for backward compatibility, but uses StatsService internally
 function calculateOfflineEarnings(player, lastOnline) {
-  const now = Date.now();
-  const offlineMs = now - lastOnline.getTime();
-  const offlineHours = Math.min(offlineMs / (1000 * 60 * 60), MAX_OFFLINE_HOURS);
+  // Use StatsService for L2-style offline progress (4 hour cap)
+  const progress = StatsService.calculateOfflineProgress({
+    lastOnline: lastOnline,
+    attackSpeed: player.attackSpeed || 300,
+    physicalPower: player.physicalPower || 15,
+  });
 
-  if (offlineHours < 0.1) return { adena: 0, hours: 0 }; // Less than 6 min, no reward
-
-  // Adena scales with player level/stats
-  const multiplier = 1 + (player.str * 0.1) + (player.dex * 0.05);
-  const adenaEarned = Math.floor(OFFLINE_ADENA_PER_HOUR * offlineHours * multiplier);
-
-  return { adena: adenaEarned, hours: Math.round(offlineHours * 10) / 10 };
+  return {
+    adena: progress.adenaEarned,
+    hours: progress.offlineHours,
+    damage: progress.totalDamage,
+    exp: progress.expEarned,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -245,17 +249,18 @@ function updateRagePhase() {
 }
 
 // Default bosses for rotation (used if DB is empty)
+// thornsDamage: обратка босса - тратит stamina игрока при каждом тапе
 const DEFAULT_BOSSES = [
-  { name: 'Lizard', hp: 500000, defense: 0, icon: '🦎', adenaReward: 1000, expReward: 500 },
-  { name: 'Golem', hp: 750000, defense: 5, icon: '🗿', adenaReward: 2000, expReward: 1000 },
-  { name: 'Spider Queen', hp: 1000000, defense: 10, icon: '🕷️', adenaReward: 3500, expReward: 1800 },
-  { name: 'Werewolf', hp: 1500000, defense: 15, icon: '🐺', adenaReward: 5000, expReward: 2500 },
-  { name: 'Demon', hp: 2000000, defense: 20, icon: '👹', adenaReward: 7000, expReward: 3500 },
-  { name: 'Kraken', hp: 3000000, defense: 30, icon: '🐙', adenaReward: 10000, expReward: 5000 },
-  { name: 'Dragon', hp: 5000000, defense: 50, icon: '🐉', adenaReward: 15000, expReward: 8000 },
-  { name: 'Hydra', hp: 7500000, defense: 75, icon: '🐍', adenaReward: 25000, expReward: 12000 },
-  { name: 'Phoenix', hp: 10000000, defense: 100, icon: '🔥', adenaReward: 35000, expReward: 20000 },
-  { name: 'Ancient Dragon', hp: 15000000, defense: 150, icon: '🏴', adenaReward: 50000, expReward: 30000 },
+  { name: 'Lizard', hp: 500000, defense: 0, thornsDamage: 0, icon: '🦎', adenaReward: 1000, expReward: 500 },
+  { name: 'Golem', hp: 750000, defense: 5, thornsDamage: 1, icon: '🗿', adenaReward: 2000, expReward: 1000 },
+  { name: 'Spider Queen', hp: 1000000, defense: 10, thornsDamage: 2, icon: '🕷️', adenaReward: 3500, expReward: 1800 },
+  { name: 'Werewolf', hp: 1500000, defense: 15, thornsDamage: 3, icon: '🐺', adenaReward: 5000, expReward: 2500 },
+  { name: 'Demon', hp: 2000000, defense: 20, thornsDamage: 4, icon: '👹', adenaReward: 7000, expReward: 3500 },
+  { name: 'Kraken', hp: 3000000, defense: 30, thornsDamage: 5, icon: '🐙', adenaReward: 10000, expReward: 5000 },
+  { name: 'Dragon', hp: 5000000, defense: 50, thornsDamage: 6, icon: '🐉', adenaReward: 15000, expReward: 8000 },
+  { name: 'Hydra', hp: 7500000, defense: 75, thornsDamage: 8, icon: '🐍', adenaReward: 25000, expReward: 12000 },
+  { name: 'Phoenix', hp: 10000000, defense: 100, thornsDamage: 10, icon: '🔥', adenaReward: 35000, expReward: 20000 },
+  { name: 'Ancient Dragon', hp: 15000000, defense: 150, thornsDamage: 15, icon: '🏴', adenaReward: 50000, expReward: 30000 },
 ];
 
 // Respawn timer (10 minutes = 600000ms)
@@ -295,13 +300,14 @@ async function respawnBoss(prisma, forceNext = true) {
         maxHp: Number(boss.baseHp),
         currentHp: Number(boss.baseHp),
         defense: boss.defense,
+        thornsDamage: boss.thornsDamage || 0,  // L2: обратка
         ragePhase: 0,
         sessionId: session?.id || null,
         icon: boss.iconUrl || '👹',
         bossIndex: currentBossIndex + 1,
         totalBosses: bosses.length,
       };
-      console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP)`);
+      console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP, thorns: ${boss.thornsDamage || 0})`);
     } else {
       // Use default bosses
       if (forceNext) {
@@ -316,6 +322,7 @@ async function respawnBoss(prisma, forceNext = true) {
         maxHp: boss.hp,
         currentHp: boss.hp,
         defense: boss.defense,
+        thornsDamage: boss.thornsDamage || 0,  // L2: обратка
         ragePhase: 0,
         sessionId: null,
         icon: boss.icon,
@@ -335,6 +342,7 @@ async function respawnBoss(prisma, forceNext = true) {
       maxHp: boss.hp,
       currentHp: boss.hp,
       defense: boss.defense,
+      thornsDamage: boss.thornsDamage || 0,  // L2: обратка
       ragePhase: 0,
       sessionId: null,
       icon: boss.icon,
@@ -408,12 +416,28 @@ app.prepare().then(async () => {
     const player = {
       odamage: '',
       odamageN: 'Guest',
+      // Legacy stats
       str: 1,
       dex: 1,
       luck: 1,
       pAtk: 10,
       critChance: BASE_CRIT_CHANCE,
-      // Mana system (renamed from energy)
+      // L2 Core Attributes (NEW)
+      power: 10,
+      agility: 10,
+      vitality: 10,
+      intellect: 10,
+      spirit: 10,
+      // L2 Derived Stats (NEW)
+      physicalPower: 15,
+      maxHealth: 100,
+      physicalDefense: 40,
+      attackSpeed: 300,
+      // Stamina System (NEW - replaces mana for combat)
+      stamina: 30,
+      maxStamina: 30,
+      exhaustedUntil: null,  // timestamp when exhaustion ends
+      // Mana system (kept for skills/magic - future)
       mana: 1000,
       maxMana: 1000,
       manaRegen: BASE_MANA_REGEN,
@@ -463,9 +487,21 @@ app.prepare().then(async () => {
     });
 
     socket.emit('player:state', {
+      // L2 Stamina (NEW)
+      stamina: player.stamina,
+      maxStamina: player.maxStamina,
+      exhaustedUntil: player.exhaustedUntil,
+      // L2 Attributes (NEW)
+      power: player.power,
+      agility: player.agility,
+      vitality: player.vitality,
+      physicalPower: player.physicalPower,
+      physicalDefense: player.physicalDefense,
+      // Legacy mana
       mana: player.mana,
       maxMana: player.maxMana,
       manaRegen: player.manaRegen,
+      // Other
       tapsPerSecond: player.tapsPerSecond,
       autoAttackSpeed: player.autoAttackSpeed,
       sessionDamage: player.sessionDamage,
@@ -587,11 +623,28 @@ app.prepare().then(async () => {
         // Update player state from DB
         player.odamage = user.id;
         player.odamageN = user.firstName || user.username || 'Player';
+        // Legacy stats
         player.str = user.str;
         player.dex = user.dex;
         player.luck = user.luck;
         player.pAtk = user.pAtk;
         player.critChance = user.critChance;
+        // L2 Core Attributes (NEW)
+        player.power = user.power || 10;
+        player.agility = user.agility || 10;
+        player.vitality = user.vitality || 10;
+        player.intellect = user.intellect || 10;
+        player.spirit = user.spirit || 10;
+        // L2 Derived Stats (NEW)
+        player.physicalPower = user.physicalPower || 15;
+        player.maxHealth = user.maxHealth || 100;
+        player.physicalDefense = user.physicalDefense || 40;
+        player.attackSpeed = user.attackSpeed || 300;
+        // L2 Stamina (NEW)
+        player.stamina = user.stamina || 30;
+        player.maxStamina = user.maxStamina || 30;
+        player.exhaustedUntil = user.exhaustedUntil ? user.exhaustedUntil.getTime() : null;
+        // Mana
         player.mana = user.mana;
         player.maxMana = user.maxMana;
         player.manaRegen = user.manaRegen;
@@ -630,11 +683,28 @@ app.prepare().then(async () => {
           username: user.username,
           firstName: user.firstName,
           level: user.level,
+          // Legacy stats
           str: user.str,
           dex: user.dex,
           luck: user.luck,
           pAtk: user.pAtk,
           critChance: user.critChance,
+          // L2 Core Attributes (NEW)
+          power: player.power,
+          agility: player.agility,
+          vitality: player.vitality,
+          intellect: player.intellect,
+          spirit: player.spirit,
+          // L2 Derived Stats (NEW)
+          physicalPower: player.physicalPower,
+          maxHealth: player.maxHealth,
+          physicalDefense: player.physicalDefense,
+          attackSpeed: player.attackSpeed,
+          // L2 Stamina (NEW)
+          stamina: player.stamina,
+          maxStamina: player.maxStamina,
+          exhaustedUntil: player.exhaustedUntil,
+          // Other
           adena: Number(user.adena),
           mana: user.mana,
           maxMana: user.maxMana,
@@ -662,9 +732,15 @@ app.prepare().then(async () => {
     // TAP
     socket.on('tap:batch', async (data) => {
       let tapCount = Math.min(data.count || 1, MAX_TAPS_PER_BATCH);
+      const now = Date.now();
+
+      // Check exhaustion (L2: не можем тапать если exhausted)
+      if (StatsService.isExhausted(player.exhaustedUntil)) {
+        socket.emit('tap:error', { message: 'Exhausted! Wait to recover.' });
+        return;
+      }
 
       // Rate limiting based on tapsPerSecond
-      const now = Date.now();
       const timeSinceLastTap = now - player.lastTapTime;
       const maxTapsAllowed = Math.floor((timeSinceLastTap / 1000) * player.tapsPerSecond) + 1;
 
@@ -675,17 +751,43 @@ app.prepare().then(async () => {
 
       player.lastTapTime = now;
 
-      if (player.mana < tapCount * MANA_COST_PER_TAP) {
-        socket.emit('tap:error', { message: 'Not enough mana' });
-        return;
-      }
-
       if (bossState.currentHp <= 0) {
         socket.emit('tap:error', { message: 'Boss is dead' });
         return;
       }
 
-      player.mana -= tapCount * MANA_COST_PER_TAP;
+      // L2: Calculate thorns damage and stamina cost
+      const thornsTaken = StatsService.calculateThorns(bossState.thornsDamage, player.physicalDefense);
+      const staminaCostPerTap = StatsService.getStaminaCost(thornsTaken);
+      const totalStaminaCost = tapCount * staminaCostPerTap;
+
+      // Check stamina
+      if (player.stamina < staminaCostPerTap) {
+        // Trigger exhaustion
+        player.exhaustedUntil = StatsService.createExhaustionUntil();
+        socket.emit('hero:exhausted', {
+          until: player.exhaustedUntil,
+          duration: StatsService.EXHAUSTION_DURATION_MS,
+        });
+        socket.emit('tap:error', { message: 'Not enough stamina! Exhausted.' });
+        return;
+      }
+
+      // Calculate how many taps we can afford
+      const maxAffordableTaps = Math.floor(player.stamina / staminaCostPerTap);
+      tapCount = Math.min(tapCount, maxAffordableTaps);
+
+      if (tapCount <= 0) {
+        player.exhaustedUntil = StatsService.createExhaustionUntil();
+        socket.emit('hero:exhausted', {
+          until: player.exhaustedUntil,
+          duration: StatsService.EXHAUSTION_DURATION_MS,
+        });
+        return;
+      }
+
+      // Deduct stamina
+      player.stamina -= tapCount * staminaCostPerTap;
 
       const { totalDamage, crits, soulshotUsed } = calculateDamage(player, tapCount);
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
@@ -709,6 +811,12 @@ app.prepare().then(async () => {
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
+        // L2 Stamina (NEW)
+        stamina: player.stamina,
+        maxStamina: player.maxStamina,
+        thornsTaken,
+        staminaCost: tapCount * staminaCostPerTap,
+        // Legacy mana
         mana: player.mana,
         sessionDamage: player.sessionDamage,
         adena: player.adena,
@@ -1275,6 +1383,10 @@ app.prepare().then(async () => {
       if (player.odamage) {
         try {
           const updateData = {
+            // L2 Stamina (NEW)
+            stamina: Math.floor(player.stamina),
+            exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
+            // Legacy mana
             mana: Math.floor(player.mana),
             adena: BigInt(player.adena),
             activeSoulshot: player.activeSoulshot,
@@ -1293,7 +1405,7 @@ app.prepare().then(async () => {
             where: { id: player.odamage },
             data: updateData,
           });
-          console.log(`[Disconnect] Saved data for user ${player.odamage}: adena=${player.adena}, dmg=${player.sessionDamage}`);
+          console.log(`[Disconnect] Saved data for user ${player.odamage}: adena=${player.adena}, stamina=${player.stamina}, dmg=${player.sessionDamage}`);
         } catch (e) {
           console.error('[Disconnect] Save error:', e.message);
         }
@@ -1326,9 +1438,23 @@ app.prepare().then(async () => {
     });
   }, 250);
 
-  // Mana regen every second (based on player's manaRegen stat)
+  // L2: Stamina regen every second (+1 per sec, unless exhausted)
   setInterval(() => {
+    const now = Date.now();
     for (const player of onlineUsers.values()) {
+      // Clear exhaustion if expired
+      if (player.exhaustedUntil && now >= player.exhaustedUntil) {
+        player.exhaustedUntil = null;
+      }
+
+      // Regen stamina only if not exhausted
+      if (!StatsService.isExhausted(player.exhaustedUntil)) {
+        if (player.stamina < player.maxStamina) {
+          player.stamina = Math.min(player.maxStamina, player.stamina + StatsService.STAMINA_REGEN_PER_SEC);
+        }
+      }
+
+      // Also regen mana (for future skills)
       if (player.mana < player.maxMana) {
         const regenAmount = player.manaRegen || BASE_MANA_REGEN;
         player.mana = Math.min(player.maxMana, player.mana + regenAmount);
@@ -1406,7 +1532,10 @@ app.prepare().then(async () => {
             where: { id: player.odamage },
             data: {
               adena: BigInt(player.adena),
-              energy: player.energy,
+              // L2 Stamina (NEW)
+              stamina: Math.floor(player.stamina),
+              exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
+              mana: Math.floor(player.mana),
               totalDamage: { increment: BigInt(player.sessionDamage) },
               totalClicks: { increment: BigInt(player.sessionClicks) },
             },

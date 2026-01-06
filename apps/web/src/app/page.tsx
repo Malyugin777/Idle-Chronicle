@@ -6,7 +6,8 @@ import BottomNav, { TabType } from '@/components/ui/BottomNav';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 // Dynamic imports for tabs (no SSR)
-const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
+// L2: Switched to PhaserGame for better battle scene rendering
+const PhaserGame = dynamic(() => import('@/components/game/PhaserGame'), {
   ssr: false,
   loading: () => <TabLoading />,
 });
@@ -72,7 +73,7 @@ export default function Home() {
   const renderTab = () => {
     switch (activeTab) {
       case 'game':
-        return <GameCanvas />;
+        return <PhaserGame />;
       case 'character':
         return <CharacterTab />;
       case 'shop':
@@ -82,7 +83,7 @@ export default function Home() {
       case 'leaderboard':
         return <LeaderboardTab />;
       default:
-        return <GameCanvas />;
+        return <PhaserGame />;
     }
   };
 
