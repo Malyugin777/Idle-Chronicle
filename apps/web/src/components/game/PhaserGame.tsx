@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.6';
+const APP_VERSION = 'v1.0.7';
 
 interface BossState {
   name: string;

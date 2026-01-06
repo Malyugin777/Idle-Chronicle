@@ -351,6 +351,7 @@ export default function CharacterTab() {
     baseStats: null,
     derivedStats: { pAtk: 10, pDef: 40, mAtk: 10, mDef: 30, critChance: 0.05, attackSpeed: 300 },
   });
+  const [isLoading, setIsLoading] = useState(true);
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
@@ -391,6 +392,7 @@ export default function CharacterTab() {
         newState.derivedStats = recalculateDerivedStats(newState);
         return newState;
       });
+      setIsLoading(false);
     };
 
     // Handle equipment data from server
@@ -461,12 +463,12 @@ export default function CharacterTab() {
     }
   }, [heroState.equipment]);
 
-  if (!heroState.baseStats) {
+  if (isLoading || !heroState.baseStats) {
     return (
       <div className="flex-1 flex items-center justify-center bg-l2-dark">
         <div className="text-center">
-          <p className="text-gray-400 mb-2">{t.character.notAuth}</p>
-          <p className="text-xs text-gray-500">{t.character.playInTelegram}</p>
+          <div className="text-2xl mb-2 animate-pulse">⚔️</div>
+          <p className="text-gray-400">{t.game.loading}</p>
         </div>
       </div>
     );
