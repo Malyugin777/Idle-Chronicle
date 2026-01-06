@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.10';
+const APP_VERSION = 'v1.0.11';
 
 interface BossState {
   name: string;
@@ -314,7 +314,7 @@ export default function PhaserGame() {
       }));
     });
 
-    // Auth success
+    // Auth success - server sends data directly (not nested in user object)
     socket.on('auth:success', (data: any) => {
       console.log('[Auth] Success! isFirstLogin:', data.isFirstLogin);
       if (data.isFirstLogin) {
@@ -322,15 +322,14 @@ export default function PhaserGame() {
         setShowWelcome(true);
         setWelcomeStep(0);
       }
-      if (data.user) {
-        setPlayerState({
-          stamina: data.user.stamina ?? 100,
-          maxStamina: data.user.maxStamina ?? 100,
-          mana: data.user.mana ?? 1000,
-          maxMana: data.user.maxMana ?? 1000,
-          exhaustedUntil: data.user.exhaustedUntil ?? null,
-        });
-      }
+      // Set player state from auth data
+      setPlayerState({
+        stamina: data.stamina ?? 100,
+        maxStamina: data.maxStamina ?? 100,
+        mana: data.mana ?? 1000,
+        maxMana: data.maxMana ?? 1000,
+        exhaustedUntil: data.exhaustedUntil ?? null,
+      });
     });
 
     // Exhaustion
@@ -548,7 +547,9 @@ export default function PhaserGame() {
             const now = Date.now();
             const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
             const onCooldown = remaining > 0;
-            const canUse = !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
+            // Check if real data loaded (maxHp > 1 means server sent boss:state)
+            const dataLoaded = bossState.maxHp > 1;
+            const canUse = dataLoaded && !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
 
             return (
               <button
