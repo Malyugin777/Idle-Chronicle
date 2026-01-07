@@ -26,7 +26,6 @@ export default function ShopTab() {
     { id: 'C', name: t.shop.ssC, multiplier: 3.5, cost: 250, color: 'blue' },
     { id: 'B', name: t.shop.ssB, multiplier: 5.0, cost: 1000, color: 'purple' },
     { id: 'A', name: t.shop.ssA, multiplier: 7.0, cost: 5000, color: 'orange' },
-    { id: 'S', name: t.shop.ssS, multiplier: 10.0, cost: 20000, color: 'red' },
   ];
 
   const BUFFS = [
