@@ -695,7 +695,7 @@
               <input type="number" id="bossMaxHp">
             </div>
             <div class="form-group">
-              <label>Defense</label>
+              <label>P.Def (Защита)</label>
               <input type="number" id="bossDefense">
             </div>
             <div class="form-group">
@@ -1479,7 +1479,7 @@
                 HP: ${boss.currentHp.toLocaleString()} / ${boss.maxHp.toLocaleString()} (${hpPercent}%)
               </div>
               <div class="boss-stats">
-                Index: ${boss.bossIndex}/${boss.totalBosses} | Defense: ${boss.defense} | Thorns: ${boss.thorns || 0}
+                Index: ${boss.bossIndex}/${boss.totalBosses} | P.Def: ${boss.defense} | Thorns: ${boss.thorns || 0}
               </div>
             </div>
           </div>
@@ -1593,22 +1593,28 @@
     }
 
     async function editUser(userId) {
-      // Load user, equipment, badges, and buffs in parallel
-      const [userData, equipData, badgeData, buffData] = await Promise.all([
-        api('users/' + userId),
-        api('users/' + userId + '/equipment'),
-        api('users/' + userId + '/badges'),
-        api('users/' + userId + '/buffs'),
-      ]);
-
+      // Load user first, then try to load equipment, badges, buffs
+      const userData = await api('users/' + userId);
       if (!userData.success) {
         alert('Error: ' + (userData.error || 'User not found'));
         return;
       }
       const u = userData.user;
-      const equipment = equipData.equipment || [];
-      const badges = badgeData.badges || [];
-      const buffs = buffData.buffs || [];
+
+      // Try to load extra data, but don't fail if endpoints not available
+      let equipment = [], badges = [], buffs = [];
+      try {
+        const [equipData, badgeData, buffData] = await Promise.all([
+          api('users/' + userId + '/equipment').catch(() => ({ equipment: [] })),
+          api('users/' + userId + '/badges').catch(() => ({ badges: [] })),
+          api('users/' + userId + '/buffs').catch(() => ({ buffs: [] })),
+        ]);
+        equipment = equipData.equipment || [];
+        badges = badgeData.badges || [];
+        buffs = buffData.buffs || [];
+      } catch (e) {
+        console.warn('Failed to load extra user data:', e);
+      }
 
       // Equipment HTML
       const equipHtml = equipment.length > 0
