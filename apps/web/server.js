@@ -448,8 +448,9 @@ function calculateDamage(player, tapCount) {
 
     const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
     dmg *= rageMultiplier;
-    // Defense из bossState (редактируется в админке)
-    dmg = Math.max(1, dmg - bossState.defense);
+    // Defense из шаблона по currentBossIndex
+    const bossDefense = (DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0]).defense;
+    dmg = Math.max(1, dmg - bossDefense);
     totalDamage += Math.floor(dmg);
   }
 
@@ -4152,8 +4153,9 @@ app.prepare().then(async () => {
             crits++;
           }
 
-          // Defense из bossState (редактируется в админке)
-          dmg = Math.max(1, dmg - bossState.defense);
+          // Defense из шаблона по currentBossIndex
+          const autoDefense = (DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0]).defense;
+          dmg = Math.max(1, dmg - autoDefense);
           totalAutoDamage += Math.floor(dmg);
         }
 
