@@ -82,3 +82,14 @@ body {
 .energy-glow {
   box-shadow: 0 0 10px var(--l2-energy), inset 0 0 5px rgba(255, 255, 255, 0.2);
 }
+
+/* Skill button press animation */
+@keyframes skill-press {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+
+.skill-btn-press {
+  animation: skill-press 0.15s ease-out;
+}

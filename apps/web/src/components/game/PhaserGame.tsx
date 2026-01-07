@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Phaser from 'phaser';
+import { Gem } from 'lucide-react';
 import { gameConfig } from '@/game/config';
 import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
@@ -45,6 +46,10 @@ interface PlayerState {
   exhaustedUntil: number | null;
   gold: number;
   soulshotNG: number;
+  // HUD fields
+  level: number;
+  crystals: number;
+  photoUrl: string | null;
 }
 
 interface Skill {
@@ -125,6 +130,9 @@ export default function PhaserGame() {
     exhaustedUntil: null,
     gold: 0,
     soulshotNG: 0,
+    level: 1,
+    crystals: 0,
+    photoUrl: null,
   });
 
   // Soulshot auto-use toggle (persisted in localStorage)
@@ -171,6 +179,7 @@ export default function PhaserGame() {
   const [claimingReward, setClaimingReward] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
+  const [pressedSkill, setPressedSkill] = useState<string | null>(null);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -194,6 +203,10 @@ export default function PhaserGame() {
     if (now - skill.lastUsed < skill.cooldown) return;
     if (playerState.mana < skill.manaCost) return;
     if (bossState.hp <= 0) return;
+
+    // Trigger press animation
+    setPressedSkill(skill.id);
+    setTimeout(() => setPressedSkill(null), 150);
 
     // Update state
     setPlayerState(p => ({ ...p, mana: p.mana - skill.manaCost }));
@@ -418,6 +431,9 @@ export default function PhaserGame() {
         exhaustedUntil: data.exhaustedUntil ?? null,
         gold: data.gold ?? 0,
         soulshotNG: data.soulshotNG ?? 0,
+        level: data.level ?? 1,
+        crystals: data.ancientCoin ?? 0,
+        photoUrl: data.photoUrl ?? null,
       });
     });
 
@@ -583,47 +599,88 @@ export default function PhaserGame() {
   return (
     <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* HEADER - Boss HP Bar (triple tap = show welcome) */}
+      {/* COMPACT PLAYER HUD - Top bar */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <div className="absolute top-0 left-0 right-0 z-20 px-3 py-1.5 bg-black/60">
+        <div className="flex items-center justify-between">
+          {/* Left: Avatar + Level */}
+          <div className="flex items-center gap-1.5">
+            {playerState.photoUrl ? (
+              <img
+                src={playerState.photoUrl}
+                alt=""
+                className="w-7 h-7 rounded-full border border-l2-gold/50"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-l2-panel flex items-center justify-center">
+                <span className="text-xs">👤</span>
+              </div>
+            )}
+            <div className="bg-l2-gold/20 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-bold text-l2-gold">Lv.{playerState.level}</span>
+            </div>
+          </div>
+
+          {/* Right: Gold + Crystals */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-xs">🪙</span>
+              <span className="text-xs font-bold text-l2-gold">{formatCompact(playerState.gold)}</span>
+            </div>
+            <div className="flex items-center gap-1 bg-purple-500/20 px-1.5 py-0.5 rounded">
+              <Gem className="text-purple-400" size={12} />
+              <span className="text-xs font-bold text-purple-400">{playerState.crystals}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* COMPACT BOSS HP BAR (triple tap = show welcome) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent"
+        className="absolute top-9 left-0 right-0 z-10 px-3 pt-1 pb-1"
         onClick={handleHeaderTap}
       >
-        <div className="flex justify-between items-center mb-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{bossState.icon}</span>
-            <div>
-              <span className="font-bold text-sm text-l2-gold">{bossDisplayName}</span>
-              <span className="text-xs text-gray-500 ml-2">({bossState.bossIndex}/{bossState.totalBosses})</span>
-            </div>
+        {/* Boss name + online + drop button */}
+        <div className="flex justify-between items-center mb-0.5">
+          <div className="flex items-center gap-1 text-[10px]">
+            <span>{bossState.icon}</span>
+            <span className="text-l2-gold font-bold">{bossDisplayName}</span>
+            <span className="text-gray-500">({bossState.bossIndex}/{bossState.totalBosses})</span>
           </div>
-          <div className="text-right">
-            <span className="text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500">
               {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
             </span>
-            <div className="text-[10px] text-gray-600">
-              {APP_VERSION}
-              {bossState.defense > 0 && <span className="ml-2">🛡️{bossState.defense}</span>}
-            </div>
+            {/* Drop button - compact icon */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
+              className="w-6 h-6 bg-purple-500/30 rounded-full flex items-center justify-center
+                         border border-purple-500/40 active:scale-90 transition-transform"
+            >
+              <span className="text-sm">🎁</span>
+            </button>
           </div>
         </div>
-        <div className="text-xs text-white mb-1">
-          {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
-        </div>
-        <div className="h-3 bg-black/50 rounded-full overflow-hidden">
+
+        {/* HP bar - thinner (h-2) with HP numbers inside */}
+        <div className="h-2.5 bg-black/60 rounded-full overflow-hidden relative">
           <div
             className={`h-full transition-all duration-100 ${
-              hpPercent < 25 ? 'bg-red-600' : hpPercent < 50 ? 'bg-orange-500' : hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
+              hpPercent < 25 ? 'bg-red-600 hp-critical' :
+              hpPercent < 50 ? 'bg-orange-500' :
+              hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
             }`}
             style={{ width: `${hpPercent}%` }}
           />
+          {/* HP numbers centered inside bar */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[9px] text-white/90 font-bold drop-shadow-md">
+              {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
+            </span>
+          </div>
         </div>
-        <button
-          onClick={() => setShowDropTable(true)}
-          className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
-        >
-          🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
-        </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -652,34 +709,37 @@ export default function PhaserGame() {
       {/* BOTTOM UI - Bars + Skills */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
-        {/* Mana Bar */}
-        <div className="mb-2">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-blue-400">💧 Mana</span>
-            <span className="text-blue-400">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
+        {/* Compact Resource Bars - 50% width, side by side */}
+        <div className="flex gap-2 mb-2">
+          {/* Mana Bar - 50% */}
+          <div className="flex-1">
+            <div className="flex justify-between text-[10px] mb-0.5">
+              <span className="text-blue-400">💧</span>
+              <span className="text-blue-400">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
+            </div>
+            <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
+            </div>
           </div>
-          <div className="h-3 bg-black/50 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
-          </div>
-        </div>
 
-        {/* Stamina Bar */}
-        <div className="mb-3">
-          <div className="flex justify-between text-xs mb-1">
-            <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
-              {exhausted ? '😵 EXHAUSTED' : '⚡ Stamina'}
-            </span>
-            <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
-              {Math.floor(playerState.stamina)}/{playerState.maxStamina}
-            </span>
-          </div>
-          <div className="h-3 bg-black/50 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-100 ${
-                exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
-              }`}
-              style={{ width: `${staminaPercent}%` }}
-            />
+          {/* Stamina Bar - 50% */}
+          <div className="flex-1">
+            <div className="flex justify-between text-[10px] mb-0.5">
+              <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
+                {exhausted ? '😵' : '⚡'}
+              </span>
+              <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
+                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+              </span>
+            </div>
+            <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-100 ${
+                  exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
+                }`}
+                style={{ width: `${staminaPercent}%` }}
+              />
+            </div>
           </div>
         </div>
 
@@ -726,7 +786,8 @@ export default function PhaserGame() {
                   relative w-14 h-14 rounded-lg border-2 ${skill.color}
                   bg-gray-900/90 flex flex-col items-center justify-center
                   ${canUse ? 'opacity-100' : 'opacity-50'}
-                  transition-all active:scale-95
+                  transition-all
+                  ${pressedSkill === skill.id ? 'skill-btn-press' : ''}
                 `}
               >
                 <span className="text-2xl">{skill.icon}</span>
