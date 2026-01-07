@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.75';
+const APP_VERSION = 'v1.0.76';
 
 interface BossState {
   name: string;
@@ -401,7 +401,7 @@ export default function PhaserGame() {
       const config = {
         ...gameConfig,
         parent: containerRef.current,
-        transparent: true, // Transparent background
+        // transparent: true, // DISABLED FOR DEBUG - should show blue background
         callbacks: {
           postBoot: (game: Phaser.Game) => {
             const scene = game.scene.getScene('BattleScene') as BattleScene;
