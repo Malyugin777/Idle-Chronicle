@@ -147,11 +147,14 @@ model PendingReward {
   rank          Int?     // Player's rank (1-100+), null if not in top
   wasEligible   Boolean  @default(true) // Had 30sec activity
 
-  // Chest rewards (stored as JSON for flexibility)
+  // Chest rewards
   chestsWooden  Int      @default(0)
   chestsBronze  Int      @default(0)
   chestsSilver  Int      @default(0)
   chestsGold    Int      @default(0)
+
+  // Crystal bonus (Gold +10, Silver +5)
+  crystals      Int      @default(0)
 
   // Badge reward (if top-3)
   badgeId       String?  // "slayer" or "elite"

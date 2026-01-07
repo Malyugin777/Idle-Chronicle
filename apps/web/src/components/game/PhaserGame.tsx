@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.64';
+const APP_VERSION = 'v1.0.66';
 
 interface BossState {
   name: string;
@@ -93,6 +93,23 @@ interface PendingReward {
   chestsBronze: number;
   chestsSilver: number;
   chestsGold: number;
+  crystals: number;
+  badgeId?: string;
+}
+
+interface SlotInfo {
+  max: number;
+  used: number;
+  free: number;
+  nextPrice: number;
+  crystals: number;
+}
+
+interface ChestSelection {
+  wooden: number;
+  bronze: number;
+  silver: number;
+  gold: number;
 }
 
 interface ActiveBuff {
@@ -254,13 +271,24 @@ export default function PhaserGame() {
   const [starterOpening, setStarterOpening] = useState(false);
   const [showDropTable, setShowDropTable] = useState(false);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
+  const [slotInfo, setSlotInfo] = useState<SlotInfo>({ max: 5, used: 0, free: 5, nextPrice: 50, crystals: 0 });
+  const [chestSelection, setChestSelection] = useState<ChestSelection>({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
   const [claimingReward, setClaimingReward] = useState(false);
+  const [buyingSlot, setBuyingSlot] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
   const [pressedSkill, setPressedSkill] = useState<string | null>(null);
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [showTasks, setShowTasks] = useState(false);
   const [hasClaimable, setHasClaimable] = useState(false);
+
+  // Loading screen state (show until all data received)
+  const [loadingState, setLoadingState] = useState({
+    auth: false,
+    boss: false,
+    player: false,
+  });
+  const isLoading = !loadingState.auth || !loadingState.boss || !loadingState.player;
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -435,6 +463,8 @@ export default function PhaserGame() {
           totalBosses: data.totalBosses || 100,
         };
       });
+      // Mark boss data loaded
+      setLoadingState(prev => ({ ...prev, boss: true }));
     });
 
     // Starter chest opened
@@ -553,6 +583,8 @@ export default function PhaserGame() {
         });
         setShowMeditation(true);
       }
+      // Mark auth and player data loaded
+      setLoadingState(prev => ({ ...prev, auth: true, player: true }));
     });
 
     // Buff activated
@@ -663,13 +695,45 @@ export default function PhaserGame() {
     socket.on('rewards:data', (data: any) => {
       if (data?.rewards) {
         setPendingRewards(data.rewards);
+        // Reset selection when new rewards arrive
+        setChestSelection({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
+      }
+      if (data?.slots) {
+        setSlotInfo(data.slots);
       }
     });
 
-    socket.on('rewards:claimed', () => {
+    socket.on('rewards:claimed', (data: any) => {
       setClaimingReward(false);
-      setPendingRewards([]);
       setClaimError(null);
+      // Always remove reward (remaining chests are discarded)
+      setPendingRewards(prev => prev.filter(r => r.id !== data.rewardId));
+      // Update slot info
+      if (data?.chestsCreated) {
+        setSlotInfo(prev => ({ ...prev, used: prev.used + data.chestsCreated, free: prev.free - data.chestsCreated }));
+      }
+      // Reset selection
+      setChestSelection({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
+      // Update player crystals if awarded
+      if (data?.crystalsAwarded > 0) {
+        setPlayerState(p => ({ ...p, crystals: p.crystals + data.crystalsAwarded }));
+      }
+    });
+
+    socket.on('chest:buySlot:success', (data: any) => {
+      setBuyingSlot(false);
+      setSlotInfo(prev => ({
+        ...prev,
+        max: data.newSlots,
+        free: prev.free + 1,
+        nextPrice: data.nextPrice,
+        crystals: data.crystalsRemaining,
+      }));
+      setPlayerState(p => ({ ...p, crystals: data.crystalsRemaining }));
+    });
+
+    socket.on('chest:buySlot:error', () => {
+      setBuyingSlot(false);
     });
 
     socket.on('rewards:error', (data: any) => {
@@ -735,6 +799,8 @@ export default function PhaserGame() {
       socket.off('rewards:data');
       socket.off('rewards:claimed');
       socket.off('rewards:error');
+      socket.off('chest:buySlot:success');
+      socket.off('chest:buySlot:error');
       socket.off('activity:status');
 
       if (gameRef.current) {
@@ -769,11 +835,52 @@ export default function PhaserGame() {
     return unsubscribe;
   }, []);
 
+  // Hide boss sprite when dead
+  useEffect(() => {
+    const isDeadWithCountdown = bossState.hp <= 0 && respawnCountdown > 0;
+    sceneRef.current?.setBossVisible(!isDeadWithCountdown);
+  }, [bossState.hp, respawnCountdown]);
+
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
   const staminaPercent = (playerState.stamina / playerState.maxStamina) * 100;
   const manaPercent = (playerState.mana / playerState.maxMana) * 100;
   const bossDisplayName = lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name;
   const exhausted = isExhausted();
+
+  // Loading screen
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
+        <div className="text-center">
+          {/* Logo/Title */}
+          <div className="text-4xl mb-4">⚔️</div>
+          <h1 className="text-2xl font-bold text-l2-gold mb-2">Idle Chronicle</h1>
+          <p className="text-gray-400 text-sm mb-6">
+            {lang === 'ru' ? 'Загрузка...' : 'Loading...'}
+          </p>
+          {/* Loading spinner */}
+          <div className="flex justify-center items-center gap-2">
+            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+          {/* Status indicators */}
+          <div className="mt-6 text-xs text-gray-500 space-y-1">
+            <div className={loadingState.auth ? 'text-green-400' : 'text-gray-500'}>
+              {loadingState.auth ? '✓' : '○'} {lang === 'ru' ? 'Авторизация' : 'Authentication'}
+            </div>
+            <div className={loadingState.boss ? 'text-green-400' : 'text-gray-500'}>
+              {loadingState.boss ? '✓' : '○'} {lang === 'ru' ? 'Данные босса' : 'Boss data'}
+            </div>
+            <div className={loadingState.player ? 'text-green-400' : 'text-gray-500'}>
+              {loadingState.player ? '✓' : '○'} {lang === 'ru' ? 'Данные игрока' : 'Player data'}
+            </div>
+          </div>
+          <div className="mt-4 text-[10px] text-gray-600">{APP_VERSION}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
@@ -862,52 +969,82 @@ export default function PhaserGame() {
       </button>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* FLOATING BOSS HP BAR (centered, 60% width) */}
+      {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, 60% width) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
         className="absolute top-20 left-0 right-0 z-10 flex flex-col items-center px-3"
         onClick={handleHeaderTap}
       >
-        {/* Boss name centered above bar */}
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-base">{bossState.icon}</span>
-          <span className="text-l2-gold font-bold text-sm">{bossDisplayName}</span>
-          <span className="text-gray-500 text-[10px]">({bossState.bossIndex}/{bossState.totalBosses})</span>
-        </div>
+        {bossState.hp <= 0 && respawnCountdown > 0 ? (
+          /* Boss dead - show countdown */
+          <>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-base">💀</span>
+              <span className="text-gray-400 font-bold text-sm">
+                {lang === 'ru' ? 'Босс мёртв' : 'Boss defeated'}
+              </span>
+            </div>
+            <div className="bg-black/70 rounded-lg px-4 py-2 border border-white/10">
+              <div className="text-xs text-gray-400 text-center mb-1">
+                {lang === 'ru' ? 'Следующий босс через' : 'Next boss in'}
+              </div>
+              <div className="text-xl font-bold text-l2-gold font-mono text-center">
+                {Math.floor(respawnCountdown / 3600000)}:{String(Math.floor((respawnCountdown % 3600000) / 60000)).padStart(2, '0')}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
+              </div>
+            </div>
+            {/* Online count */}
+            <div className="flex items-center gap-3 mt-1.5">
+              <span className="text-[9px] text-gray-500">
+                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+              </span>
+              <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+            </div>
+          </>
+        ) : (
+          /* Boss alive - show HP bar */
+          <>
+            {/* Boss name centered above bar */}
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-base">{bossState.icon}</span>
+              <span className="text-l2-gold font-bold text-sm">{bossDisplayName}</span>
+              <span className="text-gray-500 text-[10px]">({bossState.bossIndex}/{bossState.totalBosses})</span>
+            </div>
 
-        {/* Floating HP bar - 60% width, thicker */}
-        <div className="w-[60%] h-5 bg-black/70 rounded-lg overflow-hidden relative border border-white/10 shadow-lg">
-          <div
-            className={`h-full transition-all duration-100 ${
-              hpPercent < 25 ? 'bg-red-600 hp-critical' :
-              hpPercent < 50 ? 'bg-orange-500' :
-              hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
-            }`}
-            style={{ width: `${hpPercent}%` }}
-          />
-          {/* HP numbers centered inside bar */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[11px] text-white font-bold drop-shadow-md">
-              {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
-            </span>
-          </div>
-        </div>
+            {/* Floating HP bar - 60% width, thicker */}
+            <div className="w-[60%] h-5 bg-black/70 rounded-lg overflow-hidden relative border border-white/10 shadow-lg">
+              <div
+                className={`h-full transition-all duration-100 ${
+                  hpPercent < 25 ? 'bg-red-600 hp-critical' :
+                  hpPercent < 50 ? 'bg-orange-500' :
+                  hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
+                }`}
+                style={{ width: `${hpPercent}%` }}
+              />
+              {/* HP numbers centered inside bar */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[11px] text-white font-bold drop-shadow-md">
+                  {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
+                </span>
+              </div>
+            </div>
 
-        {/* Secondary info row */}
-        <div className="flex items-center gap-3 mt-1.5">
-          <span className="text-[9px] text-gray-500">
-            {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-          </span>
-          <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
-          {/* Drop info button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
-            className="w-6 h-6 bg-amber-700/40 rounded-full flex items-center justify-center
-                       border border-amber-600/50 active:scale-90 transition-transform"
-          >
-            <span className="text-sm">📦</span>
-          </button>
-        </div>
+            {/* Secondary info row */}
+            <div className="flex items-center gap-3 mt-1.5">
+              <span className="text-[9px] text-gray-500">
+                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+              </span>
+              <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+              {/* Drop info button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
+                className="w-6 h-6 bg-amber-700/40 rounded-full flex items-center justify-center
+                           border border-amber-600/50 active:scale-90 transition-transform"
+              >
+                <span className="text-sm">📦</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -1062,53 +1199,144 @@ export default function PhaserGame() {
               </div>
             </div>
 
-            {/* Персональная награда */}
-            {pendingRewards.length > 0 && (
-              <div className="bg-l2-gold/10 border border-l2-gold/50 rounded-lg p-3 mb-3">
-                <div className="text-center mb-2">
-                  <div className="text-l2-gold font-bold text-sm">
-                    {lang === 'ru' ? 'Твоя награда' : 'Your Reward'}
-                    {pendingRewards[0].rank && ` (#${pendingRewards[0].rank})`}
+            {/* Персональная награда с выбором сундуков */}
+            {pendingRewards.length > 0 && (() => {
+              const reward = pendingRewards[0];
+              const totalSelected = chestSelection.wooden + chestSelection.bronze + chestSelection.silver + chestSelection.gold;
+              const canClaim = totalSelected > 0 && totalSelected <= slotInfo.free;
+
+              return (
+                <div className="bg-l2-gold/10 border border-l2-gold/50 rounded-lg p-3 mb-3">
+                  {/* Header with rank and crystals */}
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-l2-gold font-bold text-sm">
+                      {lang === 'ru' ? 'Твоя награда' : 'Your Reward'}
+                      {reward.rank && ` (#${reward.rank})`}
+                    </div>
+                    {reward.crystals > 0 && (
+                      <div className="flex items-center gap-1 bg-purple-500/30 px-2 py-0.5 rounded">
+                        <Gem className="text-purple-400" size={12} />
+                        <span className="text-xs font-bold text-purple-400">+{reward.crystals}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="flex justify-center gap-2 text-sm">
-                  {pendingRewards[0].chestsWooden > 0 && (
-                    <span className="bg-amber-900/50 px-2 py-1 rounded">{pendingRewards[0].chestsWooden}x Wooden</span>
-                  )}
-                  {pendingRewards[0].chestsBronze > 0 && (
-                    <span className="bg-orange-900/50 px-2 py-1 rounded">{pendingRewards[0].chestsBronze}x Bronze</span>
-                  )}
-                  {pendingRewards[0].chestsSilver > 0 && (
-                    <span className="bg-gray-600/50 px-2 py-1 rounded">{pendingRewards[0].chestsSilver}x Silver</span>
-                  )}
-                  {pendingRewards[0].chestsGold > 0 && (
-                    <span className="bg-yellow-600/50 px-2 py-1 rounded">{pendingRewards[0].chestsGold}x Gold</span>
-                  )}
-                </div>
-                <button
-                  onClick={() => {
-                    if (!claimingReward && pendingRewards[0]) {
-                      setClaimingReward(true);
-                      setClaimError(null);
-                      getSocket().emit('rewards:claim', { rewardId: pendingRewards[0].id });
+
+                  {/* Slot info */}
+                  <div className="flex justify-between items-center mb-2 text-xs">
+                    <span className="text-gray-400">
+                      {lang === 'ru' ? 'Слоты:' : 'Slots:'} {slotInfo.used}/{slotInfo.max}
+                    </span>
+                    <span className={`font-bold ${slotInfo.free > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {slotInfo.free} {lang === 'ru' ? 'свободно' : 'free'}
+                    </span>
+                  </div>
+
+                  {/* Chest selection grid */}
+                  <div className="space-y-1.5 mb-3">
+                    {[
+                      { key: 'gold', label: '🟨 Gold', count: reward.chestsGold, color: 'yellow' },
+                      { key: 'silver', label: '🪙 Silver', count: reward.chestsSilver, color: 'gray' },
+                      { key: 'bronze', label: '🟫 Bronze', count: reward.chestsBronze, color: 'orange' },
+                      { key: 'wooden', label: '🪵 Wooden', count: reward.chestsWooden, color: 'amber' },
+                    ].filter(c => c.count > 0).map(chest => (
+                      <div key={chest.key} className="flex items-center justify-between bg-black/30 rounded px-2 py-1.5">
+                        <span className="text-sm">{chest.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">x{chest.count}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setChestSelection(prev => ({
+                                ...prev,
+                                [chest.key]: Math.max(0, prev[chest.key as keyof ChestSelection] - 1)
+                              }))}
+                              className="w-6 h-6 rounded bg-gray-700 text-white text-sm font-bold"
+                            >−</button>
+                            <span className="w-6 text-center font-bold text-white">
+                              {chestSelection[chest.key as keyof ChestSelection]}
+                            </span>
+                            <button
+                              onClick={() => setChestSelection(prev => ({
+                                ...prev,
+                                [chest.key]: Math.min(chest.count, prev[chest.key as keyof ChestSelection] + 1)
+                              }))}
+                              disabled={chestSelection[chest.key as keyof ChestSelection] >= chest.count}
+                              className="w-6 h-6 rounded bg-gray-700 text-white text-sm font-bold disabled:opacity-30"
+                            >+</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Selected count and buy slot */}
+                  <div className="flex justify-between items-center mb-2">
+                    <span className={`text-xs ${totalSelected > slotInfo.free ? 'text-red-400' : 'text-gray-400'}`}>
+                      {lang === 'ru' ? 'Выбрано:' : 'Selected:'} {totalSelected}
+                      {totalSelected > slotInfo.free && ` (${lang === 'ru' ? 'нет места!' : 'no space!'})`}
+                    </span>
+                    {slotInfo.free < (reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold) && (
+                      <button
+                        onClick={() => {
+                          if (!buyingSlot) {
+                            setBuyingSlot(true);
+                            getSocket().emit('chest:buySlot');
+                          }
+                        }}
+                        disabled={buyingSlot || playerState.crystals < slotInfo.nextPrice}
+                        className="text-xs px-2 py-1 rounded bg-purple-600 text-white disabled:opacity-50"
+                      >
+                        {buyingSlot ? '...' : `+1 ${lang === 'ru' ? 'слот' : 'slot'} (${slotInfo.nextPrice}💎)`}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Warning if not all selected */}
+                  {(() => {
+                    const totalAvailable = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
+                    const willDiscard = totalAvailable - totalSelected;
+                    if (totalSelected > 0 && willDiscard > 0) {
+                      return (
+                        <div className="text-orange-400 text-xs text-center mb-2 bg-orange-900/30 rounded p-1.5">
+                          ⚠️ {lang === 'ru'
+                            ? `${willDiscard} сундук(ов) будет потеряно!`
+                            : `${willDiscard} chest(s) will be lost!`}
+                        </div>
+                      );
                     }
-                  }}
-                  disabled={claimingReward}
-                  className={`w-full mt-3 py-2 rounded-lg font-bold text-sm transition-all ${
-                    claimingReward
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-l2-gold text-black hover:bg-l2-gold/80'
-                  }`}
-                >
-                  {claimingReward
-                    ? (lang === 'ru' ? 'Забираем...' : 'Claiming...')
-                    : (lang === 'ru' ? 'Забрать награду' : 'Claim Reward')}
-                </button>
-                {claimError && (
-                  <div className="text-red-400 text-xs text-center mt-2">{claimError}</div>
-                )}
-              </div>
-            )}
+                    return null;
+                  })()}
+
+                  {/* Claim button */}
+                  <button
+                    onClick={() => {
+                      if (!claimingReward && canClaim) {
+                        setClaimingReward(true);
+                        setClaimError(null);
+                        getSocket().emit('rewards:claim', {
+                          rewardId: reward.id,
+                          take: chestSelection,
+                        });
+                      }
+                    }}
+                    disabled={claimingReward || !canClaim}
+                    className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${
+                      claimingReward || !canClaim
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : 'bg-l2-gold text-black hover:bg-l2-gold/80'
+                    }`}
+                  >
+                    {claimingReward
+                      ? (lang === 'ru' ? 'Забираем...' : 'Claiming...')
+                      : totalSelected === 0
+                        ? (lang === 'ru' ? 'Выбери сундуки' : 'Select chests')
+                        : (lang === 'ru' ? `Забрать ${totalSelected} сундук(ов)` : `Claim ${totalSelected} chest(s)`)}
+                  </button>
+                  {claimError && (
+                    <div className="text-red-400 text-xs text-center mt-2">{claimError}</div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Если нет награды */}
             {pendingRewards.length === 0 && (

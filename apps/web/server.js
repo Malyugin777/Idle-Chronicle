@@ -688,7 +688,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
 
   // Helper: Calculate chest rewards based on rank (per TZ)
   const getChestRewardsByRank = (rank, isEligible) => {
-    if (!isEligible) return { wooden: 0, bronze: 0, silver: 0, gold: 0, badge: null, badgeDays: null };
+    if (!isEligible) return { wooden: 0, bronze: 0, silver: 0, gold: 0, crystals: 0, badge: null, badgeDays: null };
 
     let wooden = 2; // Base reward for all eligible players
     let bronze = 0;
@@ -735,7 +735,10 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     }
     // 101+: only base reward (2 wooden)
 
-    return { wooden, bronze, silver, gold, badge, badgeDays };
+    // Crystal bonus: Gold +10, Silver +5
+    const crystals = (gold * 10) + (silver * 5);
+
+    return { wooden, bronze, silver, gold, crystals, badge, badgeDays };
   };
 
   // Distribute rewards to all participants
@@ -801,11 +804,12 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
                 chestsBronze: chestRewards.bronze,
                 chestsSilver: chestRewards.silver,
                 chestsGold: chestRewards.gold,
+                crystals: chestRewards.crystals,
                 badgeId: chestRewards.badge,
                 badgeDuration: chestRewards.badgeDays,
               },
             });
-            console.log(`[Reward] Created pending reward for ${entry.visitorName} (rank ${rank}): ${chestRewards.wooden}W ${chestRewards.bronze}B ${chestRewards.silver}S ${chestRewards.gold}G`);
+            console.log(`[Reward] Created pending reward for ${entry.visitorName} (rank ${rank}): ${chestRewards.wooden}W ${chestRewards.bronze}B ${chestRewards.silver}S ${chestRewards.gold}G +${chestRewards.crystals}💎`);
           } catch (e) {
             // Might be duplicate - that's OK
             if (!e.message.includes('Unique constraint')) {
@@ -2100,18 +2104,32 @@ app.prepare().then(async () => {
     // GET PENDING REWARDS
     socket.on('rewards:get', async () => {
       if (!player.odamage) {
-        socket.emit('rewards:data', { rewards: [] });
+        socket.emit('rewards:data', { rewards: [], slots: { max: 5, used: 0, free: 5, nextPrice: 50 } });
         return;
       }
 
       try {
-        const pendingRewards = await prisma.pendingReward.findMany({
-          where: {
-            userId: player.odamage,
-            claimed: false,
-          },
-          orderBy: { createdAt: 'desc' },
-        });
+        const [pendingRewards, user, chestCount] = await Promise.all([
+          prisma.pendingReward.findMany({
+            where: {
+              userId: player.odamage,
+              claimed: false,
+            },
+            orderBy: { createdAt: 'desc' },
+          }),
+          prisma.user.findUnique({
+            where: { id: player.odamage },
+            select: { chestSlots: true, ancientCoin: true },
+          }),
+          prisma.chest.count({
+            where: { userId: player.odamage },
+          }),
+        ]);
+
+        const maxSlots = user?.chestSlots || 5;
+        const purchasedSlots = maxSlots - 5;
+        const SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
+        const nextPrice = SLOT_PRICES[purchasedSlots] || (purchasedSlots + 1) * 500;
 
         socket.emit('rewards:data', {
           rewards: pendingRewards.map(r => ({
@@ -2125,25 +2143,34 @@ app.prepare().then(async () => {
             chestsBronze: r.chestsBronze,
             chestsSilver: r.chestsSilver,
             chestsGold: r.chestsGold,
+            crystals: r.crystals || 0,
             badgeId: r.badgeId,
             badgeDuration: r.badgeDuration,
             createdAt: r.createdAt.getTime(),
           })),
+          slots: {
+            max: maxSlots,
+            used: chestCount,
+            free: Math.max(0, maxSlots - chestCount),
+            nextPrice,
+            crystals: user?.ancientCoin || 0,
+          },
         });
       } catch (err) {
         console.error('[Rewards] Get error:', err.message);
-        socket.emit('rewards:data', { rewards: [] });
+        socket.emit('rewards:data', { rewards: [], slots: { max: 5, used: 0, free: 5, nextPrice: 50 } });
       }
     });
 
-    // CLAIM PENDING REWARDS
+    // CLAIM PENDING REWARDS (partial selection)
+    // data: { rewardId, take: { wooden: 2, bronze: 1, silver: 0, gold: 1 } }
     socket.on('rewards:claim', async (data) => {
       if (!player.odamage) {
         socket.emit('rewards:error', { message: 'Not authenticated' });
         return;
       }
 
-      const { rewardId } = data;
+      const { rewardId, take } = data;
 
       try {
         // Get the pending reward
@@ -2161,48 +2188,52 @@ app.prepare().then(async () => {
           return;
         }
 
+        // Validate take request (can't take more than available)
+        const takeWooden = Math.min(take?.wooden || 0, reward.chestsWooden);
+        const takeBronze = Math.min(take?.bronze || 0, reward.chestsBronze);
+        const takeSilver = Math.min(take?.silver || 0, reward.chestsSilver);
+        const takeGold = Math.min(take?.gold || 0, reward.chestsGold);
+        const totalToTake = takeWooden + takeBronze + takeSilver + takeGold;
+
+        if (totalToTake === 0) {
+          socket.emit('rewards:error', { message: 'Select at least one chest' });
+          return;
+        }
+
         // Get user's chest slot info
         const userSlotInfo = await prisma.user.findUnique({
           where: { id: player.odamage },
-          select: { chestSlots: true },
+          select: { chestSlots: true, ancientCoin: true },
         });
         const currentChestCount = await prisma.chest.count({
           where: { userId: player.odamage },
         });
         const maxSlots = userSlotInfo?.chestSlots || 5;
-        let freeSlots = Math.max(0, maxSlots - currentChestCount);
+        const freeSlots = Math.max(0, maxSlots - currentChestCount);
 
-        // Create chests (as many as fit in slots)
-        // Overflow chests are converted to gold
+        if (totalToTake > freeSlots) {
+          socket.emit('rewards:error', { message: `Only ${freeSlots} slots available` });
+          return;
+        }
+
+        // Create selected chests
         const chestsToCreate = [];
-        const chestTypes = [
-          { type: 'WOODEN', count: reward.chestsWooden, goldValue: 500 },   // 50% base gold
-          { type: 'BRONZE', count: reward.chestsBronze, goldValue: 1250 },  // 50% base gold
-          { type: 'SILVER', count: reward.chestsSilver, goldValue: 3500 },  // 50% base gold
-          { type: 'GOLD', count: reward.chestsGold, goldValue: 10000 },     // 50% base gold
+        const chestConfigs = [
+          { type: 'WOODEN', count: takeWooden },
+          { type: 'BRONZE', count: takeBronze },
+          { type: 'SILVER', count: takeSilver },
+          { type: 'GOLD', count: takeGold },
         ];
 
-        let totalChestsCreated = 0;
-        let overflowGold = 0;
-        let overflowCount = 0;
-
-        for (const { type, count, goldValue } of chestTypes) {
+        for (const { type, count } of chestConfigs) {
           for (let i = 0; i < count; i++) {
-            if (freeSlots > 0) {
-              chestsToCreate.push({
-                userId: player.odamage,
-                chestType: type,
-                openingDuration: getChestDuration(type),
-                fromBossId: null,
-                fromSessionId: reward.bossSessionId,
-              });
-              freeSlots--;
-              totalChestsCreated++;
-            } else {
-              // No room - convert to gold (50% of chest's base gold)
-              overflowGold += goldValue;
-              overflowCount++;
-            }
+            chestsToCreate.push({
+              userId: player.odamage,
+              chestType: type,
+              openingDuration: getChestDuration(type),
+              fromBossId: null,
+              fromSessionId: reward.bossSessionId,
+            });
           }
         }
 
@@ -2210,16 +2241,26 @@ app.prepare().then(async () => {
           await prisma.chest.createMany({ data: chestsToCreate });
         }
 
-        // Give overflow gold if any chests couldn't fit
-        if (overflowGold > 0) {
+        // Calculate remaining chests
+        const remainingWooden = reward.chestsWooden - takeWooden;
+        const remainingBronze = reward.chestsBronze - takeBronze;
+        const remainingSilver = reward.chestsSilver - takeSilver;
+        const remainingGold = reward.chestsGold - takeGold;
+        const totalRemaining = remainingWooden + remainingBronze + remainingSilver + remainingGold;
+
+        // Award crystals on first claim (all at once)
+        let crystalsAwarded = 0;
+        if (reward.crystals > 0) {
+          crystalsAwarded = reward.crystals;
           await prisma.user.update({
             where: { id: player.odamage },
-            data: { gold: { increment: BigInt(overflowGold) } },
+            data: { ancientCoin: { increment: crystalsAwarded } },
           });
-          console.log(`[Rewards] ${overflowCount} chests converted to ${overflowGold} gold (overflow)`);
+          player.ancientCoin = (player.ancientCoin || 0) + crystalsAwarded;
         }
 
-        // Create badge if awarded
+        // Create badge if awarded (on first claim)
+        let badgeAwarded = null;
         if (reward.badgeId && reward.badgeDuration) {
           const badgeConfig = {
             slayer: { name: 'Slayer', icon: '⚔️' },
@@ -2236,23 +2277,39 @@ app.prepare().then(async () => {
               expiresAt: new Date(Date.now() + reward.badgeDuration * 24 * 60 * 60 * 1000),
             },
           });
+          badgeAwarded = reward.badgeId;
         }
 
-        // Mark reward as claimed
+        // Always mark as claimed (remaining chests are discarded)
         await prisma.pendingReward.update({
           where: { id: rewardId },
           data: {
+            chestsWooden: 0,
+            chestsBronze: 0,
+            chestsSilver: 0,
+            chestsGold: 0,
+            crystals: 0,
+            badgeId: null,
+            badgeDuration: null,
             claimed: true,
             claimedAt: new Date(),
           },
         });
 
+        // Log discarded chests if any
+        if (totalRemaining > 0) {
+          console.log(`[Rewards] ${player.odamageN} discarded ${totalRemaining} chests (${remainingWooden}W ${remainingBronze}B ${remainingSilver}S ${remainingGold}G)`);
+        }
+
+        console.log(`[Rewards] ${player.odamageN} claimed ${totalToTake} chests, ${totalRemaining} remaining, +${crystalsAwarded}💎`);
+
         socket.emit('rewards:claimed', {
           rewardId,
-          chestsCreated: totalChestsCreated,
-          overflowGold: overflowGold,
-          overflowCount: overflowCount,
-          badgeAwarded: reward.badgeId || null,
+          chestsCreated: totalToTake,
+          chestsDiscarded: totalRemaining,
+          crystalsAwarded,
+          badgeAwarded,
+          fullyClaimed: true, // Always fully claimed now (remaining discarded)
         });
 
         // Refresh chest data
@@ -2593,14 +2650,16 @@ app.prepare().then(async () => {
       player.sessionClicks += tapCount;
       player.sessionCrits += crits;
 
-      const key = player.odamage || socket.id;
-      const existing = sessionLeaderboard.get(key);
-      sessionLeaderboard.set(key, {
-        damage: (existing?.damage || 0) + actualDamage,
-        visitorName: player.odamageN,
-        photoUrl: player.photoUrl,
-        isEligible: existing?.isEligible || player.isEligible || false,
-      });
+      // Only add to leaderboard if authenticated (has valid odamage)
+      if (player.odamage) {
+        const existing = sessionLeaderboard.get(player.odamage);
+        sessionLeaderboard.set(player.odamage, {
+          damage: (existing?.damage || 0) + actualDamage,
+          visitorName: player.odamageN,
+          photoUrl: player.photoUrl,
+          isEligible: existing?.isEligible || player.isEligible || false,
+        });
+      }
 
       socket.emit('tap:result', {
         damage: actualDamage,
@@ -2678,15 +2737,16 @@ app.prepare().then(async () => {
       // Gold убран - только из сундуков
       player.sessionDamage += actualDamage;
 
-      // Update leaderboard
-      const key = player.odamage || socket.id;
-      const existing = sessionLeaderboard.get(key);
-      sessionLeaderboard.set(key, {
-        damage: (existing?.damage || 0) + actualDamage,
-        visitorName: player.odamageN,
-        photoUrl: player.photoUrl,
-        isEligible: existing?.isEligible || player.isEligible || false,
-      });
+      // Update leaderboard (only if authenticated)
+      if (player.odamage) {
+        const existing = sessionLeaderboard.get(player.odamage);
+        sessionLeaderboard.set(player.odamage, {
+          damage: (existing?.damage || 0) + actualDamage,
+          visitorName: player.odamageN,
+          photoUrl: player.photoUrl,
+          isEligible: existing?.isEligible || player.isEligible || false,
+        });
+      }
 
       socket.emit('skill:result', {
         skillId,
@@ -3645,6 +3705,61 @@ app.prepare().then(async () => {
       }
     });
 
+    // BUY CHEST SLOT (progressive pricing)
+    // Base: 5 slots. Additional: 50, 150, 300, 500, 750, ... crystals
+    socket.on('chest:buySlot', async () => {
+      if (!player.odamage) {
+        socket.emit('chest:buySlot:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { chestSlots: true, ancientCoin: true },
+        });
+
+        const currentSlots = user?.chestSlots || 5;
+        const purchasedSlots = currentSlots - 5; // How many extra slots bought
+
+        // Progressive pricing: 50, 150, 300, 500, 750, 1000...
+        const SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
+        const price = SLOT_PRICES[purchasedSlots] || (purchasedSlots + 1) * 500;
+
+        if ((user?.ancientCoin || 0) < price) {
+          socket.emit('chest:buySlot:error', { message: 'Not enough crystals', price });
+          return;
+        }
+
+        // Deduct crystals and add slot
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            ancientCoin: { decrement: price },
+            chestSlots: currentSlots + 1,
+          },
+        });
+
+        player.ancientCoin = (user?.ancientCoin || 0) - price;
+
+        // Calculate next price
+        const nextPrice = SLOT_PRICES[purchasedSlots + 1] || (purchasedSlots + 2) * 500;
+
+        socket.emit('chest:buySlot:success', {
+          newSlots: currentSlots + 1,
+          crystalsSpent: price,
+          crystalsRemaining: player.ancientCoin,
+          nextPrice,
+        });
+
+        console.log(`[ChestSlot] ${player.odamageN} bought slot #${currentSlots + 1} for ${price}💎`);
+
+      } catch (err) {
+        console.error('[ChestSlot] Buy error:', err.message);
+        socket.emit('chest:buySlot:error', { message: 'Purchase failed' });
+      }
+    });
+
     // ETHER TOGGLE (auto-use on/off)
     socket.on('ether:toggle', async (data) => {
       if (!player.odamage) return;
@@ -4346,15 +4461,16 @@ app.prepare().then(async () => {
           const actualDamage = Math.min(totalAutoDamage, bossState.currentHp);
           bossState.currentHp -= actualDamage;
 
-          // Update leaderboard
-          const key = player.odamage;
-          const existing = sessionLeaderboard.get(key);
-          sessionLeaderboard.set(key, {
-            damage: (existing?.damage || 0) + actualDamage,
-            visitorName: player.odamageN,
-            photoUrl: player.photoUrl,
-            isEligible: existing?.isEligible || player.isEligible || false,
-          });
+          // Update leaderboard (only if authenticated)
+          if (player.odamage) {
+            const existing = sessionLeaderboard.get(player.odamage);
+            sessionLeaderboard.set(player.odamage, {
+              damage: (existing?.damage || 0) + actualDamage,
+              visitorName: player.odamageN,
+              photoUrl: player.photoUrl,
+              isEligible: existing?.isEligible || player.isEligible || false,
+            });
+          }
 
           player.sessionDamage += actualDamage;
 

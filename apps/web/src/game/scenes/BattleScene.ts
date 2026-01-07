@@ -440,6 +440,16 @@ export class BattleScene extends Phaser.Scene {
     this.updateBossScale();
   }
 
+  // ─────────────────────────────────────────────────────────
+  // BOSS VISIBILITY
+  // ─────────────────────────────────────────────────────────
+
+  setBossVisible(visible: boolean) {
+    if (this.bossSprite) {
+      this.bossSprite.setVisible(visible);
+    }
+  }
+
   update() {
     // No UI updates needed - all handled by React
   }
