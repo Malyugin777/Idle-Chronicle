@@ -145,18 +145,18 @@ async function loadBossState(prisma) {
       title: 'World Boss',
       maxHp: Number(state.bossMaxHp),
       currentHp: bossRespawnAt ? Number(state.bossMaxHp) : savedHp,
-      defense: state.bossDefense || boss.defense,
-      thornsDamage: state.bossThorns || boss.thornsDamage || 0,
+      defense: boss.defense, // Всегда из шаблона (pDef)
+      thornsDamage: boss.thornsDamage || 0,
       ragePhase: 0,
       sessionId: null,
       icon: state.bossIcon || boss.icon,
-      image: boss.image || null,
+      image: boss.image || null, // Всегда из шаблона
       bossIndex: state.currentBossIndex + 1,
       totalBosses: 100, // Будет 100 боссов!
-      goldReward: state.bossGoldReward || boss.goldReward,
-      expReward: Number(state.bossExpReward) || boss.expReward,
-      tonReward: state.bossTonReward || boss.tonReward || 10,
-      chestsReward: state.bossChestsReward || boss.chestsReward || 10,
+      goldReward: boss.goldReward,
+      expReward: boss.expReward,
+      tonReward: boss.tonReward || 10,
+      chestsReward: boss.chestsReward || 10,
     };
 
     // Load session leaderboard

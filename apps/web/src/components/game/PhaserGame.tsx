@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.36';
+const APP_VERSION = 'v1.0.37';
 
 interface BossState {
   name: string;
@@ -159,6 +159,7 @@ export default function PhaserGame() {
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingReward, setClaimingReward] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -420,6 +421,7 @@ export default function PhaserGame() {
       setRespawnCountdown(0);
       setPendingRewards([]);
       setClaimError(null);
+      setActivityStatus({ time: 0, eligible: false });
       // Обновить состояние босса с новыми данными
       if (data) {
         const newImage = data.image || '/assets/bosses/boss_single.png';
@@ -458,6 +460,11 @@ export default function PhaserGame() {
     socket.on('rewards:error', (data: any) => {
       setClaimingReward(false);
       setClaimError(data?.message || 'Ошибка получения награды');
+    });
+
+    // Activity status (eligibility for boss rewards)
+    socket.on('activity:status', (data: { activityTime: number; isEligible: boolean }) => {
+      setActivityStatus({ time: data.activityTime, eligible: data.isEligible });
     });
 
     // Player data (sent on player:get request - used when tab remounts)
@@ -511,6 +518,7 @@ export default function PhaserGame() {
       socket.off('rewards:data');
       socket.off('rewards:claimed');
       socket.off('rewards:error');
+      socket.off('activity:status');
 
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -669,10 +677,17 @@ export default function PhaserGame() {
           })}
         </div>
 
-        {/* Session Damage */}
+        {/* Session Damage + Activity Status */}
         <div className="mt-2 text-center text-xs">
-          <span className="text-gray-400">{t.game.sessionDamage}: </span>
-          <span className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</span>
+          <div>
+            <span className="text-gray-400">{t.game.sessionDamage}: </span>
+            <span className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</span>
+          </div>
+          <div className={activityStatus.eligible ? 'text-green-400' : 'text-gray-500'}>
+            {activityStatus.eligible
+              ? (lang === 'ru' ? '✓ Награда доступна' : '✓ Reward eligible')
+              : `⏱️ ${Math.floor(activityStatus.time / 1000)}/30s`}
+          </div>
         </div>
       </div>
 
