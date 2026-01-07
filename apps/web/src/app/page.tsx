@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import BottomNav, { TabType } from '@/components/ui/BottomNav';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 // Dynamic imports for tabs (no SSR)
@@ -89,7 +90,9 @@ export default function Home() {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-l2-dark flex flex-col">
-      {renderTab()}
+      <ErrorBoundary>
+        {renderTab()}
+      </ErrorBoundary>
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </main>
   );
