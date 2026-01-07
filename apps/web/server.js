@@ -943,6 +943,69 @@ app.prepare().then(async () => {
     console.error('[Prisma] Connection error:', err.message);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // ONE-TIME MIGRATION: Convert generic equipment to novice set
+  // ═══════════════════════════════════════════════════════════
+  try {
+    // Check if there are any non-starter equipment templates
+    const genericEquipment = await prisma.equipment.findMany({
+      where: {
+        code: { not: { startsWith: 'starter-' } },
+      },
+    });
+
+    if (genericEquipment.length > 0) {
+      console.log(`[Migration] Found ${genericEquipment.length} generic equipment items to migrate`);
+
+      // Map slot to starter code
+      const slotToStarter = {
+        WEAPON: 'starter-sword',
+        HELMET: 'starter-helmet',
+        CHEST: 'starter-chest',
+        GLOVES: 'starter-gloves',
+        LEGS: 'starter-legs',
+        BOOTS: 'starter-boots',
+        SHIELD: 'starter-shield',
+      };
+
+      for (const generic of genericEquipment) {
+        const starterCode = slotToStarter[generic.slot];
+        if (!starterCode) continue;
+
+        // Find starter equipment for this slot
+        const starter = await prisma.equipment.findUnique({
+          where: { code: starterCode },
+        });
+
+        if (starter) {
+          // Reassign all UserEquipment from generic to starter
+          const updated = await prisma.userEquipment.updateMany({
+            where: { equipmentId: generic.id },
+            data: { equipmentId: starter.id },
+          });
+
+          if (updated.count > 0) {
+            console.log(`[Migration] Moved ${updated.count} items from ${generic.code} to ${starterCode}`);
+          }
+
+          // Delete the generic equipment template
+          await prisma.equipment.delete({ where: { id: generic.id } });
+          console.log(`[Migration] Deleted generic equipment: ${generic.code}`);
+        }
+      }
+
+      // Ensure starter items are not droppable
+      await prisma.equipment.updateMany({
+        where: { code: { startsWith: 'starter-' } },
+        data: { droppable: false },
+      });
+
+      console.log('[Migration] Generic equipment migration complete');
+    }
+  } catch (err) {
+    console.error('[Migration] Error:', err.message);
+  }
+
   // Try to load saved boss state first
   const loadedState = await loadBossState(prisma);
   if (!loadedState || loadedState === 'respawn') {
@@ -3016,82 +3079,53 @@ app.prepare().then(async () => {
           }
         }
 
-        // If item dropped, create random equipment piece
+        // If item dropped, find existing droppable equipment
+        // ВАЖНО: Никогда не создаём generic предметы! Только существующие в БД с droppable=true
         if (droppedItemRarity) {
-          // Get all equipment of this rarity or create generic
-          const slots = ['WEAPON', 'HELMET', 'CHEST', 'GLOVES', 'LEGS', 'BOOTS', 'SHIELD'];
-          const randomSlot = slots[Math.floor(Math.random() * slots.length)];
-
-          // Find or create equipment template
-          let equipment = await prisma.equipment.findFirst({
-            where: { slot: randomSlot, rarity: droppedItemRarity },
-          });
-
-          if (!equipment) {
-            // Equipment stat ranges per TZ:
-            // WEAPON example: Common 10, Uncommon 12-13, Rare 15-16, Epic 18-20
-            // DEF scales similarly
-            const slotConfig = {
-              WEAPON: { name: 'Меч', icon: '🗡️', isWeapon: true },
-              HELMET: { name: 'Шлем', icon: '⛑️', isWeapon: false },
-              CHEST: { name: 'Нагрудник', icon: '🎽', isWeapon: false },
-              GLOVES: { name: 'Перчатки', icon: '🧤', isWeapon: false },
-              LEGS: { name: 'Поножи', icon: '👖', isWeapon: false },
-              BOOTS: { name: 'Ботинки', icon: '👢', isWeapon: false },
-              SHIELD: { name: 'Щит', icon: '🛡️', isWeapon: false },
-            };
-            // Stat ranges per rarity (matching TZ example for Starter Sword)
-            const rarityStats = {
-              COMMON: { pAtkMin: 10, pAtkMax: 10, pDefMin: 2, pDefMax: 2 },
-              UNCOMMON: { pAtkMin: 12, pAtkMax: 13, pDefMin: 3, pDefMax: 4 },
-              RARE: { pAtkMin: 15, pAtkMax: 16, pDefMin: 5, pDefMax: 6 },
-              EPIC: { pAtkMin: 18, pAtkMax: 20, pDefMin: 7, pDefMax: 8 },
-            };
-            const slotInfo = slotConfig[randomSlot];
-            const stats = rarityStats[droppedItemRarity] || rarityStats.COMMON;
-
-            equipment = await prisma.equipment.create({
-              data: {
-                code: `${randomSlot.toLowerCase()}-${droppedItemRarity.toLowerCase()}-${Date.now()}`,
-                name: slotInfo.name,
-                nameRu: slotInfo.name,
-                icon: slotInfo.icon,
-                slot: randomSlot,
-                rarity: droppedItemRarity,
-                pAtkMin: slotInfo.isWeapon ? stats.pAtkMin : 0,
-                pAtkMax: slotInfo.isWeapon ? stats.pAtkMax : 0,
-                pDefMin: slotInfo.isWeapon ? 0 : stats.pDefMin,
-                pDefMax: slotInfo.isWeapon ? 0 : stats.pDefMax,
-              },
-            });
-          }
-
-          // Roll stats for user equipment
-          const rolledPAtk = equipment.pAtkMax > 0
-            ? Math.floor(Math.random() * (equipment.pAtkMax - equipment.pAtkMin + 1)) + equipment.pAtkMin
-            : 0;
-          const rolledPDef = equipment.pDefMax > 0
-            ? Math.floor(Math.random() * (equipment.pDefMax - equipment.pDefMin + 1)) + equipment.pDefMin
-            : 0;
-
-          await prisma.userEquipment.create({
-            data: {
-              userId: player.odamage,
-              equipmentId: equipment.id,
-              pAtk: rolledPAtk,
-              pDef: rolledPDef,
-              enchant: 0,
-              isEquipped: false,
+          // Find all droppable equipment of this rarity
+          const droppableItems = await prisma.equipment.findMany({
+            where: {
+              rarity: droppedItemRarity,
+              droppable: true,
             },
           });
 
-          droppedItem = {
-            name: equipment.name,
-            icon: equipment.icon,
-            rarity: droppedItemRarity,
-            pAtk: rolledPAtk,
-            pDef: rolledPDef,
-          };
+          if (droppableItems.length > 0) {
+            // Pick random item from available
+            const equipment = droppableItems[Math.floor(Math.random() * droppableItems.length)];
+
+            // Roll stats for user equipment
+            const rolledPAtk = equipment.pAtkMax > 0
+              ? Math.floor(Math.random() * (equipment.pAtkMax - equipment.pAtkMin + 1)) + equipment.pAtkMin
+              : 0;
+            const rolledPDef = equipment.pDefMax > 0
+              ? Math.floor(Math.random() * (equipment.pDefMax - equipment.pDefMin + 1)) + equipment.pDefMin
+              : 0;
+
+            await prisma.userEquipment.create({
+              data: {
+                userId: player.odamage,
+                equipmentId: equipment.id,
+                pAtk: rolledPAtk,
+                pDef: rolledPDef,
+                enchant: 0,
+                isEquipped: false,
+              },
+            });
+
+            droppedItem = {
+              name: equipment.name,
+              icon: equipment.icon,
+              rarity: droppedItemRarity,
+              pAtk: rolledPAtk,
+              pDef: rolledPDef,
+            };
+          } else {
+            // No droppable items of this rarity exist - give bonus gold instead
+            const bonusGold = { COMMON: 500, UNCOMMON: 1000, RARE: 2500, EPIC: 5000 };
+            goldReward += bonusGold[droppedItemRarity] || 500;
+            console.log(`[Chest] No droppable ${droppedItemRarity} items exist, gave ${bonusGold[droppedItemRarity]} bonus gold instead`);
+          }
         }
 
         // Update chest type counter
