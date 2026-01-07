@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.55';
+const APP_VERSION = 'v1.0.56';
 
 interface BossState {
   name: string;
@@ -774,37 +774,21 @@ export default function PhaserGame() {
       </button>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* COMPACT BOSS HP BAR (triple tap = show welcome) */}
+      {/* FLOATING BOSS HP BAR (centered, 60% width) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-20 left-0 right-0 z-10 px-3 pt-1 pb-1"
+        className="absolute top-20 left-0 right-0 z-10 flex flex-col items-center px-3"
         onClick={handleHeaderTap}
       >
-        {/* Boss name + online + drop button */}
-        <div className="flex justify-between items-center mb-0.5">
-          <div className="flex items-center gap-1 text-[10px]">
-            <span>{bossState.icon}</span>
-            <span className="text-l2-gold font-bold">{bossDisplayName}</span>
-            <span className="text-gray-500">({bossState.bossIndex}/{bossState.totalBosses})</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-500">
-              {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-            </span>
-            <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
-            {/* Drop button - compact icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
-              className="w-6 h-6 bg-purple-500/30 rounded-full flex items-center justify-center
-                         border border-purple-500/40 active:scale-90 transition-transform"
-            >
-              <span className="text-sm">🎁</span>
-            </button>
-          </div>
+        {/* Boss name centered above bar */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-base">{bossState.icon}</span>
+          <span className="text-l2-gold font-bold text-sm">{bossDisplayName}</span>
+          <span className="text-gray-500 text-[10px]">({bossState.bossIndex}/{bossState.totalBosses})</span>
         </div>
 
-        {/* HP bar - thinner (h-2) with HP numbers inside */}
-        <div className="h-2.5 bg-black/60 rounded-full overflow-hidden relative">
+        {/* Floating HP bar - 60% width, thicker */}
+        <div className="w-[60%] h-5 bg-black/70 rounded-lg overflow-hidden relative border border-white/10 shadow-lg">
           <div
             className={`h-full transition-all duration-100 ${
               hpPercent < 25 ? 'bg-red-600 hp-critical' :
@@ -815,10 +799,26 @@ export default function PhaserGame() {
           />
           {/* HP numbers centered inside bar */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[9px] text-white/90 font-bold drop-shadow-md">
+            <span className="text-[11px] text-white font-bold drop-shadow-md">
               {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
             </span>
           </div>
+        </div>
+
+        {/* Secondary info row */}
+        <div className="flex items-center gap-3 mt-1.5">
+          <span className="text-[9px] text-gray-500">
+            {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+          </span>
+          <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+          {/* Drop button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
+            className="w-6 h-6 bg-purple-500/30 rounded-full flex items-center justify-center
+                       border border-purple-500/40 active:scale-90 transition-transform"
+          >
+            <span className="text-sm">🎁</span>
+          </button>
         </div>
       </div>
 
