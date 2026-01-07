@@ -1787,9 +1787,9 @@ app.prepare().then(async () => {
 
         // User Active Buffs
         if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+\/buffs$/) && req.method === 'GET') {
-          const odamage = parsedUrl.pathname.split('/')[4];
+          const userId = parsedUrl.pathname.split('/')[4];
           const buffs = await prisma.activeBuff.findMany({
-            where: { odamage, expiresAt: { gt: new Date() } },
+            where: { userId, expiresAt: { gt: new Date() } },
           });
           sendJson({ success: true, buffs });
           return;
