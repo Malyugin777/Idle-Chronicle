@@ -738,6 +738,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     });
 
     // Update player stats in DB (adena, exp, totalDamage)
+    // bossesKilled increments for all eligible participants, not just final blow
     try {
       await prisma.user.update({
         where: { id: entry.odamage },
@@ -745,7 +746,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(expReward) },
           totalDamage: { increment: BigInt(entry.damage) },
-          bossesKilled: { increment: isFinalBlow ? 1 : 0 },
+          bossesKilled: { increment: entry.isEligible ? 1 : 0 },
         },
       });
 
@@ -2260,26 +2261,15 @@ app.prepare().then(async () => {
 
     // LEADERBOARD - Current Boss (with % and photos)
     socket.on('leaderboard:get', () => {
-      // Aggregate by player name to avoid duplicates from different socket.ids
-      const aggregated = new Map();
-      for (const [id, data] of sessionLeaderboard.entries()) {
-        const name = data.odamageN || id;
-        const existing = aggregated.get(name);
-        if (existing) {
-          existing.damage += data.odamage;
-          if (!existing.photoUrl && data.photoUrl) existing.photoUrl = data.photoUrl;
-        } else {
-          aggregated.set(name, {
-            visitorId: id,
-            visitorName: name,
-            photoUrl: data.photoUrl,
-            damage: data.odamage,
-          });
-        }
-      }
-
-      const totalDamage = Array.from(aggregated.values()).reduce((sum, d) => sum + d.damage, 0);
-      const leaderboard = Array.from(aggregated.values())
+      // sessionLeaderboard already keyed by unique odamage ID, no aggregation needed
+      const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + d.odamage, 0);
+      const leaderboard = Array.from(sessionLeaderboard.entries())
+        .map(([id, data]) => ({
+          visitorId: id,
+          visitorName: data.odamageN || id,
+          photoUrl: data.photoUrl,
+          damage: data.odamage,
+        }))
         .map(entry => ({
           ...entry,
           damagePercent: totalDamage > 0 ? Math.round((entry.damage / totalDamage) * 100) : 0,

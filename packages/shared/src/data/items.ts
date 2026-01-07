@@ -94,35 +94,35 @@ export const ITEMS: Record<string, ItemDefinition> = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // POTIONS (Зелья/Баффы)
+  // BUFF SCROLLS (Свитки баффов) - временные усиления
   // ─────────────────────────────────────────────────────────
-  'potion-haste': {
-    id: 'potion-haste',
-    code: 'potion-haste',
-    nameRu: 'Зелье скорости',
-    nameEn: 'Haste Potion',
+  'scroll-haste': {
+    id: 'scroll-haste',
+    code: 'scroll-haste',
+    nameRu: 'Свиток скорости',
+    nameEn: 'Haste Scroll',
     icon: '⚡',
     type: 'consumable',
     rarity: 'uncommon',
     stackable: true,
     dbField: 'potionHaste',
   },
-  'potion-acumen': {
-    id: 'potion-acumen',
-    code: 'potion-acumen',
-    nameRu: 'Зелье силы',
-    nameEn: 'Acumen Potion',
+  'scroll-acumen': {
+    id: 'scroll-acumen',
+    code: 'scroll-acumen',
+    nameRu: 'Свиток силы магии',
+    nameEn: 'Acumen Scroll',
     icon: '🔥',
     type: 'consumable',
     rarity: 'uncommon',
     stackable: true,
     dbField: 'potionAcumen',
   },
-  'potion-luck': {
-    id: 'potion-luck',
-    code: 'potion-luck',
-    nameRu: 'Зелье удачи',
-    nameEn: 'Luck Potion',
+  'scroll-luck': {
+    id: 'scroll-luck',
+    code: 'scroll-luck',
+    nameRu: 'Свиток удачи',
+    nameEn: 'Luck Scroll',
     icon: '🍀',
     type: 'consumable',
     rarity: 'uncommon',

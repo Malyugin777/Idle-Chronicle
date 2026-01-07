@@ -125,6 +125,8 @@ export default function TreasuryTab() {
       setChests(prev => prev.map(c =>
         c.id === chest.id ? { ...c, openingStarted: chest.openingStarted } : c
       ));
+      // Update selected chest too so popup reflects the change
+      setSelectedChest(prev => prev?.id === chest.id ? { ...prev, openingStarted: chest.openingStarted } : prev);
     });
 
     // Chest claimed (rewards received)
