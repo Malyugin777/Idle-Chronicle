@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.53';
+const APP_VERSION = 'v1.0.54';
 
 interface BossState {
   name: string;
@@ -791,6 +791,7 @@ export default function PhaserGame() {
             <span className="text-[10px] text-gray-500">
               {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
             </span>
+            <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
             {/* Drop button - compact icon */}
             <button
               onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
