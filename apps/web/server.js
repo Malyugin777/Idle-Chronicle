@@ -2412,9 +2412,17 @@ app.prepare().then(async () => {
           MEDITATION.maxOfflineMinutes,
           Math.floor((now - lastOnlineTime) / 60000)
         );
-        const pendingDust = offlineMinutes > 0 ? offlineMinutes * MEDITATION.dustPerMinute : 0;
+        const pendingDust = offlineMinutes >= 5 ? offlineMinutes * MEDITATION.dustPerMinute : 0;
         player.pendingDust = pendingDust;
         player.offlineMinutes = offlineMinutes;
+
+        // Update lastOnline immediately to prevent duplicate dust on reconnect
+        if (offlineMinutes >= 5) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastOnline: new Date() },
+          });
+        }
 
         // Load active buffs from DB
         const activeBuffs = await prisma.activeBuff.findMany({

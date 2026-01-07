@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.60';
+const APP_VERSION = 'v1.0.61';
 
 interface BossState {
   name: string;
@@ -545,8 +545,8 @@ export default function PhaserGame() {
         const now = Date.now();
         setActiveBuffs(data.activeBuffs.filter((b: ActiveBuff) => b.expiresAt > now));
       }
-      // Show meditation modal if pending dust > 0
-      if (data.pendingDust > 0) {
+      // Show meditation modal only if offline >= 5 minutes (avoid spam on reconnect)
+      if (data.offlineMinutes >= 5 && data.pendingDust > 0) {
         setMeditationData({
           pendingDust: data.pendingDust,
           offlineMinutes: data.offlineMinutes,
