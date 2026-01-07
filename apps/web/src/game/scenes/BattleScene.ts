@@ -61,6 +61,14 @@ export class BattleScene extends Phaser.Scene {
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
 
+    // DEBUG: Create a visible green circle to verify scene renders
+    const debugCircle = this.add.graphics();
+    debugCircle.fillStyle(0x00ff00, 0.8);
+    debugCircle.fillCircle(width / 2, height / 2, 50);
+    debugCircle.setDepth(1000);
+    // Remove debug circle after 3 seconds
+    this.time.delayedCall(3000, () => debugCircle.destroy());
+
     // Boss sprite (centered)
     // Fallback: if texture didn't load, create a placeholder
     if (!this.textures.exists('boss') || !this.textures.get('boss').getSourceImage().width) {
@@ -68,12 +76,14 @@ export class BattleScene extends Phaser.Scene {
       const graphics = this.add.graphics();
       graphics.fillStyle(0xff0000, 0.5);
       graphics.fillRect(width / 2 - 75, height / 2 - 100, 150, 200);
-      console.error('[BattleScene] Boss texture failed to load!');
+      graphics.setDepth(999);
     }
 
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
-    this.bossSprite.setVisible(true); // Explicitly set visible
+    this.bossSprite.setVisible(true);
+    this.bossSprite.setDepth(10); // Ensure boss is above background
+    this.bossSprite.setAlpha(1); // Ensure full opacity
     this.originalBossX = width / 2;
     this.originalBossY = height / 2;
     this.updateBossScale();
@@ -438,7 +448,22 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const imgWidth = this.bossSprite.width;
     const imgHeight = this.bossSprite.height;
-    const scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
+
+    // Safety check: if sprite has no dimensions, use default scale
+    if (!imgWidth || !imgHeight || imgWidth <= 0 || imgHeight <= 0) {
+      this.bossSprite.setScale(1);
+      this.originalBossScale = 1;
+      return;
+    }
+
+    let scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
+
+    // Safety check: ensure scale is valid number between 0.1 and 5
+    if (!Number.isFinite(scaleFit) || scaleFit <= 0) {
+      scaleFit = 1;
+    }
+    scaleFit = Math.max(0.1, Math.min(5, scaleFit));
+
     this.bossSprite.setScale(scaleFit);
     this.originalBossScale = scaleFit;
     this.originalBossX = this.bossSprite.x;
