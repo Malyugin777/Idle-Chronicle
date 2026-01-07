@@ -95,6 +95,9 @@ export class BattleScene extends Phaser.Scene {
 
     // Delay scale fix
     this.time.delayedCall(100, () => this.updateBossScale());
+
+    // Emit event to React that scene is ready and boss is visible
+    this.emitter.emit('sceneReady');
   }
 
   // ─────────────────────────────────────────────────────────

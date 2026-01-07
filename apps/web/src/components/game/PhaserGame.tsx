@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.72';
+const APP_VERSION = 'v1.0.73';
 
 interface BossState {
   name: string;
@@ -407,9 +407,13 @@ export default function PhaserGame() {
             const scene = game.scene.getScene('BattleScene') as BattleScene;
             if (scene) {
               sceneRef.current = scene;
+              // Listen for scene ready event BEFORE restart
+              const emitter = scene.getEmitter();
+              emitter.once('sceneReady', () => {
+                // Scene finished create(), boss sprite exists, ensure visible
+                scene.setBossVisible(true);
+              });
               scene.scene.restart({ socket });
-              // Ensure boss is visible after scene restart (fixes visibility bug)
-              setTimeout(() => scene.setBossVisible(true), 200);
             }
           },
         },
@@ -465,6 +469,10 @@ export default function PhaserGame() {
           totalBosses: data.totalBosses || 100,
         };
       });
+      // Ensure boss is visible when alive (fallback fix)
+      if (data.hp > 0 && sceneRef.current) {
+        sceneRef.current.setBossVisible(true);
+      }
       // Mark boss data loaded
       setLoadingState(prev => ({ ...prev, boss: true }));
     });
