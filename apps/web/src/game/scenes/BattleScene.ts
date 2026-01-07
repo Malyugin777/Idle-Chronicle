@@ -62,8 +62,18 @@ export class BattleScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
 
     // Boss sprite (centered)
+    // Fallback: if texture didn't load, create a placeholder
+    if (!this.textures.exists('boss') || !this.textures.get('boss').getSourceImage().width) {
+      // Create red rectangle as placeholder
+      const graphics = this.add.graphics();
+      graphics.fillStyle(0xff0000, 0.5);
+      graphics.fillRect(width / 2 - 75, height / 2 - 100, 150, 200);
+      console.error('[BattleScene] Boss texture failed to load!');
+    }
+
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
+    this.bossSprite.setVisible(true); // Explicitly set visible
     this.originalBossX = width / 2;
     this.originalBossY = height / 2;
     this.updateBossScale();
