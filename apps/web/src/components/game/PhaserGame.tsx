@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.78';
+const APP_VERSION = 'v1.0.79';
 
 interface BossState {
   name: string;
@@ -396,23 +396,23 @@ export default function PhaserGame() {
       }
     }
 
-    // Initialize Phaser - SIMPLIFIED
+    // Initialize Phaser
     if (containerRef.current && !gameRef.current) {
       const config = {
         ...gameConfig,
         parent: containerRef.current,
+        transparent: true,
+        callbacks: {
+          postBoot: (game: Phaser.Game) => {
+            const scene = game.scene.getScene('BattleScene') as BattleScene;
+            if (scene) {
+              sceneRef.current = scene;
+              scene.scene.restart({ socket });
+            }
+          },
+        },
       };
-      const game = new Phaser.Game(config);
-      gameRef.current = game;
-
-      // Wait for scene to be ready, then pass socket
-      game.events.once('ready', () => {
-        const scene = game.scene.getScene('BattleScene') as BattleScene;
-        if (scene) {
-          sceneRef.current = scene;
-          scene.scene.restart({ socket });
-        }
-      });
+      gameRef.current = new Phaser.Game(config);
     }
 
     // Auth
