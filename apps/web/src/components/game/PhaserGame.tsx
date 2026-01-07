@@ -17,7 +17,7 @@ import { getTaskManager } from '@/lib/taskManager';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.50';
+const APP_VERSION = 'v1.0.51';
 
 interface BossState {
   name: string;
@@ -293,6 +293,12 @@ export default function PhaserGame() {
 
     socket.on('connect', () => { setConnected(true); doAuth(); });
     socket.on('disconnect', () => setConnected(false));
+
+    // Session kicked (another device logged in)
+    socket.on('session:kicked', (data: { reason: string }) => {
+      alert(data.reason);
+      window.location.reload();
+    });
 
     // Boss state
     socket.on('boss:state', (data: any) => {

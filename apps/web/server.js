@@ -1859,6 +1859,7 @@ app.prepare().then(async () => {
 
     const player = {
       odamage: '',
+      telegramId: null, // For single-session enforcement
       odamageN: 'Guest',
       username: null, // Telegram username для debug-проверок
       photoUrl: null,
@@ -2267,6 +2268,33 @@ app.prepare().then(async () => {
           return;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // SINGLE SESSION ENFORCEMENT
+        // Kick existing session if same telegramId connects from another device
+        // ═══════════════════════════════════════════════════════════
+        const telegramIdStr = String(data.telegramId);
+        for (const [existingSocketId, existingPlayer] of onlineUsers.entries()) {
+          // Skip self (reconnection case)
+          if (existingSocketId === socket.id) continue;
+
+          // Check if this player has same telegramId
+          if (existingPlayer.telegramId === telegramIdStr) {
+            console.log(`[Auth] Kicking duplicate session for telegramId ${telegramIdStr}: ${existingSocketId}`);
+
+            // Notify old session and disconnect it
+            const oldSocket = io.sockets.sockets.get(existingSocketId);
+            if (oldSocket) {
+              oldSocket.emit('session:kicked', {
+                reason: 'Выполнен вход с другого устройства / Logged in from another device'
+              });
+              oldSocket.disconnect(true);
+            }
+
+            // Remove from onlineUsers (disconnect handler will also try but let's be safe)
+            onlineUsers.delete(existingSocketId);
+          }
+        }
+
         let user = await prisma.user.findUnique({
           where: { telegramId: BigInt(data.telegramId) },
         });
@@ -2337,6 +2365,7 @@ app.prepare().then(async () => {
 
         // Update player state from DB
         player.odamage = user.id;
+        player.telegramId = telegramIdStr; // For single-session enforcement
         player.odamageN = user.firstName || user.username || 'Player';
         player.username = user.username || null;
         player.photoUrl = user.photoUrl || null;
