@@ -160,14 +160,35 @@ async function loadBossState(prisma) {
       chestsReward: boss.chestsReward || 10,
     };
 
-    // Load session leaderboard
+    // Load session leaderboard (with backward compatibility)
     if (state.sessionLeaderboard && !bossRespawnAt) {
       const saved = state.sessionLeaderboard;
       if (Array.isArray(saved)) {
         sessionLeaderboard.clear();
         for (const entry of saved) {
-          sessionLeaderboard.set(entry.odamage, entry);
+          // New format: { userId, damage, visitorName, photoUrl, isEligible }
+          if (entry.userId && typeof entry.userId === 'string') {
+            sessionLeaderboard.set(entry.userId, {
+              damage: entry.damage || 0,
+              visitorName: entry.visitorName || 'Unknown',
+              photoUrl: entry.photoUrl || null,
+              isEligible: entry.isEligible || false,
+            });
+          }
+          // Old format backward compat: { odamage (was damage), odamageN, ... }
+          // Skip corrupted entries where odamage is a number (was damage value)
+          else if (entry.odamage && typeof entry.odamage === 'string' && entry.odamage.length > 10) {
+            // Looks like a cuid, use as userId
+            sessionLeaderboard.set(entry.odamage, {
+              damage: entry.damage || entry.odamage_value || 0,
+              visitorName: entry.odamageN || entry.visitorName || 'Unknown',
+              photoUrl: entry.photoUrl || null,
+              isEligible: entry.isEligible || false,
+            });
+          }
+          // else: corrupted entry with numeric odamage, skip it
         }
+        console.log(`[Boss] Loaded ${sessionLeaderboard.size} leaderboard entries`);
       }
     }
 
@@ -187,10 +208,13 @@ async function loadBossState(prisma) {
 
 async function saveBossState(prisma) {
   try {
-    // Serialize leaderboard
-    const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([odamage, data]) => ({
-      odamage,
-      ...data,
+    // Serialize leaderboard with explicit userId field (avoid collision with damage)
+    const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([userId, data]) => ({
+      userId,
+      damage: data.damage || 0,
+      visitorName: data.visitorName || data.odamageN || 'Unknown',
+      photoUrl: data.photoUrl || null,
+      isEligible: data.isEligible || false,
     }));
 
     await prisma.gameState.upsert({
@@ -637,13 +661,13 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
 
   // Build leaderboard with photoUrl and activity status (from sessionLeaderboard)
   const leaderboard = Array.from(sessionLeaderboard.entries())
-    .map(([id, data]) => ({
-      odamage: id,
-      visitorId: id,
-      visitorName: data.odamageN,
+    .map(([userId, data]) => ({
+      odamage: userId,  // Keep for backward compat
+      visitorId: userId,
+      visitorName: data.visitorName || 'Unknown',
       photoUrl: data.photoUrl,
-      damage: data.odamage,
-      isEligible: data.isEligible || false, // TZ Этап 2: saved during damage dealing
+      damage: data.damage || 0,
+      isEligible: data.isEligible || false,
     }))
     .sort((a, b) => b.damage - a.damage);
 
@@ -2571,10 +2595,10 @@ app.prepare().then(async () => {
       const key = player.odamage || socket.id;
       const existing = sessionLeaderboard.get(key);
       sessionLeaderboard.set(key, {
-        odamage: (existing?.odamage || 0) + actualDamage,
-        odamageN: player.odamageN,
+        damage: (existing?.damage || 0) + actualDamage,
+        visitorName: player.odamageN,
         photoUrl: player.photoUrl,
-        isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
+        isEligible: existing?.isEligible || player.isEligible || false,
       });
 
       socket.emit('tap:result', {
@@ -2657,10 +2681,10 @@ app.prepare().then(async () => {
       const key = player.odamage || socket.id;
       const existing = sessionLeaderboard.get(key);
       sessionLeaderboard.set(key, {
-        odamage: (existing?.odamage || 0) + actualDamage,
-        odamageN: player.odamageN,
+        damage: (existing?.damage || 0) + actualDamage,
+        visitorName: player.odamageN,
         photoUrl: player.photoUrl,
-        isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
+        isEligible: existing?.isEligible || player.isEligible || false,
       });
 
       socket.emit('skill:result', {
@@ -2689,14 +2713,14 @@ app.prepare().then(async () => {
 
     // LEADERBOARD - Current Boss (with % and photos)
     socket.on('leaderboard:get', () => {
-      // sessionLeaderboard already keyed by unique odamage ID, no aggregation needed
-      const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + d.odamage, 0);
+      // sessionLeaderboard keyed by userId, data = { damage, visitorName, photoUrl, isEligible }
+      const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + (d.damage || 0), 0);
       const leaderboard = Array.from(sessionLeaderboard.entries())
-        .map(([id, data]) => ({
-          visitorId: id,
-          visitorName: data.odamageN || id,
+        .map(([userId, data]) => ({
+          visitorId: userId,
+          visitorName: data.visitorName || 'Unknown',
           photoUrl: data.photoUrl,
-          damage: data.odamage,
+          damage: data.damage || 0,
         }))
         .map(entry => ({
           ...entry,
@@ -4325,8 +4349,8 @@ app.prepare().then(async () => {
           const key = player.odamage;
           const existing = sessionLeaderboard.get(key);
           sessionLeaderboard.set(key, {
-            odamage: (existing?.odamage || 0) + actualDamage,
-            odamageN: player.odamageN,
+            damage: (existing?.damage || 0) + actualDamage,
+            visitorName: player.odamageN,
             photoUrl: player.photoUrl,
             isEligible: existing?.isEligible || player.isEligible || false,
           });
