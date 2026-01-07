@@ -4255,23 +4255,44 @@ app.prepare().then(async () => {
     }
   }, 1000);
 
-  // Auto-attack every second (for players with autoAttackSpeed > 0)
+  // Auto-attack every second (for players with AUTO enabled)
+  const AUTO_ATTACKS_PER_SECOND = 3; // 3 hits per second when AUTO is ON
+  const AUTO_STAMINA_COST = 5; // Stamina cost per auto-hit
+
   setInterval(async () => {
     if (bossState.currentHp <= 0) return; // Boss is dead
 
     for (const [socketId, player] of onlineUsers.entries()) {
-      if (player.autoAttackSpeed > 0 && player.odamage && bossState.currentHp > 0) {
-        // Calculate auto damage (same as regular damage but weaker)
+      // NEW: Check autoAttack toggle instead of autoAttackSpeed
+      if (player.autoAttack && player.odamage && bossState.currentHp > 0) {
+        // Check stamina - need stamina to auto-attack
+        const staminaNeeded = AUTO_STAMINA_COST * AUTO_ATTACKS_PER_SECOND;
+        if (player.stamina < AUTO_STAMINA_COST) {
+          // Not enough stamina - skip this tick
+          continue;
+        }
+
+        // Calculate auto damage
         const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
         let totalAutoDamage = 0;
         let crits = 0;
+        let etherUsed = 0;
         const critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
 
-        // Number of auto attacks per second
-        for (let i = 0; i < player.autoAttackSpeed; i++) {
-          let dmg = baseDamage * (0.8 + Math.random() * 0.2); // Slightly lower variance
+        // Number of auto attacks per second (limited by stamina)
+        const maxHits = Math.min(AUTO_ATTACKS_PER_SECOND, Math.floor(player.stamina / AUTO_STAMINA_COST));
+
+        for (let i = 0; i < maxHits; i++) {
+          let dmg = baseDamage * (0.8 + Math.random() * 0.2);
           const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
           dmg *= rageMultiplier;
+
+          // Ether bonus (x2 damage if autoEther enabled and has ether)
+          if (player.autoEther && player.ether > 0) {
+            dmg *= 2;
+            player.ether -= 1;
+            etherUsed++;
+          }
 
           // Check for crit
           if (Math.random() < critChance) {
@@ -4279,10 +4300,13 @@ app.prepare().then(async () => {
             crits++;
           }
 
-          // Defense из шаблона по currentBossIndex
+          // Defense
           const autoDefense = (DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0]).defense;
           dmg = Math.max(1, dmg - autoDefense);
           totalAutoDamage += Math.floor(dmg);
+
+          // Consume stamina per hit
+          player.stamina = Math.max(0, player.stamina - AUTO_STAMINA_COST);
         }
 
         if (totalAutoDamage > 0 && bossState.currentHp > 0) {
@@ -4296,26 +4320,26 @@ app.prepare().then(async () => {
             odamage: (existing?.odamage || 0) + actualDamage,
             odamageN: player.odamageN,
             photoUrl: player.photoUrl,
-            isEligible: existing?.isEligible || player.isEligible || false, // TZ Этап 2
+            isEligible: existing?.isEligible || player.isEligible || false,
           });
 
           player.sessionDamage += actualDamage;
 
-          // Gold убран - только из сундуков
-
-          // Send auto-attack result to player with hit animation trigger
+          // Send auto-attack result to player
           const socket = io.sockets.sockets.get(socketId);
           if (socket) {
             socket.emit('autoAttack:result', {
               damage: actualDamage,
               crits,
               sessionDamage: player.sessionDamage,
-              showHitEffect: true, // Trigger hit animation on client
-              ether: player.ether, // For battle UI
+              showHitEffect: true,
+              ether: player.ether,
+              stamina: player.stamina,
+              etherUsed,
             });
           }
 
-          // Broadcast to damage feed (without "Auto" suffix for cleaner UI)
+          // Broadcast to damage feed
           io.emit('damage:feed', {
             playerName: player.odamageN,
             damage: actualDamage,
@@ -4329,7 +4353,7 @@ app.prepare().then(async () => {
           // Check if boss was killed by auto-attack
           if (bossState.currentHp <= 0) {
             await handleBossKill(io, prisma, player, socketId);
-            return; // Exit the loop since boss is dead
+            return;
           }
         }
       }

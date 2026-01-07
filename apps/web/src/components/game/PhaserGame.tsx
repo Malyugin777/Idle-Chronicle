@@ -481,6 +481,7 @@ export default function PhaserGame() {
         ...p,
         gold: data.gold ?? p.gold,
         ether: data.ether ?? p.ether,
+        stamina: data.stamina ?? p.stamina,
       }));
       // Track damage for tasks
       if (data.damage > 0) {
