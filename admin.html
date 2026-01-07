@@ -555,17 +555,37 @@
             <span class="icon">&#128121;</span>
             <span>Boss</span>
           </button>
+          <button class="nav-item" onclick="showTab('online')">
+            <span class="icon">&#127760;</span>
+            <span>Online</span>
+          </button>
           <button class="nav-item" onclick="showTab('users')">
             <span class="icon">&#128100;</span>
             <span>Users</span>
           </button>
-          <button class="nav-item" onclick="showTab('chests')">
+          <button class="nav-item" onclick="showTab('rewards')">
             <span class="icon">&#127873;</span>
+            <span>Rewards</span>
+          </button>
+          <button class="nav-item" onclick="showTab('sessions')">
+            <span class="icon">&#128200;</span>
+            <span>Boss History</span>
+          </button>
+          <button class="nav-item" onclick="showTab('chests')">
+            <span class="icon">&#128230;</span>
             <span>Chests</span>
           </button>
           <button class="nav-item" onclick="showTab('equipment')">
             <span class="icon">&#128737;</span>
             <span>Equipment</span>
+          </button>
+          <button class="nav-item" onclick="showTab('consumables')">
+            <span class="icon">&#127866;</span>
+            <span>Consumables</span>
+          </button>
+          <button class="nav-item" onclick="showTab('badges')">
+            <span class="icon">&#127942;</span>
+            <span>Badges</span>
           </button>
         </div>
 
@@ -1032,6 +1052,272 @@
         </div>
       </div>
 
+      <!-- Online Players Panel -->
+      <div id="onlinePanel" class="panel">
+        <div class="page-header">
+          <h2>Online Players</h2>
+          <p>Currently connected players</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127760; Active Sessions</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadOnlinePlayers()">Refresh</button>
+          </div>
+          <div class="stats-grid" id="onlineStats">
+            <div class="stat-card">
+              <div class="stat-value" id="onlineCount">-</div>
+              <div class="stat-label">Players Online</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="eligibleCount">-</div>
+              <div class="stat-label">Eligible for Rewards</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="totalSessionDamage">-</div>
+              <div class="stat-label">Session Damage</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Photo</th>
+                  <th>Name</th>
+                  <th>Session Damage</th>
+                  <th>Activity Time</th>
+                  <th>Eligible</th>
+                  <th>Soulshot</th>
+                </tr>
+              </thead>
+              <tbody id="onlineTable">
+                <tr><td colspan="6" style="text-align:center">Click Refresh to load</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending Rewards Panel -->
+      <div id="rewardsPanel" class="panel">
+        <div class="page-header">
+          <h2>Pending Rewards</h2>
+          <p>Unclaimed boss kill rewards</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127873; Give Manual Reward</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="rewardUserId" placeholder="Paste user ID">
+            </div>
+            <div class="form-group">
+              <label>Boss Index</label>
+              <input type="number" id="rewardBossIndex" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>Rank</label>
+              <input type="number" id="rewardRank" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>Damage Dealt</label>
+              <input type="number" id="rewardDamage" value="1000">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveManualReward()">Create Reward</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128218; Pending Rewards List</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadPendingRewards()">Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Boss #</th>
+                  <th>Rank</th>
+                  <th>Damage</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rewardsTable">
+                <tr><td colspan="6" style="text-align:center">Click Refresh to load</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Boss Sessions Panel -->
+      <div id="sessionsPanel" class="panel">
+        <div class="page-header">
+          <h2>Boss History</h2>
+          <p>Past boss kill sessions</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128200; Recent Boss Kills</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadBossSessions()">Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Boss</th>
+                  <th>Killed At</th>
+                  <th>Participants</th>
+                  <th>Total Damage</th>
+                  <th>Top Player</th>
+                </tr>
+              </thead>
+              <tbody id="sessionsTable">
+                <tr><td colspan="5" style="text-align:center">Click Refresh to load</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Consumables Panel -->
+      <div id="consumablesPanel" class="panel">
+        <div class="page-header">
+          <h2>Consumables</h2>
+          <p>Give soulshots and buff scrolls</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127866; Give Consumables</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="consumableUserId" placeholder="Paste user ID">
+            </div>
+            <div class="form-group">
+              <label>Item Type</label>
+              <select id="consumableType">
+                <optgroup label="Soulshots">
+                  <option value="soulshotNG">Soulshot NG (x2 dmg)</option>
+                  <option value="soulshotD">Soulshot D (x2.2 dmg)</option>
+                  <option value="soulshotC">Soulshot C (x3.5 dmg)</option>
+                </optgroup>
+                <optgroup label="Buff Potions">
+                  <option value="potionHaste">Potion: Haste (+30% speed)</option>
+                  <option value="potionAcumen">Potion: Acumen (+50% dmg)</option>
+                  <option value="potionLuck">Potion: Luck (+10% crit)</option>
+                </optgroup>
+                <optgroup label="Other">
+                  <option value="enchantScrolls">Enchant Scrolls</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="consumableQty" value="100" min="1" max="10000">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveConsumables()">Give Consumables</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128218; Consumable Reference</h3>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Effect</th>
+                  <th>Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Soulshot NG</td><td>x2 damage</td><td>Per tap</td></tr>
+                <tr><td>Soulshot D</td><td>x2.2 damage</td><td>Per tap</td></tr>
+                <tr><td>Soulshot C</td><td>x3.5 damage</td><td>Per tap</td></tr>
+                <tr><td>Potion: Haste</td><td>+30% attack speed</td><td>30 sec</td></tr>
+                <tr><td>Potion: Acumen</td><td>+50% damage</td><td>30 sec</td></tr>
+                <tr><td>Potion: Luck</td><td>+10% crit chance</td><td>60 sec</td></tr>
+                <tr><td>Enchant Scroll</td><td>+1 enchant level</td><td>Permanent</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Badges Panel -->
+      <div id="badgesPanel" class="panel">
+        <div class="page-header">
+          <h2>Badges</h2>
+          <p>Manage player badges and titles</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#127942; Give Badge</h3>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="badgeUserId" placeholder="Paste user ID">
+            </div>
+            <div class="form-group">
+              <label>Badge Type</label>
+              <select id="badgeType">
+                <option value="slayer">🏆 Slayer (Boss Killer)</option>
+                <option value="elite">⭐ Elite</option>
+                <option value="veteran">🎖️ Veteran</option>
+                <option value="legend">👑 Legend</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Duration (days)</label>
+              <input type="number" id="badgeDays" value="7" min="1" max="365">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="giveBadge()">Give Badge</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>&#128218; Active Badges</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadActiveBadges()">Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Badge</th>
+                  <th>Granted</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="badgesTable">
+                <tr><td colspan="5" style="text-align:center">Click Refresh to load</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Danger Zone Panel -->
       <div id="dangerPanel" class="panel">
         <div class="page-header">
@@ -1307,12 +1593,49 @@
     }
 
     async function editUser(userId) {
-      const data = await api('users/' + userId);
-      if (!data.success) {
-        alert('Error: ' + (data.error || 'User not found'));
+      // Load user, equipment, badges, and buffs in parallel
+      const [userData, equipData, badgeData, buffData] = await Promise.all([
+        api('users/' + userId),
+        api('users/' + userId + '/equipment'),
+        api('users/' + userId + '/badges'),
+        api('users/' + userId + '/buffs'),
+      ]);
+
+      if (!userData.success) {
+        alert('Error: ' + (userData.error || 'User not found'));
         return;
       }
-      const u = data.user;
+      const u = userData.user;
+      const equipment = equipData.equipment || [];
+      const badges = badgeData.badges || [];
+      const buffs = buffData.buffs || [];
+
+      // Equipment HTML
+      const equipHtml = equipment.length > 0
+        ? equipment.map(e => `
+            <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+              <span>${e.icon || '🔧'}</span>
+              <span class="rarity-${(e.rarity || 'common').toLowerCase()}">${e.name || e.code}</span>
+              ${e.enchantLevel > 0 ? `<span class="badge badge-gold">+${e.enchantLevel}</span>` : ''}
+              ${e.isEquipped ? '<span class="badge badge-success">Equipped</span>' : ''}
+            </div>
+          `).join('')
+        : '<div style="color:var(--text-muted)">No equipment</div>';
+
+      // Badges HTML
+      const badgesHtml = badges.length > 0
+        ? badges.map(b => `
+            <span class="badge badge-purple">${b.icon || '🏅'} ${b.name || b.badgeId}</span>
+          `).join(' ')
+        : '<span style="color:var(--text-muted)">No badges</span>';
+
+      // Active Buffs HTML
+      const buffsHtml = buffs.length > 0
+        ? buffs.map(b => `
+            <span class="badge badge-gold">${b.buffId} (${Math.round((new Date(b.expiresAt) - Date.now()) / 1000)}s)</span>
+          `).join(' ')
+        : '<span style="color:var(--text-muted)">No active buffs</span>';
+
       document.getElementById('userModalContent').innerHTML = `
         <input type="hidden" id="editUserId" value="${u.id}">
         <div class="form-grid">
@@ -1401,6 +1724,22 @@
             <input type="number" id="editChestSlots" value="${u.chestSlots || 5}" min="5" max="10">
           </div>
         </div>
+
+        <div style="margin-top:20px;padding-top:15px;border-top:1px solid var(--border)">
+          <h4 style="color:var(--gold);margin-bottom:10px">🛡️ Equipment (${equipment.length})</h4>
+          <div style="max-height:150px;overflow-y:auto">${equipHtml}</div>
+        </div>
+
+        <div style="margin-top:15px">
+          <h4 style="color:var(--gold);margin-bottom:10px">🏅 Badges</h4>
+          <div>${badgesHtml}</div>
+        </div>
+
+        <div style="margin-top:15px">
+          <h4 style="color:var(--gold);margin-bottom:10px">✨ Active Buffs</h4>
+          <div>${buffsHtml}</div>
+        </div>
+
         <div class="btn-group">
           <button class="btn btn-success" onclick="saveUser()">Save Changes</button>
           <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
@@ -1564,6 +1903,185 @@
       const data = await api('danger/reset-boss', 'POST', { confirmPassword: '1993' });
       alert(data.success ? 'Boss reset' : 'Error: ' + data.error);
       if (data.success) loadBossInfo();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ONLINE PLAYERS
+    // ═══════════════════════════════════════════════════════════
+    async function loadOnlinePlayers() {
+      const data = await api('online');
+      if (!data.success) {
+        alert('Error: ' + data.error);
+        return;
+      }
+
+      document.getElementById('onlineCount').textContent = data.players.length;
+      document.getElementById('eligibleCount').textContent = data.players.filter(p => p.isEligible).length;
+      document.getElementById('totalSessionDamage').textContent =
+        data.players.reduce((sum, p) => sum + (p.sessionDamage || 0), 0).toLocaleString();
+
+      const tbody = document.getElementById('onlineTable');
+      if (data.players.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No players online</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.players.map(p => `
+        <tr>
+          <td>${p.photoUrl ? `<img src="${p.photoUrl}" class="user-photo">` : '-'}</td>
+          <td>${p.displayName || 'Anonymous'}<br><small style="color:var(--text-muted)">${p.odamageN || ''}</small></td>
+          <td>${(p.sessionDamage || 0).toLocaleString()}</td>
+          <td>${p.activityTime ? Math.round(p.activityTime / 1000) + 's' : '-'}</td>
+          <td>${p.isEligible ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>'}</td>
+          <td>${p.activeSoulshot || 'None'}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PENDING REWARDS
+    // ═══════════════════════════════════════════════════════════
+    async function loadPendingRewards() {
+      const data = await api('rewards');
+      if (!data.success) {
+        alert('Error: ' + data.error);
+        return;
+      }
+
+      const tbody = document.getElementById('rewardsTable');
+      if (data.rewards.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No pending rewards</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.rewards.map(r => `
+        <tr>
+          <td>${r.user?.firstName || r.user?.username || 'Unknown'}<br><small style="color:var(--text-muted)">${r.userId.substring(0,8)}...</small></td>
+          <td>#${r.bossIndex}</td>
+          <td><span class="badge ${r.rank <= 3 ? 'badge-gold' : 'badge-secondary'}">#${r.rank}</span></td>
+          <td>${Number(r.damageDealt).toLocaleString()}</td>
+          <td>${new Date(r.createdAt).toLocaleString()}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="deleteReward('${r.id}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function giveManualReward() {
+      const data = await api('rewards/give', 'POST', {
+        userId: document.getElementById('rewardUserId').value,
+        bossIndex: parseInt(document.getElementById('rewardBossIndex').value),
+        rank: parseInt(document.getElementById('rewardRank').value),
+        damageDealt: parseInt(document.getElementById('rewardDamage').value),
+      });
+      alert(data.success ? 'Reward created!' : 'Error: ' + data.error);
+      if (data.success) loadPendingRewards();
+    }
+
+    async function deleteReward(rewardId) {
+      if (!confirm('Delete this reward?')) return;
+      const data = await api('rewards/delete', 'POST', { rewardId });
+      alert(data.success ? 'Reward deleted' : 'Error: ' + data.error);
+      if (data.success) loadPendingRewards();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // BOSS SESSIONS
+    // ═══════════════════════════════════════════════════════════
+    async function loadBossSessions() {
+      const data = await api('boss-sessions');
+      if (!data.success) {
+        alert('Error: ' + data.error);
+        return;
+      }
+
+      const tbody = document.getElementById('sessionsTable');
+      if (data.sessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No boss sessions found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.sessions.map(s => {
+        const leaderboard = s.leaderboard || [];
+        const topPlayer = leaderboard[0];
+        const totalDamage = leaderboard.reduce((sum, p) => sum + (p.damage || 0), 0);
+        return `
+          <tr>
+            <td>${s.bossIcon || '👹'} ${s.bossName || 'Boss #' + s.bossIndex}</td>
+            <td>${new Date(s.killedAt).toLocaleString()}</td>
+            <td>${leaderboard.length}</td>
+            <td>${totalDamage.toLocaleString()}</td>
+            <td>${topPlayer ? `${topPlayer.name} (${topPlayer.damage.toLocaleString()})` : '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CONSUMABLES
+    // ═══════════════════════════════════════════════════════════
+    async function giveConsumables() {
+      const itemType = document.getElementById('consumableType').value;
+      const qty = parseInt(document.getElementById('consumableQty').value);
+
+      const body = { odamage: document.getElementById('consumableUserId').value };
+      body[itemType] = qty;
+
+      const data = await api('consumables/give', 'POST', body);
+      alert(data.success ? `${qty} ${itemType} given!` : 'Error: ' + data.error);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // BADGES
+    // ═══════════════════════════════════════════════════════════
+    async function giveBadge() {
+      const badgeType = document.getElementById('badgeType').value;
+      const badgeNames = { slayer: 'Slayer', elite: 'Elite', veteran: 'Veteran', legend: 'Legend' };
+      const badgeIcons = { slayer: '🏆', elite: '⭐', veteran: '🎖️', legend: '👑' };
+
+      const data = await api('badges/give', 'POST', {
+        odamage: document.getElementById('badgeUserId').value,
+        badgeId: badgeType,
+        name: badgeNames[badgeType] || 'Badge',
+        icon: badgeIcons[badgeType] || '🏅',
+        durationDays: parseInt(document.getElementById('badgeDays').value),
+      });
+      alert(data.success ? 'Badge given!' : 'Error: ' + data.error);
+      if (data.success) loadActiveBadges();
+    }
+
+    async function loadActiveBadges() {
+      const data = await api('badges');
+      if (!data.success) {
+        alert('Error: ' + data.error);
+        return;
+      }
+
+      const tbody = document.getElementById('badgesTable');
+      if (data.badges.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No active badges</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.badges.map(b => `
+        <tr>
+          <td>${b.user?.firstName || b.user?.username || 'Unknown'}<br><small style="color:var(--text-muted)">${b.userId.substring(0,8)}...</small></td>
+          <td>${b.icon || '🏅'} ${b.name || b.badgeId}</td>
+          <td>${new Date(b.grantedAt).toLocaleDateString()}</td>
+          <td>${new Date(b.expiresAt).toLocaleDateString()}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="deleteBadge('${b.id}')">Remove</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function deleteBadge(badgeId) {
+      if (!confirm('Remove this badge?')) return;
+      const data = await api('badges/delete', 'POST', { badgeId });
+      alert(data.success ? 'Badge removed' : 'Error: ' + data.error);
+      if (data.success) loadActiveBadges();
     }
 
     // Init

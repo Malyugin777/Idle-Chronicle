@@ -1085,16 +1085,24 @@ app.prepare().then(async () => {
               level: true,
               gold: true,
               totalDamage: true,
+              _count: { select: { chests: true } },
             },
           });
 
+          const total = await prisma.user.count({ where });
           sendJson({
             success: true,
+            total,
             users: users.map(u => ({
-              ...u,
+              id: u.id,
               telegramId: u.telegramId.toString(),
-              gold: u.gold.toString(),
-              totalDamage: u.totalDamage.toString(),
+              username: u.username,
+              firstName: u.firstName,
+              photoUrl: u.photoUrl,
+              level: u.level,
+              gold: Number(u.gold),
+              totalDamage: Number(u.totalDamage),
+              _count: u._count,
             })),
           });
           return;
@@ -1108,14 +1116,62 @@ app.prepare().then(async () => {
             sendJson({ success: false, error: 'User not found' }, 404);
             return;
           }
+          // Convert ALL BigInt fields to Number for JSON serialization
           sendJson({
             success: true,
             user: {
-              ...user,
+              id: user.id,
               telegramId: user.telegramId.toString(),
-              gold: user.gold.toString(),
-              exp: user.exp.toString(),
-              totalDamage: user.totalDamage.toString(),
+              username: user.username,
+              firstName: user.firstName,
+              photoUrl: user.photoUrl,
+              language: user.language,
+              level: user.level,
+              exp: Number(user.exp),
+              // Legacy stats
+              str: user.str,
+              dex: user.dex,
+              luck: user.luck,
+              // L2 Core Attributes
+              power: user.power,
+              agility: user.agility,
+              vitality: user.vitality,
+              intellect: user.intellect,
+              spirit: user.spirit,
+              // Derived stats
+              pAtk: user.pAtk,
+              critChance: user.critChance,
+              critDamage: user.critDamage,
+              attackSpeed: user.attackSpeed,
+              physicalPower: user.physicalPower,
+              maxHealth: user.maxHealth,
+              physicalDefense: user.physicalDefense,
+              // Stamina
+              stamina: user.stamina,
+              maxStamina: user.maxStamina,
+              // Mana
+              mana: user.mana,
+              maxMana: user.maxMana,
+              manaRegen: user.manaRegen,
+              // Currencies
+              gold: Number(user.gold),
+              ancientCoin: user.ancientCoin,
+              tonBalance: user.tonBalance,
+              // Chests
+              chestSlots: user.chestSlots,
+              totalGoldEarned: Number(user.totalGoldEarned || 0),
+              // Consumables
+              enchantScrolls: user.enchantScrolls,
+              soulshotNG: user.soulshotNG,
+              soulshotD: user.soulshotD,
+              soulshotC: user.soulshotC,
+              // Progress
+              totalDamage: Number(user.totalDamage),
+              totalClicks: Number(user.totalClicks || 0),
+              bossesKilled: user.bossesKilled,
+              isFirstLogin: user.isFirstLogin,
+              createdAt: user.createdAt,
+              updatedAt: user.updatedAt,
             },
           });
           return;
@@ -1498,6 +1554,275 @@ app.prepare().then(async () => {
           sessionLeaderboard.clear();
 
           sendJson({ success: true });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // NEW ADMIN ENDPOINTS
+        // ═══════════════════════════════════════════════════════════
+
+        // Online Players - real-time list
+        if (parsedUrl.pathname === '/api/admin/online' && req.method === 'GET') {
+          const onlinePlayers = [];
+          for (const [socketId, player] of onlineUsers.entries()) {
+            if (player.odamage) {
+              onlinePlayers.push({
+                odamage: player.odamage,
+                odamageN: player.odamageN,
+                odamageU: player.odamageU,
+                photoUrl: player.photoUrl,
+                sessionDamage: player.sessionDamage || 0,
+                isEligible: player.isEligible || false,
+                activityTime: player.activityTime || 0,
+                lastActivity: player.lastActivityPing || 0,
+              });
+            }
+          }
+          sendJson({
+            success: true,
+            count: onlinePlayers.length,
+            players: onlinePlayers.sort((a, b) => b.sessionDamage - a.sessionDamage),
+          });
+          return;
+        }
+
+        // Pending Rewards - list all unclaimed
+        if (parsedUrl.pathname === '/api/admin/rewards' && req.method === 'GET') {
+          const rewards = await prisma.pendingReward.findMany({
+            where: { claimed: false },
+            include: { user: { select: { firstName: true, username: true, photoUrl: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+          });
+          sendJson({
+            success: true,
+            rewards: rewards.map(r => ({
+              id: r.id,
+              odamage: r.userId,
+              playerName: r.user.firstName || r.user.username || 'Anonymous',
+              photoUrl: r.user.photoUrl,
+              bossName: r.bossName,
+              bossIcon: r.bossIcon,
+              rank: r.rank,
+              chestsWooden: r.chestsWooden,
+              chestsBronze: r.chestsBronze,
+              chestsSilver: r.chestsSilver,
+              chestsGold: r.chestsGold,
+              badgeId: r.badgeId,
+              createdAt: r.createdAt,
+            })),
+          });
+          return;
+        }
+
+        // Give pending reward manually
+        if (parsedUrl.pathname === '/api/admin/rewards/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { odamage, bossName, rank, chestsWooden, chestsBronze, chestsSilver, chestsGold, badgeId, badgeDuration } = body;
+
+          if (!odamage) {
+            sendJson({ success: false, error: 'userId required' }, 400);
+            return;
+          }
+
+          const reward = await prisma.pendingReward.create({
+            data: {
+              userId: odamage,
+              bossSessionId: 'admin-' + Date.now(),
+              bossName: bossName || 'Admin Gift',
+              bossIcon: '🎁',
+              rank: rank || null,
+              wasEligible: true,
+              chestsWooden: chestsWooden || 0,
+              chestsBronze: chestsBronze || 0,
+              chestsSilver: chestsSilver || 0,
+              chestsGold: chestsGold || 0,
+              badgeId: badgeId || null,
+              badgeDuration: badgeDuration || null,
+            },
+          });
+
+          sendJson({ success: true, reward });
+          return;
+        }
+
+        // Delete pending reward
+        if (parsedUrl.pathname === '/api/admin/rewards/delete' && req.method === 'POST') {
+          const body = await parseBody();
+          await prisma.pendingReward.delete({ where: { id: body.rewardId } });
+          sendJson({ success: true });
+          return;
+        }
+
+        // Boss Sessions history
+        if (parsedUrl.pathname === '/api/admin/boss-sessions' && req.method === 'GET') {
+          const sessions = await prisma.bossSession.findMany({
+            where: { endedAt: { not: null } },
+            orderBy: { endedAt: 'desc' },
+            take: 50,
+            select: {
+              id: true,
+              bossName: true,
+              startedAt: true,
+              endedAt: true,
+              maxHp: true,
+              totalDamage: true,
+              finalBlowBy: true,
+              finalBlowName: true,
+              topDamageBy: true,
+              topDamageName: true,
+              topDamage: true,
+              chestsPool: true,
+            },
+          });
+          sendJson({
+            success: true,
+            sessions: sessions.map(s => ({
+              ...s,
+              maxHp: Number(s.maxHp),
+              totalDamage: Number(s.totalDamage),
+              topDamage: s.topDamage ? Number(s.topDamage) : null,
+            })),
+          });
+          return;
+        }
+
+        // User Equipment - get user's inventory
+        if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+\/equipment$/) && req.method === 'GET') {
+          const userId = parsedUrl.pathname.split('/')[4];
+          const equipment = await prisma.userEquipment.findMany({
+            where: { userId },
+            include: { equipment: true },
+            orderBy: { isEquipped: 'desc' },
+          });
+          sendJson({
+            success: true,
+            equipment: equipment.map(e => ({
+              id: e.id,
+              code: e.equipment.code,
+              name: e.equipment.name,
+              icon: e.equipment.icon,
+              slot: e.equipment.slot,
+              rarity: e.equipment.rarity,
+              pAtk: e.pAtk,
+              pDef: e.pDef,
+              enchant: e.enchant,
+              isEquipped: e.isEquipped,
+            })),
+          });
+          return;
+        }
+
+        // User Badges
+        if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+\/badges$/) && req.method === 'GET') {
+          const userId = parsedUrl.pathname.split('/')[4];
+          const badges = await prisma.userBadge.findMany({
+            where: { userId },
+            orderBy: { expiresAt: 'desc' },
+          });
+          sendJson({ success: true, badges });
+          return;
+        }
+
+        // List ALL Badges
+        if (parsedUrl.pathname === '/api/admin/badges' && req.method === 'GET') {
+          const badges = await prisma.userBadge.findMany({
+            where: { expiresAt: { gt: new Date() } },
+            include: { user: { select: { firstName: true, username: true } } },
+            orderBy: { expiresAt: 'desc' },
+            take: 100,
+          });
+          sendJson({ success: true, badges });
+          return;
+        }
+
+        // Give Badge
+        if (parsedUrl.pathname === '/api/admin/badges/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { odamage, badgeId, name, icon, durationDays } = body;
+
+          const badge = await prisma.userBadge.create({
+            data: {
+              userId: odamage,
+              badgeId: badgeId || 'custom',
+              name: name || 'Custom Badge',
+              icon: icon || '🏅',
+              expiresAt: new Date(Date.now() + (durationDays || 7) * 24 * 60 * 60 * 1000),
+            },
+          });
+          sendJson({ success: true, badge });
+          return;
+        }
+
+        // Delete Badge
+        if (parsedUrl.pathname === '/api/admin/badges/delete' && req.method === 'POST') {
+          const body = await parseBody();
+          await prisma.userBadge.delete({ where: { id: body.badgeId } });
+          sendJson({ success: true });
+          return;
+        }
+
+        // Give Consumables
+        if (parsedUrl.pathname === '/api/admin/consumables/give' && req.method === 'POST') {
+          const body = await parseBody();
+          const { odamage, soulshotNG, soulshotD, soulshotC, potionHaste, potionAcumen, potionLuck, enchantScrolls } = body;
+
+          const updateData = {};
+          if (soulshotNG) updateData.soulshotNG = { increment: soulshotNG };
+          if (soulshotD) updateData.soulshotD = { increment: soulshotD };
+          if (soulshotC) updateData.soulshotC = { increment: soulshotC };
+          if (potionHaste) updateData.potionHaste = { increment: potionHaste };
+          if (potionAcumen) updateData.potionAcumen = { increment: potionAcumen };
+          if (potionLuck) updateData.potionLuck = { increment: potionLuck };
+          if (enchantScrolls) updateData.enchantScrolls = { increment: enchantScrolls };
+
+          const user = await prisma.user.update({
+            where: { id: odamage },
+            data: updateData,
+            select: { soulshotNG: true, soulshotD: true, soulshotC: true, potionHaste: true, potionAcumen: true, potionLuck: true, enchantScrolls: true },
+          });
+          sendJson({ success: true, consumables: user });
+          return;
+        }
+
+        // User Active Buffs
+        if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+\/buffs$/) && req.method === 'GET') {
+          const odamage = parsedUrl.pathname.split('/')[4];
+          const buffs = await prisma.activeBuff.findMany({
+            where: { odamage, expiresAt: { gt: new Date() } },
+          });
+          sendJson({ success: true, buffs });
+          return;
+        }
+
+        // Game Stats
+        if (parsedUrl.pathname === '/api/admin/stats' && req.method === 'GET') {
+          const [totalUsers, totalDamage, totalChests, totalSessions] = await Promise.all([
+            prisma.user.count(),
+            prisma.user.aggregate({ _sum: { totalDamage: true } }),
+            prisma.chest.count(),
+            prisma.bossSession.count({ where: { endedAt: { not: null } } }),
+          ]);
+
+          // Users registered today
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const newUsersToday = await prisma.user.count({
+            where: { createdAt: { gte: today } },
+          });
+
+          sendJson({
+            success: true,
+            stats: {
+              totalUsers,
+              newUsersToday,
+              playersOnline: onlineUsers.size,
+              totalDamage: Number(totalDamage._sum.totalDamage || 0),
+              totalChests,
+              totalBossKills: totalSessions,
+              currentBossIndex: currentBossIndex + 1,
+            },
+          });
           return;
         }
       }
