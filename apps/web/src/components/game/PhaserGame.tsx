@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.77';
+const APP_VERSION = 'v1.0.78';
 
 interface BossState {
   name: string;
@@ -1118,28 +1118,29 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DAMAGE FEED - Right side, premium combat log */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-48 right-2 z-10 w-32">
+      <div className="absolute top-48 right-1 z-10 w-28">
         {damageFeed.length > 0 && (
-          <div className="bg-black/40 rounded-lg border border-gray-800/50 backdrop-blur-sm overflow-hidden">
-            <div className="px-2 py-1 bg-gradient-to-r from-gray-900/80 to-transparent border-b border-gray-800/50">
-              <span className="text-[8px] text-gray-500 uppercase tracking-wider">Combat Log</span>
+          <div className="bg-black/50 rounded-lg border border-gray-800/50 overflow-hidden">
+            <div className="px-1.5 py-0.5 bg-gray-900/80 border-b border-gray-800/50">
+              <span className="text-[7px] text-gray-500 uppercase">Log</span>
             </div>
-            <div className="p-1.5 space-y-0.5 max-h-32 overflow-hidden">
+            <div className="px-1 py-1 space-y-0.5 max-h-28 overflow-hidden">
               {damageFeed.map((item, i) => (
                 <div
                   key={item.timestamp}
-                  className={`text-[10px] text-right px-1 py-0.5 rounded transition-all ${
+                  className={`text-[9px] px-1 py-0.5 rounded ${
                     item.isCrit
-                      ? 'bg-red-900/30 text-red-400 border-l-2 border-red-500'
+                      ? 'bg-red-900/40 text-red-400'
                       : 'text-gray-400'
                   }`}
-                  style={{ opacity: 1 - i * 0.18 }}
+                  style={{ opacity: 1 - i * 0.15 }}
                 >
-                  <span className="text-gray-500">{item.playerName.slice(0, 8)}</span>
-                  <span className={item.isCrit ? 'text-red-400 font-bold' : 'text-gray-300'}>
-                    {' '}-{item.damage.toLocaleString()}
-                  </span>
-                  {item.isCrit && <span className="text-red-500 text-[8px]"> !</span>}
+                  <div className="truncate">
+                    <span className="text-gray-500">{item.playerName.slice(0, 6)}</span>
+                    <span className={item.isCrit ? 'text-red-400 font-bold' : 'text-gray-300'}>
+                      {' '}-{formatCompact(item.damage)}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
