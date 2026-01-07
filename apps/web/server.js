@@ -474,7 +474,7 @@ function updateRagePhase() {
 // Boss templates (names/icons/images)
 const BOSS_TEMPLATES = [
   { name: 'Serpent', nameRu: 'Змей', icon: '🐍', image: '/assets/bosses/boss_1.png' },
-  { name: 'Plague Rat', nameRu: 'Чумная Крыса', icon: '🐀', image: '/assets/bosses/boss_2.png', pDef: 50 },
+  { name: 'Plague Rat', nameRu: 'Чумная Крыса', icon: '🐀', image: '/assets/bosses/boss_2.png' },
   { name: 'Lizardman', nameRu: 'Ящер', icon: '🦎', image: '/assets/bosses/boss_3.png' },
   { name: 'Hell Hound', nameRu: 'Адский Пёс', icon: '🐕', image: '/assets/bosses/boss_4.png' },
   { name: 'Poison Toad', nameRu: 'Ядовитая Жаба', icon: '🐸', image: '/assets/bosses/boss_5.png' },
