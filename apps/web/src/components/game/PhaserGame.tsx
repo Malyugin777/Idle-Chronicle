@@ -8,6 +8,7 @@ import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import { getTaskManager } from '@/lib/taskManager';
+import TasksModal from './TasksModal';
 
 // ═══════════════════════════════════════════════════════════
 // PHASER GAME + REACT UI
@@ -18,7 +19,7 @@ import { getTaskManager } from '@/lib/taskManager';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.52';
+const APP_VERSION = 'v1.0.53';
 
 interface BossState {
   name: string;
@@ -88,6 +89,24 @@ interface PendingReward {
   chestsGold: number;
 }
 
+interface ActiveBuff {
+  type: 'haste' | 'acumen' | 'luck';
+  value: number;
+  expiresAt: number;
+}
+
+const BUFF_ICONS: Record<string, string> = {
+  haste: '⚡',
+  acumen: '🔥',
+  luck: '🍀',
+};
+
+const BUFF_DURATIONS: Record<string, number> = {
+  haste: 30000,
+  acumen: 30000,
+  luck: 60000,
+};
+
 const SKILLS: Skill[] = [
   { id: 'fireball', name: 'Fireball', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
   { id: 'iceball', name: 'Ice Ball', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
@@ -95,6 +114,51 @@ const SKILLS: Skill[] = [
 ];
 
 const COOLDOWNS_KEY = 'battle_skill_cooldowns';
+
+// BuffIcon component with circular progress
+function BuffIcon({ buff }: { buff: ActiveBuff }) {
+  const [remaining, setRemaining] = useState(0);
+  const duration = BUFF_DURATIONS[buff.type] || 30000;
+
+  useEffect(() => {
+    const update = () => setRemaining(Math.max(0, buff.expiresAt - Date.now()));
+    update();
+    const interval = setInterval(update, 100);
+    return () => clearInterval(interval);
+  }, [buff.expiresAt]);
+
+  const percent = (remaining / duration) * 100;
+  const radius = 14;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percent / 100);
+
+  return (
+    <div className="relative w-9 h-9">
+      {/* SVG circular progress */}
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36">
+        <circle
+          cx="18" cy="18" r={radius}
+          fill="rgba(0,0,0,0.7)"
+          stroke="rgba(255,255,255,0.2)"
+          strokeWidth="2"
+        />
+        <circle
+          cx="18" cy="18" r={radius}
+          fill="none"
+          stroke="#fbbf24"
+          strokeWidth="2"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-100"
+        />
+      </svg>
+      {/* Icon centered */}
+      <span className="absolute inset-0 flex items-center justify-center text-lg">
+        {BUFF_ICONS[buff.type]}
+      </span>
+    </div>
+  );
+}
 
 export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -180,6 +244,9 @@ export default function PhaserGame() {
   const [claimError, setClaimError] = useState<string | null>(null);
   const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
   const [pressedSkill, setPressedSkill] = useState<string | null>(null);
+  const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
+  const [showTasks, setShowTasks] = useState(false);
+  const [hasClaimable, setHasClaimable] = useState(false);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -435,6 +502,26 @@ export default function PhaserGame() {
         crystals: data.ancientCoin ?? 0,
         photoUrl: data.photoUrl ?? null,
       });
+      // Set active buffs from auth data
+      if (data.activeBuffs && Array.isArray(data.activeBuffs)) {
+        const now = Date.now();
+        setActiveBuffs(data.activeBuffs.filter((b: ActiveBuff) => b.expiresAt > now));
+      }
+    });
+
+    // Buff activated
+    socket.on('buff:success', (data: { buffId: string; expiresAt: number }) => {
+      setActiveBuffs(prev => {
+        // Remove old buff of same type
+        const filtered = prev.filter(b => b.type !== data.buffId);
+        // Add new buff
+        const buffValues: Record<string, number> = { haste: 0.3, acumen: 0.5, luck: 0.1 };
+        return [...filtered, {
+          type: data.buffId as ActiveBuff['type'],
+          value: buffValues[data.buffId] || 0,
+          expiresAt: data.expiresAt,
+        }];
+      });
     });
 
     // Exhaustion
@@ -570,6 +657,7 @@ export default function PhaserGame() {
       socket.off('player:state');
       socket.off('skill:result');
       socket.off('auth:success');
+      socket.off('buff:success');
       socket.off('hero:exhausted');
       socket.off('damage:feed');
       socket.off('offline:earnings');
@@ -588,6 +676,31 @@ export default function PhaserGame() {
         gameRef.current = null;
       }
     };
+  }, []);
+
+  // Buff expiration checker - removes expired buffs every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setActiveBuffs(prev => prev.filter(b => b.expiresAt > now));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Tasks claimable badge checker
+  useEffect(() => {
+    const tm = getTaskManager();
+
+    const checkClaimable = () => {
+      const tasks = tm.getDailyTasks();
+      const claimable = tasks.some((t: any) => t.completed && !t.claimed);
+      setHasClaimable(claimable);
+    };
+
+    checkClaimable();
+    const unsubscribe = tm.subscribe(checkClaimable);
+
+    return unsubscribe;
   }, []);
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
@@ -636,10 +749,35 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ACTIVE BUFFS - Left side, below HUD */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {activeBuffs.length > 0 && (
+        <div className="absolute top-10 left-3 z-15 flex gap-1">
+          {activeBuffs.map(buff => (
+            <BuffIcon key={buff.type} buff={buff} />
+          ))}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* TASKS BUTTON - Right side, below HUD */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <button
+        onClick={() => setShowTasks(true)}
+        className="absolute top-10 right-3 z-15 w-9 h-9 bg-black/70 rounded-lg border border-white/20
+                   flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all"
+      >
+        <span className="text-lg">🎯</span>
+        {hasClaimable && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+        )}
+      </button>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
       {/* COMPACT BOSS HP BAR (triple tap = show welcome) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-9 left-0 right-0 z-10 px-3 pt-1 pb-1"
+        className="absolute top-20 left-0 right-0 z-10 px-3 pt-1 pb-1"
         onClick={handleHeaderTap}
       >
         {/* Boss name + online + drop button */}
@@ -1139,6 +1277,11 @@ export default function PhaserGame() {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* TASKS MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
 
     </div>
   );
