@@ -138,21 +138,22 @@ async function loadBossState(prisma) {
       return 'respawn'; // Signal to respawn
     }
 
+    // ВСЕГДА используем данные из шаблона по currentBossIndex для синхронизации
     bossState = {
       id: `default-${state.currentBossIndex}`,
-      name: state.bossName || boss.name,
-      nameRu: state.bossNameRu || boss.nameRu || boss.name,
+      name: boss.name,           // Из шаблона (не из БД!)
+      nameRu: boss.nameRu || boss.name,
       title: 'World Boss',
       maxHp: Number(state.bossMaxHp),
       currentHp: bossRespawnAt ? Number(state.bossMaxHp) : savedHp,
-      defense: boss.defense, // Всегда из шаблона (pDef)
+      defense: boss.defense,
       thornsDamage: boss.thornsDamage || 0,
       ragePhase: 0,
       sessionId: null,
-      icon: state.bossIcon || boss.icon,
-      image: boss.image || null, // Всегда из шаблона
+      icon: boss.icon,           // Из шаблона (не из БД!)
+      image: boss.image || null, // Из шаблона
       bossIndex: state.currentBossIndex + 1,
-      totalBosses: 100, // Будет 100 боссов!
+      totalBosses: 100,
       goldReward: boss.goldReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
