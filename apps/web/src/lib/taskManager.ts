@@ -10,7 +10,7 @@ import {
   TaskDefinition,
   TaskReward,
   TRIAL_THRESHOLD,
-} from '@shared/data/tasks';
+} from './tasks';
 
 const STORAGE_KEY = 'ic_task_state_v1';
 
