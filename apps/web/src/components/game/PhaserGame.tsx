@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.61';
+const APP_VERSION = 'v1.0.62';
 
 interface BossState {
   name: string;
@@ -1020,19 +1020,6 @@ export default function PhaserGame() {
               </div>
             )}
           </button>
-        </div>
-
-        {/* Session Damage + Activity Status */}
-        <div className="mt-2 text-center text-xs">
-          <div>
-            <span className="text-gray-400">{t.game.sessionDamage}: </span>
-            <span className="text-l2-gold font-bold">{sessionDamage.toLocaleString()}</span>
-          </div>
-          <div className={activityStatus.eligible ? 'text-green-400' : 'text-gray-500'}>
-            {activityStatus.eligible
-              ? (lang === 'ru' ? '✓ Награда доступна' : '✓ Reward eligible')
-              : `⏱️ ${Math.floor(activityStatus.time / 1000)}/30s`}
-          </div>
         </div>
       </div>
 
