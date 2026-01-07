@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════════════════════════
 
 export type Slot = 'weapon' | 'helmet' | 'chest' | 'gloves' | 'legs' | 'boots' | 'shield';
-export type ItemType = 'equipment' | 'consumable';
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type ItemType = 'equipment' | 'consumable' | 'material';
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
 
 export interface ItemStats {
   pAtk?: number;
@@ -15,6 +15,9 @@ export interface ItemStats {
   atkSpd?: number;      // flat bonus
   mpMax?: number;
   staminaMax?: number;
+  // Base attributes (для сетовых бонусов)
+  power?: number;       // СИЛ
+  agility?: number;     // ЛОВ
 }
 
 export interface ItemDefinition {
@@ -23,17 +26,18 @@ export interface ItemDefinition {
   nameRu: string;
   nameEn: string;
   icon: string;
-  type: ItemType;       // equipment или consumable
+  type: ItemType;       // equipment, consumable, material
   slot?: Slot;          // только для equipment
   rarity: Rarity;
   stats?: ItemStats;    // только для equipment
-  setId?: string;       // ID сета (например "novice")
-  stackable?: boolean;  // можно ли складывать (для consumable)
-  dbField?: string;     // поле в БД (для consumable)
+  setId?: string;       // ID сета (например "starter")
+  stackable?: boolean;  // можно ли складывать (для consumable/material)
+  dbField?: string;     // поле в БД (для consumable/material)
+  description?: string; // описание эффекта (для consumable)
 }
 
 // ═══════════════════════════════════════════════════════════
-// СТАРТОВЫЙ СЕТ НОВИЧКА (Common, setId: "novice")
+// СТАРТОВЫЙ СЕТ НОВИЧКА (Common, setId: "starter")
 // ═══════════════════════════════════════════════════════════
 
 export const ITEMS: Record<string, ItemDefinition> = {
@@ -126,7 +130,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
   // ═══════════════════════════════════════════════════════════
 
   // ─────────────────────────────────────────────────────────
-  // NOVICE SET (Common)
+  // STARTER SET (Common) - выдаётся новичкам, не дропается
   // ─────────────────────────────────────────────────────────
   'novice-sword': {
     id: 'novice-sword',
@@ -138,7 +142,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'weapon',
     rarity: 'common',
     stats: { pAtk: 8 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-helmet': {
     id: 'novice-helmet',
@@ -150,7 +154,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'helmet',
     rarity: 'common',
     stats: { pDef: 2 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-chest': {
     id: 'novice-chest',
@@ -162,7 +166,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'chest',
     rarity: 'common',
     stats: { pDef: 3 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-gloves': {
     id: 'novice-gloves',
@@ -174,7 +178,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'gloves',
     rarity: 'common',
     stats: { pDef: 1 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-legs': {
     id: 'novice-legs',
@@ -186,7 +190,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'legs',
     rarity: 'common',
     stats: { pDef: 2 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-boots': {
     id: 'novice-boots',
@@ -198,7 +202,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'boots',
     rarity: 'common',
     stats: { pDef: 1 },
-    setId: 'novice',
+    setId: 'starter',
   },
   'novice-shield': {
     id: 'novice-shield',
@@ -210,18 +214,653 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slot: 'shield',
     rarity: 'common',
     stats: { pDef: 2 },
-    setId: 'novice',
+    setId: 'starter',
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // DROPPABLE SETS (10 сетов × 5 частей = 50 предметов)
+  // helmet, gloves, boots, chest, legs
+  // ═══════════════════════════════════════════════════════════
+
+  // ─────────────────────────────────────────────────────────
+  // ADVENTURER SET (Common) - Сет искателя
+  // ─────────────────────────────────────────────────────────
+  'adventurer-helmet': {
+    id: 'adventurer-helmet',
+    code: 'adventurer-helmet',
+    nameRu: 'Шлем искателя',
+    nameEn: 'Adventurer Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'common',
+    stats: { pDef: 3, staminaMax: 10 },
+    setId: 'adventurer',
+  },
+  'adventurer-gloves': {
+    id: 'adventurer-gloves',
+    code: 'adventurer-gloves',
+    nameRu: 'Перчатки искателя',
+    nameEn: 'Adventurer Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'common',
+    stats: { pDef: 2, staminaMax: 5 },
+    setId: 'adventurer',
+  },
+  'adventurer-boots': {
+    id: 'adventurer-boots',
+    code: 'adventurer-boots',
+    nameRu: 'Ботинки искателя',
+    nameEn: 'Adventurer Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'common',
+    stats: { pDef: 2, staminaMax: 10 },
+    setId: 'adventurer',
+  },
+  'adventurer-chest': {
+    id: 'adventurer-chest',
+    code: 'adventurer-chest',
+    nameRu: 'Нагрудник искателя',
+    nameEn: 'Adventurer Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'common',
+    stats: { pDef: 4, staminaMax: 15 },
+    setId: 'adventurer',
+  },
+  'adventurer-legs': {
+    id: 'adventurer-legs',
+    code: 'adventurer-legs',
+    nameRu: 'Поножи искателя',
+    nameEn: 'Adventurer Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'common',
+    stats: { pDef: 3, staminaMax: 10 },
+    setId: 'adventurer',
   },
 
   // ─────────────────────────────────────────────────────────
-  // IRON SET (Uncommon) - будущее
+  // LEATHER SET (Common) - Кожаный сет
   // ─────────────────────────────────────────────────────────
-  // TODO: Add iron set items
+  'leather-helmet': {
+    id: 'leather-helmet',
+    code: 'leather-helmet',
+    nameRu: 'Кожаный шлем',
+    nameEn: 'Leather Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'common',
+    stats: { pDef: 4, staminaMax: 12 },
+    setId: 'leather',
+  },
+  'leather-gloves': {
+    id: 'leather-gloves',
+    code: 'leather-gloves',
+    nameRu: 'Кожаные перчатки',
+    nameEn: 'Leather Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'common',
+    stats: { pDef: 2, staminaMax: 8 },
+    setId: 'leather',
+  },
+  'leather-boots': {
+    id: 'leather-boots',
+    code: 'leather-boots',
+    nameRu: 'Кожаные ботинки',
+    nameEn: 'Leather Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'common',
+    stats: { pDef: 3, staminaMax: 12 },
+    setId: 'leather',
+  },
+  'leather-chest': {
+    id: 'leather-chest',
+    code: 'leather-chest',
+    nameRu: 'Кожаный нагрудник',
+    nameEn: 'Leather Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'common',
+    stats: { pDef: 5, staminaMax: 18 },
+    setId: 'leather',
+  },
+  'leather-legs': {
+    id: 'leather-legs',
+    code: 'leather-legs',
+    nameRu: 'Кожаные поножи',
+    nameEn: 'Leather Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'common',
+    stats: { pDef: 3, staminaMax: 12 },
+    setId: 'leather',
+  },
 
   // ─────────────────────────────────────────────────────────
-  // STEEL SET (Rare) - будущее
+  // SCOUT SET (Uncommon) - Сет разведчика
   // ─────────────────────────────────────────────────────────
-  // TODO: Add steel set items
+  'scout-helmet': {
+    id: 'scout-helmet',
+    code: 'scout-helmet',
+    nameRu: 'Шлем разведчика',
+    nameEn: 'Scout Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'uncommon',
+    stats: { pDef: 5, staminaMax: 20 },
+    setId: 'scout',
+  },
+  'scout-gloves': {
+    id: 'scout-gloves',
+    code: 'scout-gloves',
+    nameRu: 'Перчатки разведчика',
+    nameEn: 'Scout Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'uncommon',
+    stats: { pDef: 3, staminaMax: 12 },
+    setId: 'scout',
+  },
+  'scout-boots': {
+    id: 'scout-boots',
+    code: 'scout-boots',
+    nameRu: 'Ботинки разведчика',
+    nameEn: 'Scout Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'uncommon',
+    stats: { pDef: 4, staminaMax: 18 },
+    setId: 'scout',
+  },
+  'scout-chest': {
+    id: 'scout-chest',
+    code: 'scout-chest',
+    nameRu: 'Нагрудник разведчика',
+    nameEn: 'Scout Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'uncommon',
+    stats: { pDef: 7, staminaMax: 28 },
+    setId: 'scout',
+  },
+  'scout-legs': {
+    id: 'scout-legs',
+    code: 'scout-legs',
+    nameRu: 'Поножи разведчика',
+    nameEn: 'Scout Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'uncommon',
+    stats: { pDef: 5, staminaMax: 22 },
+    setId: 'scout',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // HUNTER SET (Uncommon) - Сет охотника
+  // ─────────────────────────────────────────────────────────
+  'hunter-helmet': {
+    id: 'hunter-helmet',
+    code: 'hunter-helmet',
+    nameRu: 'Шлем охотника',
+    nameEn: 'Hunter Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'uncommon',
+    stats: { pDef: 6, staminaMax: 24 },
+    setId: 'hunter',
+  },
+  'hunter-gloves': {
+    id: 'hunter-gloves',
+    code: 'hunter-gloves',
+    nameRu: 'Перчатки охотника',
+    nameEn: 'Hunter Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'uncommon',
+    stats: { pDef: 4, staminaMax: 14 },
+    setId: 'hunter',
+  },
+  'hunter-boots': {
+    id: 'hunter-boots',
+    code: 'hunter-boots',
+    nameRu: 'Ботинки охотника',
+    nameEn: 'Hunter Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'uncommon',
+    stats: { pDef: 5, staminaMax: 20 },
+    setId: 'hunter',
+  },
+  'hunter-chest': {
+    id: 'hunter-chest',
+    code: 'hunter-chest',
+    nameRu: 'Нагрудник охотника',
+    nameEn: 'Hunter Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'uncommon',
+    stats: { pDef: 8, staminaMax: 32 },
+    setId: 'hunter',
+  },
+  'hunter-legs': {
+    id: 'hunter-legs',
+    code: 'hunter-legs',
+    nameRu: 'Поножи охотника',
+    nameEn: 'Hunter Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'uncommon',
+    stats: { pDef: 6, staminaMax: 26 },
+    setId: 'hunter',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // SOLDIER SET (Rare) - Сет солдата
+  // ─────────────────────────────────────────────────────────
+  'soldier-helmet': {
+    id: 'soldier-helmet',
+    code: 'soldier-helmet',
+    nameRu: 'Шлем солдата',
+    nameEn: 'Soldier Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'rare',
+    stats: { pDef: 8, staminaMax: 35 },
+    setId: 'soldier',
+  },
+  'soldier-gloves': {
+    id: 'soldier-gloves',
+    code: 'soldier-gloves',
+    nameRu: 'Перчатки солдата',
+    nameEn: 'Soldier Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'rare',
+    stats: { pDef: 5, staminaMax: 22 },
+    setId: 'soldier',
+  },
+  'soldier-boots': {
+    id: 'soldier-boots',
+    code: 'soldier-boots',
+    nameRu: 'Ботинки солдата',
+    nameEn: 'Soldier Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'rare',
+    stats: { pDef: 6, staminaMax: 28 },
+    setId: 'soldier',
+  },
+  'soldier-chest': {
+    id: 'soldier-chest',
+    code: 'soldier-chest',
+    nameRu: 'Нагрудник солдата',
+    nameEn: 'Soldier Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'rare',
+    stats: { pDef: 10, staminaMax: 45 },
+    setId: 'soldier',
+  },
+  'soldier-legs': {
+    id: 'soldier-legs',
+    code: 'soldier-legs',
+    nameRu: 'Поножи солдата',
+    nameEn: 'Soldier Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'rare',
+    stats: { pDef: 8, staminaMax: 38 },
+    setId: 'soldier',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // KNIGHT SET (Rare) - Сет рыцаря
+  // ─────────────────────────────────────────────────────────
+  'knight-helmet': {
+    id: 'knight-helmet',
+    code: 'knight-helmet',
+    nameRu: 'Шлем рыцаря',
+    nameEn: 'Knight Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'rare',
+    stats: { pDef: 10, staminaMax: 40 },
+    setId: 'knight',
+  },
+  'knight-gloves': {
+    id: 'knight-gloves',
+    code: 'knight-gloves',
+    nameRu: 'Перчатки рыцаря',
+    nameEn: 'Knight Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'rare',
+    stats: { pDef: 6, staminaMax: 25 },
+    setId: 'knight',
+  },
+  'knight-boots': {
+    id: 'knight-boots',
+    code: 'knight-boots',
+    nameRu: 'Ботинки рыцаря',
+    nameEn: 'Knight Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'rare',
+    stats: { pDef: 8, staminaMax: 32 },
+    setId: 'knight',
+  },
+  'knight-chest': {
+    id: 'knight-chest',
+    code: 'knight-chest',
+    nameRu: 'Нагрудник рыцаря',
+    nameEn: 'Knight Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'rare',
+    stats: { pDef: 12, staminaMax: 50 },
+    setId: 'knight',
+  },
+  'knight-legs': {
+    id: 'knight-legs',
+    code: 'knight-legs',
+    nameRu: 'Поножи рыцаря',
+    nameEn: 'Knight Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'rare',
+    stats: { pDef: 10, staminaMax: 42 },
+    setId: 'knight',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // GUARDIAN SET (Epic) - Сет стража
+  // ─────────────────────────────────────────────────────────
+  'guardian-helmet': {
+    id: 'guardian-helmet',
+    code: 'guardian-helmet',
+    nameRu: 'Шлем стража',
+    nameEn: 'Guardian Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'epic',
+    stats: { pDef: 12, staminaMax: 50 },
+    setId: 'guardian',
+  },
+  'guardian-gloves': {
+    id: 'guardian-gloves',
+    code: 'guardian-gloves',
+    nameRu: 'Перчатки стража',
+    nameEn: 'Guardian Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'epic',
+    stats: { pDef: 8, staminaMax: 32 },
+    setId: 'guardian',
+  },
+  'guardian-boots': {
+    id: 'guardian-boots',
+    code: 'guardian-boots',
+    nameRu: 'Ботинки стража',
+    nameEn: 'Guardian Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'epic',
+    stats: { pDef: 10, staminaMax: 42 },
+    setId: 'guardian',
+  },
+  'guardian-chest': {
+    id: 'guardian-chest',
+    code: 'guardian-chest',
+    nameRu: 'Нагрудник стража',
+    nameEn: 'Guardian Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'epic',
+    stats: { pDef: 15, staminaMax: 65 },
+    setId: 'guardian',
+  },
+  'guardian-legs': {
+    id: 'guardian-legs',
+    code: 'guardian-legs',
+    nameRu: 'Поножи стража',
+    nameEn: 'Guardian Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'epic',
+    stats: { pDef: 12, staminaMax: 55 },
+    setId: 'guardian',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // WARLORD SET (Epic) - Сет полководца
+  // ─────────────────────────────────────────────────────────
+  'warlord-helmet': {
+    id: 'warlord-helmet',
+    code: 'warlord-helmet',
+    nameRu: 'Шлем полководца',
+    nameEn: 'Warlord Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'epic',
+    stats: { pDef: 14, staminaMax: 60 },
+    setId: 'warlord',
+  },
+  'warlord-gloves': {
+    id: 'warlord-gloves',
+    code: 'warlord-gloves',
+    nameRu: 'Перчатки полководца',
+    nameEn: 'Warlord Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'epic',
+    stats: { pDef: 9, staminaMax: 38 },
+    setId: 'warlord',
+  },
+  'warlord-boots': {
+    id: 'warlord-boots',
+    code: 'warlord-boots',
+    nameRu: 'Ботинки полководца',
+    nameEn: 'Warlord Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'epic',
+    stats: { pDef: 12, staminaMax: 50 },
+    setId: 'warlord',
+  },
+  'warlord-chest': {
+    id: 'warlord-chest',
+    code: 'warlord-chest',
+    nameRu: 'Нагрудник полководца',
+    nameEn: 'Warlord Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'epic',
+    stats: { pDef: 18, staminaMax: 75 },
+    setId: 'warlord',
+  },
+  'warlord-legs': {
+    id: 'warlord-legs',
+    code: 'warlord-legs',
+    nameRu: 'Поножи полководца',
+    nameEn: 'Warlord Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'epic',
+    stats: { pDef: 14, staminaMax: 62 },
+    setId: 'warlord',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // CHAMPION SET (Epic) - Сет чемпиона
+  // ─────────────────────────────────────────────────────────
+  'champion-helmet': {
+    id: 'champion-helmet',
+    code: 'champion-helmet',
+    nameRu: 'Шлем чемпиона',
+    nameEn: 'Champion Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'epic',
+    stats: { pDef: 16, staminaMax: 70 },
+    setId: 'champion',
+  },
+  'champion-gloves': {
+    id: 'champion-gloves',
+    code: 'champion-gloves',
+    nameRu: 'Перчатки чемпиона',
+    nameEn: 'Champion Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'epic',
+    stats: { pDef: 10, staminaMax: 45 },
+    setId: 'champion',
+  },
+  'champion-boots': {
+    id: 'champion-boots',
+    code: 'champion-boots',
+    nameRu: 'Ботинки чемпиона',
+    nameEn: 'Champion Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'epic',
+    stats: { pDef: 13, staminaMax: 55 },
+    setId: 'champion',
+  },
+  'champion-chest': {
+    id: 'champion-chest',
+    code: 'champion-chest',
+    nameRu: 'Нагрудник чемпиона',
+    nameEn: 'Champion Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'epic',
+    stats: { pDef: 20, staminaMax: 88 },
+    setId: 'champion',
+  },
+  'champion-legs': {
+    id: 'champion-legs',
+    code: 'champion-legs',
+    nameRu: 'Поножи чемпиона',
+    nameEn: 'Champion Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'epic',
+    stats: { pDef: 16, staminaMax: 72 },
+    setId: 'champion',
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // IMMORTAL SET (Epic) - Сет бессмертного
+  // ─────────────────────────────────────────────────────────
+  'immortal-helmet': {
+    id: 'immortal-helmet',
+    code: 'immortal-helmet',
+    nameRu: 'Шлем бессмертного',
+    nameEn: 'Immortal Helmet',
+    icon: '⛑️',
+    type: 'equipment',
+    slot: 'helmet',
+    rarity: 'epic',
+    stats: { pDef: 18, staminaMax: 80 },
+    setId: 'immortal',
+  },
+  'immortal-gloves': {
+    id: 'immortal-gloves',
+    code: 'immortal-gloves',
+    nameRu: 'Перчатки бессмертного',
+    nameEn: 'Immortal Gloves',
+    icon: '🧤',
+    type: 'equipment',
+    slot: 'gloves',
+    rarity: 'epic',
+    stats: { pDef: 12, staminaMax: 52 },
+    setId: 'immortal',
+  },
+  'immortal-boots': {
+    id: 'immortal-boots',
+    code: 'immortal-boots',
+    nameRu: 'Ботинки бессмертного',
+    nameEn: 'Immortal Boots',
+    icon: '👢',
+    type: 'equipment',
+    slot: 'boots',
+    rarity: 'epic',
+    stats: { pDef: 15, staminaMax: 65 },
+    setId: 'immortal',
+  },
+  'immortal-chest': {
+    id: 'immortal-chest',
+    code: 'immortal-chest',
+    nameRu: 'Нагрудник бессмертного',
+    nameEn: 'Immortal Chest',
+    icon: '🎽',
+    type: 'equipment',
+    slot: 'chest',
+    rarity: 'epic',
+    stats: { pDef: 22, staminaMax: 100 },
+    setId: 'immortal',
+  },
+  'immortal-legs': {
+    id: 'immortal-legs',
+    code: 'immortal-legs',
+    nameRu: 'Поножи бессмертного',
+    nameEn: 'Immortal Legs',
+    icon: '👖',
+    type: 'equipment',
+    slot: 'legs',
+    rarity: 'epic',
+    stats: { pDef: 18, staminaMax: 82 },
+    setId: 'immortal',
+  },
 };
 
 // Поиск предмета по code (для совместимости со старыми данными)

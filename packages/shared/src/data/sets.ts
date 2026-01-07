@@ -5,8 +5,8 @@
 import { ItemStats } from './items';
 
 export interface SetBonus {
-  pieces: number;       // Сколько частей нужно (3, 6, 7...)
-  bonusFlat?: ItemStats; // Плоские бонусы
+  pieces: number;       // Сколько частей нужно (3, 5...)
+  bonusFlat?: ItemStats; // Плоские бонусы (включая power, agility)
   bonusPct?: {          // Процентные бонусы
     pAtk?: number;      // 0.05 = +5%
     pDef?: number;
@@ -16,6 +16,7 @@ export interface SetBonus {
     atkSpd?: number;
     mpMax?: number;
     staminaMax?: number;
+    staminaRegen?: number; // 0.15 = +15% к регену стамины
   };
   description: {
     ru: string;
@@ -36,84 +37,152 @@ export interface SetDefinition {
 // ═══════════════════════════════════════════════════════════
 
 export const SETS: Record<string, SetDefinition> = {
-  novice: {
-    id: 'novice',
-    nameRu: 'Сет новичка',
-    nameEn: 'Novice Set',
+  // ═══════════════════════════════════════════════════════════
+  // STARTER SET (выдаётся в начале, НЕ дропается)
+  // ═══════════════════════════════════════════════════════════
+  starter: {
+    id: 'starter',
+    nameRu: 'Стартовый сет',
+    nameEn: 'Starter Set',
     totalPieces: 7,
     bonuses: [
       {
         pieces: 3,
-        bonusPct: { pAtk: 0.03 },  // +3% P.Atk
-        description: {
-          ru: '+3% к физ. атаке',
-          en: '+3% Physical Attack',
-        },
+        bonusPct: { pAtk: 0.03 },
+        description: { ru: '+3% к физ. атаке', en: '+3% Physical Attack' },
       },
       {
         pieces: 6,
-        bonusPct: { pAtk: 0.05, pDef: 0.05 },  // +5% P.Atk, +5% P.Def
-        description: {
-          ru: '+5% к физ. атаке, +5% к физ. защите',
-          en: '+5% Physical Attack, +5% Physical Defense',
-        },
+        bonusPct: { pAtk: 0.05, pDef: 0.05 },
+        description: { ru: '+5% к физ. атаке, +5% к физ. защите', en: '+5% P.Atk, +5% P.Def' },
       },
     ],
   },
 
+  // ═══════════════════════════════════════════════════════════
+  // ДРОПОВЫЕ СЕТЫ (10 сетов, 5 частей каждый)
+  // helmet, gloves, boots, chest, legs
+  // ═══════════════════════════════════════════════════════════
+
   // ─────────────────────────────────────────────────────────
-  // IRON SET (будущее)
+  // COMMON (adventurer, leather)
   // ─────────────────────────────────────────────────────────
-  iron: {
-    id: 'iron',
-    nameRu: 'Железный сет',
-    nameEn: 'Iron Set',
-    totalPieces: 7,
+  adventurer: {
+    id: 'adventurer',
+    nameRu: 'Сет искателя',
+    nameEn: 'Adventurer Set',
+    totalPieces: 5,
     bonuses: [
-      {
-        pieces: 3,
-        bonusPct: { pDef: 0.05 },
-        description: {
-          ru: '+5% к физ. защите',
-          en: '+5% Physical Defense',
-        },
-      },
-      {
-        pieces: 6,
-        bonusPct: { pDef: 0.10, staminaMax: 0.05 },
-        description: {
-          ru: '+10% к физ. защите, +5% к макс. стамине',
-          en: '+10% Physical Defense, +5% Max Stamina',
-        },
-      },
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, description: { ru: '+15% к регену стамины', en: '+15% stamina regen' } },
+    ],
+  },
+
+  leather: {
+    id: 'leather',
+    nameRu: 'Кожаный сет',
+    nameEn: 'Leather Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, description: { ru: '+15% к регену стамины', en: '+15% stamina regen' } },
     ],
   },
 
   // ─────────────────────────────────────────────────────────
-  // STEEL SET (будущее)
+  // UNCOMMON (scout, hunter)
   // ─────────────────────────────────────────────────────────
-  steel: {
-    id: 'steel',
-    nameRu: 'Стальной сет',
-    nameEn: 'Steel Set',
-    totalPieces: 7,
+  scout: {
+    id: 'scout',
+    nameRu: 'Сет разведчика',
+    nameEn: 'Scout Set',
+    totalPieces: 5,
     bonuses: [
-      {
-        pieces: 3,
-        bonusPct: { pAtk: 0.05, crit: 0.01 },
-        description: {
-          ru: '+5% к физ. атаке, +1% крит. шанс',
-          en: '+5% Physical Attack, +1% Crit Chance',
-        },
-      },
-      {
-        pieces: 6,
-        bonusPct: { pAtk: 0.10, pDef: 0.08, crit: 0.02 },
-        description: {
-          ru: '+10% к физ. атаке, +8% к защите, +2% крит',
-          en: '+10% P.Atk, +8% P.Def, +2% Crit',
-        },
-      },
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, description: { ru: '+15% к регену стамины', en: '+15% stamina regen' } },
+    ],
+  },
+
+  hunter: {
+    id: 'hunter',
+    nameRu: 'Сет охотника',
+    nameEn: 'Hunter Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 1 }, description: { ru: '+15% реген стамины, +1 СИЛ', en: '+15% stamina regen, +1 STR' } },
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // RARE (soldier, knight)
+  // ─────────────────────────────────────────────────────────
+  soldier: {
+    id: 'soldier',
+    nameRu: 'Сет солдата',
+    nameEn: 'Soldier Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 2 }, description: { ru: '+15% реген стамины, +2 СИЛ', en: '+15% stamina regen, +2 STR' } },
+    ],
+  },
+
+  knight: {
+    id: 'knight',
+    nameRu: 'Сет рыцаря',
+    nameEn: 'Knight Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 2, agility: 1 }, description: { ru: '+15% реген, +2 СИЛ, +1 ЛОВ', en: '+15% regen, +2 STR, +1 DEX' } },
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // EPIC (guardian, warlord, champion, immortal)
+  // ─────────────────────────────────────────────────────────
+  guardian: {
+    id: 'guardian',
+    nameRu: 'Сет стража',
+    nameEn: 'Guardian Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 3, agility: 1 }, description: { ru: '+15% реген, +3 СИЛ, +1 ЛОВ', en: '+15% regen, +3 STR, +1 DEX' } },
+    ],
+  },
+
+  warlord: {
+    id: 'warlord',
+    nameRu: 'Сет полководца',
+    nameEn: 'Warlord Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 3, agility: 2 }, description: { ru: '+15% реген, +3 СИЛ, +2 ЛОВ', en: '+15% regen, +3 STR, +2 DEX' } },
+    ],
+  },
+
+  champion: {
+    id: 'champion',
+    nameRu: 'Сет чемпиона',
+    nameEn: 'Champion Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 4, agility: 2 }, description: { ru: '+15% реген, +4 СИЛ, +2 ЛОВ', en: '+15% regen, +4 STR, +2 DEX' } },
+    ],
+  },
+
+  immortal: {
+    id: 'immortal',
+    nameRu: 'Сет бессмертного',
+    nameEn: 'Immortal Set',
+    totalPieces: 5,
+    bonuses: [
+      { pieces: 3, bonusPct: { staminaRegen: 0.05 }, description: { ru: '+5% к регену стамины', en: '+5% stamina regen' } },
+      { pieces: 5, bonusPct: { staminaRegen: 0.15 }, bonusFlat: { power: 5, agility: 3 }, description: { ru: '+15% реген, +5 СИЛ, +3 ЛОВ', en: '+15% regen, +5 STR, +3 DEX' } },
     ],
   },
 };
@@ -142,7 +211,7 @@ export function getActiveSetBonuses(setId: string, equippedCount: number): SetBo
  */
 export function calculateSetBonuses(setId: string, equippedCount: number): {
   flat: ItemStats;
-  pct: { pAtk?: number; pDef?: number; mAtk?: number; mDef?: number; crit?: number; atkSpd?: number; mpMax?: number; staminaMax?: number };
+  pct: { pAtk?: number; pDef?: number; mAtk?: number; mDef?: number; crit?: number; atkSpd?: number; mpMax?: number; staminaMax?: number; staminaRegen?: number };
 } {
   const activeBonuses = getActiveSetBonuses(setId, equippedCount);
 

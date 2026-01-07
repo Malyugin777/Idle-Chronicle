@@ -359,29 +359,139 @@ const CHEST_DROP_RATES = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════
+// DROP SET/SLOT WEIGHTS — веса для выбора сета и слота при дропе
+// Сначала выбирается сет (по рарности), затем слот
+// ═══════════════════════════════════════════════════════════
+
+// Веса сетов внутри каждой рарности (более ранние сеты чаще)
+const DROP_SET_WEIGHTS = {
+  COMMON: { adventurer: 60, leather: 40 },
+  UNCOMMON: { scout: 60, hunter: 40 },
+  RARE: { soldier: 60, knight: 40 },
+  EPIC: { guardian: 40, warlord: 30, champion: 20, immortal: 10 },
+};
+
+// Веса слотов (перчатки реже всего)
+const DROP_SLOT_WEIGHTS = {
+  helmet: 22,
+  chest: 22,
+  legs: 22,
+  boots: 22,
+  gloves: 12,
+};
+
+// Helper: выбрать элемент по весам
+function weightedRandom(weights) {
+  const entries = Object.entries(weights);
+  const totalWeight = entries.reduce((sum, [, w]) => sum + w, 0);
+  let roll = Math.random() * totalWeight;
+  for (const [key, weight] of entries) {
+    roll -= weight;
+    if (roll <= 0) return key;
+  }
+  return entries[0][0]; // fallback
+}
+
 // Starter equipment set (Novice Set)
 // Синхронизировано с packages/shared/src/data/items.ts (novice set)
 // TODO: После сборки shared импортировать оттуда напрямую
 const STARTER_EQUIPMENT = [
-  { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 8, setId: 'novice' },
-  { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2, setId: 'novice' },
-  { code: 'starter-chest', slot: 'CHEST', name: 'Нагрудник новичка', icon: '🎽', pDef: 3, setId: 'novice' },
-  { code: 'starter-gloves', slot: 'GLOVES', name: 'Перчатки новичка', icon: '🧤', pDef: 1, setId: 'novice' },
-  { code: 'starter-legs', slot: 'LEGS', name: 'Поножи новичка', icon: '👖', pDef: 2, setId: 'novice' },
-  { code: 'starter-boots', slot: 'BOOTS', name: 'Ботинки новичка', icon: '👢', pDef: 1, setId: 'novice' },
-  { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2, setId: 'novice' },
+  { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 8, setId: 'starter' },
+  { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2, setId: 'starter' },
+  { code: 'starter-chest', slot: 'CHEST', name: 'Нагрудник новичка', icon: '🎽', pDef: 3, setId: 'starter' },
+  { code: 'starter-gloves', slot: 'GLOVES', name: 'Перчатки новичка', icon: '🧤', pDef: 1, setId: 'starter' },
+  { code: 'starter-legs', slot: 'LEGS', name: 'Поножи новичка', icon: '👖', pDef: 2, setId: 'starter' },
+  { code: 'starter-boots', slot: 'BOOTS', name: 'Ботинки новичка', icon: '👢', pDef: 1, setId: 'starter' },
+  { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2, setId: 'starter' },
 ];
 
 // Map item codes to set IDs
 const ITEM_SET_MAP = {
-  'starter-sword': 'novice',
-  'starter-helmet': 'novice',
-  'starter-chest': 'novice',
-  'starter-gloves': 'novice',
-  'starter-legs': 'novice',
-  'starter-boots': 'novice',
-  'starter-shield': 'novice',
+  'starter-sword': 'starter',
+  'starter-helmet': 'starter',
+  'starter-chest': 'starter',
+  'starter-gloves': 'starter',
+  'starter-legs': 'starter',
+  'starter-boots': 'starter',
+  'starter-shield': 'starter',
 };
+
+// ═══════════════════════════════════════════════════════════
+// DROPPABLE EQUIPMENT (50 предметов, 10 сетов × 5 частей)
+// Синхронизировано с packages/shared/src/data/items.ts
+// ═══════════════════════════════════════════════════════════
+const DROPPABLE_EQUIPMENT = [
+  // ADVENTURER SET (Common)
+  { code: 'adventurer-helmet', slot: 'HELMET', name: 'Шлем искателя', icon: '⛑️', pDef: 3, staminaMax: 10, rarity: 'COMMON', setId: 'adventurer' },
+  { code: 'adventurer-gloves', slot: 'GLOVES', name: 'Перчатки искателя', icon: '🧤', pDef: 2, staminaMax: 5, rarity: 'COMMON', setId: 'adventurer' },
+  { code: 'adventurer-boots', slot: 'BOOTS', name: 'Ботинки искателя', icon: '👢', pDef: 2, staminaMax: 10, rarity: 'COMMON', setId: 'adventurer' },
+  { code: 'adventurer-chest', slot: 'CHEST', name: 'Нагрудник искателя', icon: '🎽', pDef: 4, staminaMax: 15, rarity: 'COMMON', setId: 'adventurer' },
+  { code: 'adventurer-legs', slot: 'LEGS', name: 'Поножи искателя', icon: '👖', pDef: 3, staminaMax: 10, rarity: 'COMMON', setId: 'adventurer' },
+
+  // LEATHER SET (Common)
+  { code: 'leather-helmet', slot: 'HELMET', name: 'Кожаный шлем', icon: '⛑️', pDef: 4, staminaMax: 12, rarity: 'COMMON', setId: 'leather' },
+  { code: 'leather-gloves', slot: 'GLOVES', name: 'Кожаные перчатки', icon: '🧤', pDef: 2, staminaMax: 8, rarity: 'COMMON', setId: 'leather' },
+  { code: 'leather-boots', slot: 'BOOTS', name: 'Кожаные ботинки', icon: '👢', pDef: 3, staminaMax: 12, rarity: 'COMMON', setId: 'leather' },
+  { code: 'leather-chest', slot: 'CHEST', name: 'Кожаный нагрудник', icon: '🎽', pDef: 5, staminaMax: 18, rarity: 'COMMON', setId: 'leather' },
+  { code: 'leather-legs', slot: 'LEGS', name: 'Кожаные поножи', icon: '👖', pDef: 3, staminaMax: 12, rarity: 'COMMON', setId: 'leather' },
+
+  // SCOUT SET (Uncommon)
+  { code: 'scout-helmet', slot: 'HELMET', name: 'Шлем разведчика', icon: '⛑️', pDef: 5, staminaMax: 20, rarity: 'UNCOMMON', setId: 'scout' },
+  { code: 'scout-gloves', slot: 'GLOVES', name: 'Перчатки разведчика', icon: '🧤', pDef: 3, staminaMax: 12, rarity: 'UNCOMMON', setId: 'scout' },
+  { code: 'scout-boots', slot: 'BOOTS', name: 'Ботинки разведчика', icon: '👢', pDef: 4, staminaMax: 18, rarity: 'UNCOMMON', setId: 'scout' },
+  { code: 'scout-chest', slot: 'CHEST', name: 'Нагрудник разведчика', icon: '🎽', pDef: 7, staminaMax: 28, rarity: 'UNCOMMON', setId: 'scout' },
+  { code: 'scout-legs', slot: 'LEGS', name: 'Поножи разведчика', icon: '👖', pDef: 5, staminaMax: 22, rarity: 'UNCOMMON', setId: 'scout' },
+
+  // HUNTER SET (Uncommon)
+  { code: 'hunter-helmet', slot: 'HELMET', name: 'Шлем охотника', icon: '⛑️', pDef: 6, staminaMax: 24, rarity: 'UNCOMMON', setId: 'hunter' },
+  { code: 'hunter-gloves', slot: 'GLOVES', name: 'Перчатки охотника', icon: '🧤', pDef: 4, staminaMax: 14, rarity: 'UNCOMMON', setId: 'hunter' },
+  { code: 'hunter-boots', slot: 'BOOTS', name: 'Ботинки охотника', icon: '👢', pDef: 5, staminaMax: 20, rarity: 'UNCOMMON', setId: 'hunter' },
+  { code: 'hunter-chest', slot: 'CHEST', name: 'Нагрудник охотника', icon: '🎽', pDef: 8, staminaMax: 32, rarity: 'UNCOMMON', setId: 'hunter' },
+  { code: 'hunter-legs', slot: 'LEGS', name: 'Поножи охотника', icon: '👖', pDef: 6, staminaMax: 26, rarity: 'UNCOMMON', setId: 'hunter' },
+
+  // SOLDIER SET (Rare)
+  { code: 'soldier-helmet', slot: 'HELMET', name: 'Шлем солдата', icon: '⛑️', pDef: 8, staminaMax: 35, rarity: 'RARE', setId: 'soldier' },
+  { code: 'soldier-gloves', slot: 'GLOVES', name: 'Перчатки солдата', icon: '🧤', pDef: 5, staminaMax: 22, rarity: 'RARE', setId: 'soldier' },
+  { code: 'soldier-boots', slot: 'BOOTS', name: 'Ботинки солдата', icon: '👢', pDef: 6, staminaMax: 28, rarity: 'RARE', setId: 'soldier' },
+  { code: 'soldier-chest', slot: 'CHEST', name: 'Нагрудник солдата', icon: '🎽', pDef: 10, staminaMax: 45, rarity: 'RARE', setId: 'soldier' },
+  { code: 'soldier-legs', slot: 'LEGS', name: 'Поножи солдата', icon: '👖', pDef: 8, staminaMax: 38, rarity: 'RARE', setId: 'soldier' },
+
+  // KNIGHT SET (Rare)
+  { code: 'knight-helmet', slot: 'HELMET', name: 'Шлем рыцаря', icon: '⛑️', pDef: 10, staminaMax: 40, rarity: 'RARE', setId: 'knight' },
+  { code: 'knight-gloves', slot: 'GLOVES', name: 'Перчатки рыцаря', icon: '🧤', pDef: 6, staminaMax: 25, rarity: 'RARE', setId: 'knight' },
+  { code: 'knight-boots', slot: 'BOOTS', name: 'Ботинки рыцаря', icon: '👢', pDef: 8, staminaMax: 32, rarity: 'RARE', setId: 'knight' },
+  { code: 'knight-chest', slot: 'CHEST', name: 'Нагрудник рыцаря', icon: '🎽', pDef: 12, staminaMax: 50, rarity: 'RARE', setId: 'knight' },
+  { code: 'knight-legs', slot: 'LEGS', name: 'Поножи рыцаря', icon: '👖', pDef: 10, staminaMax: 42, rarity: 'RARE', setId: 'knight' },
+
+  // GUARDIAN SET (Epic)
+  { code: 'guardian-helmet', slot: 'HELMET', name: 'Шлем стража', icon: '⛑️', pDef: 12, staminaMax: 50, rarity: 'EPIC', setId: 'guardian' },
+  { code: 'guardian-gloves', slot: 'GLOVES', name: 'Перчатки стража', icon: '🧤', pDef: 8, staminaMax: 32, rarity: 'EPIC', setId: 'guardian' },
+  { code: 'guardian-boots', slot: 'BOOTS', name: 'Ботинки стража', icon: '👢', pDef: 10, staminaMax: 42, rarity: 'EPIC', setId: 'guardian' },
+  { code: 'guardian-chest', slot: 'CHEST', name: 'Нагрудник стража', icon: '🎽', pDef: 15, staminaMax: 65, rarity: 'EPIC', setId: 'guardian' },
+  { code: 'guardian-legs', slot: 'LEGS', name: 'Поножи стража', icon: '👖', pDef: 12, staminaMax: 55, rarity: 'EPIC', setId: 'guardian' },
+
+  // WARLORD SET (Epic)
+  { code: 'warlord-helmet', slot: 'HELMET', name: 'Шлем полководца', icon: '⛑️', pDef: 14, staminaMax: 60, rarity: 'EPIC', setId: 'warlord' },
+  { code: 'warlord-gloves', slot: 'GLOVES', name: 'Перчатки полководца', icon: '🧤', pDef: 9, staminaMax: 38, rarity: 'EPIC', setId: 'warlord' },
+  { code: 'warlord-boots', slot: 'BOOTS', name: 'Ботинки полководца', icon: '👢', pDef: 12, staminaMax: 50, rarity: 'EPIC', setId: 'warlord' },
+  { code: 'warlord-chest', slot: 'CHEST', name: 'Нагрудник полководца', icon: '🎽', pDef: 18, staminaMax: 75, rarity: 'EPIC', setId: 'warlord' },
+  { code: 'warlord-legs', slot: 'LEGS', name: 'Поножи полководца', icon: '👖', pDef: 14, staminaMax: 62, rarity: 'EPIC', setId: 'warlord' },
+
+  // CHAMPION SET (Epic)
+  { code: 'champion-helmet', slot: 'HELMET', name: 'Шлем чемпиона', icon: '⛑️', pDef: 16, staminaMax: 70, rarity: 'EPIC', setId: 'champion' },
+  { code: 'champion-gloves', slot: 'GLOVES', name: 'Перчатки чемпиона', icon: '🧤', pDef: 10, staminaMax: 45, rarity: 'EPIC', setId: 'champion' },
+  { code: 'champion-boots', slot: 'BOOTS', name: 'Ботинки чемпиона', icon: '👢', pDef: 13, staminaMax: 55, rarity: 'EPIC', setId: 'champion' },
+  { code: 'champion-chest', slot: 'CHEST', name: 'Нагрудник чемпиона', icon: '🎽', pDef: 20, staminaMax: 88, rarity: 'EPIC', setId: 'champion' },
+  { code: 'champion-legs', slot: 'LEGS', name: 'Поножи чемпиона', icon: '👖', pDef: 16, staminaMax: 72, rarity: 'EPIC', setId: 'champion' },
+
+  // IMMORTAL SET (Epic)
+  { code: 'immortal-helmet', slot: 'HELMET', name: 'Шлем бессмертного', icon: '⛑️', pDef: 18, staminaMax: 80, rarity: 'EPIC', setId: 'immortal' },
+  { code: 'immortal-gloves', slot: 'GLOVES', name: 'Перчатки бессмертного', icon: '🧤', pDef: 12, staminaMax: 52, rarity: 'EPIC', setId: 'immortal' },
+  { code: 'immortal-boots', slot: 'BOOTS', name: 'Ботинки бессмертного', icon: '👢', pDef: 15, staminaMax: 65, rarity: 'EPIC', setId: 'immortal' },
+  { code: 'immortal-chest', slot: 'CHEST', name: 'Нагрудник бессмертного', icon: '🎽', pDef: 22, staminaMax: 100, rarity: 'EPIC', setId: 'immortal' },
+  { code: 'immortal-legs', slot: 'LEGS', name: 'Поножи бессмертного', icon: '👖', pDef: 18, staminaMax: 82, rarity: 'EPIC', setId: 'immortal' },
+];
 
 // Stat upgrade cost formula
 function getUpgradeCost(level) {
@@ -997,11 +1107,50 @@ app.prepare().then(async () => {
       console.log('[Migration] Generic equipment migration complete');
     }
 
-    // ALWAYS ensure starter items are droppable (until we add more sets)
+    // Starter items are NOT droppable (они выдаются только новичкам)
     await prisma.equipment.updateMany({
       where: { code: { startsWith: 'starter-' } },
-      data: { droppable: true },
+      data: { droppable: false },
     });
+
+    // ═══════════════════════════════════════════════════════════
+    // SEED DROPPABLE EQUIPMENT (50 items)
+    // ═══════════════════════════════════════════════════════════
+    let seededCount = 0;
+    for (const item of DROPPABLE_EQUIPMENT) {
+      const existing = await prisma.equipment.findUnique({
+        where: { code: item.code },
+      });
+
+      if (!existing) {
+        await prisma.equipment.create({
+          data: {
+            code: item.code,
+            name: item.name,
+            nameRu: item.name,
+            icon: item.icon,
+            slot: item.slot,
+            rarity: item.rarity,
+            pAtkMin: 0,
+            pAtkMax: 0,
+            pDefMin: item.pDef || 0,
+            pDefMax: item.pDef || 0,
+            droppable: true,
+          },
+        });
+        seededCount++;
+      } else if (!existing.droppable) {
+        // Ensure droppable is true for existing items
+        await prisma.equipment.update({
+          where: { code: item.code },
+          data: { droppable: true },
+        });
+      }
+    }
+    if (seededCount > 0) {
+      console.log(`[Seed] Created ${seededCount} new equipment templates`);
+    }
+    console.log(`[Seed] Total droppable equipment: ${DROPPABLE_EQUIPMENT.length}`);
   } catch (err) {
     console.error('[Migration] Error:', err.message);
   }
@@ -3091,8 +3240,38 @@ app.prepare().then(async () => {
           });
 
           if (droppableItems.length > 0) {
-            // Pick random item from available
-            const equipment = droppableItems[Math.floor(Math.random() * droppableItems.length)];
+            // WEIGHTED SELECTION: сначала сет, потом слот
+            let equipment = null;
+
+            // Проверяем есть ли веса для этой рарности
+            const setWeights = DROP_SET_WEIGHTS[droppedItemRarity];
+            if (setWeights) {
+              // Шаг 1: Выбираем сет по весам
+              const chosenSetId = weightedRandom(setWeights);
+              // Шаг 2: Выбираем слот по весам
+              const chosenSlot = weightedRandom(DROP_SLOT_WEIGHTS).toUpperCase();
+              // Шаг 3: Ищем предмет по коду (setId-slot)
+              const targetCode = `${chosenSetId}-${chosenSlot.toLowerCase()}`;
+              equipment = droppableItems.find(item => item.code === targetCode);
+
+              // Fallback: если точный предмет не найден, ищем любой из этого сета
+              if (!equipment) {
+                const setItems = droppableItems.filter(item => item.code.startsWith(chosenSetId + '-'));
+                if (setItems.length > 0) {
+                  equipment = setItems[Math.floor(Math.random() * setItems.length)];
+                }
+              }
+
+              // Fallback: если сет не найден, берём любой из этой рарности
+              if (!equipment) {
+                equipment = droppableItems[Math.floor(Math.random() * droppableItems.length)];
+              }
+
+              console.log(`[Drop] Rarity=${droppedItemRarity}, Set=${chosenSetId}, Slot=${chosenSlot}, Code=${targetCode}, Found=${equipment?.code || 'fallback'}`);
+            } else {
+              // Для рарностей без весов (если есть) — просто рандом
+              equipment = droppableItems[Math.floor(Math.random() * droppableItems.length)];
+            }
 
             // Roll stats for user equipment
             const rolledPAtk = equipment.pAtkMax > 0

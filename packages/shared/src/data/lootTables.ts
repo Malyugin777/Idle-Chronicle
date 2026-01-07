@@ -2,8 +2,11 @@
 // LOOT TABLES — Таблицы дропа сундуков
 // ═══════════════════════════════════════════════════════════
 
+import { Rarity } from './items';
+
 export type ChestType = 'wood' | 'bronze' | 'silver' | 'gold';
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
+// Re-export Rarity for backwards compatibility
+export { Rarity };
 
 // ═══════════════════════════════════════════════════════════
 // CHEST DROP CONFIG
