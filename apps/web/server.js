@@ -3121,10 +3121,9 @@ app.prepare().then(async () => {
               pDef: rolledPDef,
             };
           } else {
-            // No droppable items of this rarity exist - give bonus gold instead
-            const bonusGold = { COMMON: 500, UNCOMMON: 1000, RARE: 2500, EPIC: 5000 };
-            goldReward += bonusGold[droppedItemRarity] || 500;
-            console.log(`[Chest] No droppable ${droppedItemRarity} items exist, gave ${bonusGold[droppedItemRarity]} bonus gold instead`);
+            // ERROR: No droppable items of this rarity exist!
+            // Item drop SKIPPED - needs manual fix by adding items to DB
+            console.error(`[CHEST ERROR] ❌ NO DROPPABLE ${droppedItemRarity} ITEMS! User ${player.odamage} lost item from ${chestType} chest. FIX: Add ${droppedItemRarity} items to items.ts with droppable=true`);
           }
         }
 
