@@ -994,14 +994,14 @@ app.prepare().then(async () => {
         }
       }
 
-      // Ensure starter items are not droppable
-      await prisma.equipment.updateMany({
-        where: { code: { startsWith: 'starter-' } },
-        data: { droppable: false },
-      });
-
       console.log('[Migration] Generic equipment migration complete');
     }
+
+    // ALWAYS ensure starter items are droppable (until we add more sets)
+    await prisma.equipment.updateMany({
+      where: { code: { startsWith: 'starter-' } },
+      data: { droppable: true },
+    });
   } catch (err) {
     console.error('[Migration] Error:', err.message);
   }
