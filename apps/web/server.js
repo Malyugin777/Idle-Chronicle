@@ -1037,6 +1037,7 @@ app.prepare().then(async () => {
           if (body.currentHp !== undefined) bossState.currentHp = Math.max(0, body.currentHp);
           if (body.maxHp !== undefined) bossState.maxHp = Math.max(1, body.maxHp);
           if (body.defense !== undefined) bossState.defense = Math.max(0, body.defense);
+          if (body.thorns !== undefined) bossState.thornsDamage = Math.max(0, body.thorns);
           await saveBossState(prisma);
           sendJson({ success: true, boss: bossState });
           return;

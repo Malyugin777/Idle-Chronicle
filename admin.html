@@ -695,11 +695,11 @@
               <input type="number" id="bossMaxHp">
             </div>
             <div class="form-group">
-              <label>Defense</label>
+              <label>P.Def (Физ. Защита)</label>
               <input type="number" id="bossDefense">
             </div>
             <div class="form-group">
-              <label>Thorns Damage</label>
+              <label>Thorns (Обратка)</label>
               <input type="number" id="bossThorns" value="0">
             </div>
           </div>
@@ -1479,7 +1479,7 @@
                 HP: ${boss.currentHp.toLocaleString()} / ${boss.maxHp.toLocaleString()} (${hpPercent}%)
               </div>
               <div class="boss-stats">
-                Index: ${boss.bossIndex}/${boss.totalBosses} | Defense: ${boss.defense} | Thorns: ${boss.thorns || 0}
+                Index: ${boss.bossIndex}/${boss.totalBosses} | P.Def: ${boss.defense} | Thorns: ${boss.thornsDamage || 0}
               </div>
             </div>
           </div>
@@ -1496,7 +1496,7 @@
         document.getElementById('bossHp').value = boss.currentHp;
         document.getElementById('bossMaxHp').value = boss.maxHp;
         document.getElementById('bossDefense').value = boss.defense;
-        document.getElementById('bossThorns').value = boss.thorns || 0;
+        document.getElementById('bossThorns').value = boss.thornsDamage || 0;
         document.getElementById('bossGoldReward').value = boss.goldReward;
         document.getElementById('bossExpReward').value = boss.expReward;
         document.getElementById('bossTonReward').value = boss.tonReward;
