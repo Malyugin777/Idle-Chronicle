@@ -263,6 +263,18 @@ const ETHER = {
   cost: 10, // gold per 100
 };
 
+// Meditation config (Offline Ether Dust accumulation)
+const MEDITATION = {
+  dustPerMinute: 10,           // 10 пыли за минуту оффлайна
+  maxOfflineMinutes: 480,      // 8 часов = 480 минут
+  maxDust: 4800,               // Лимит накопления (480 * 10)
+  craftRecipe: {
+    dustCost: 5,               // 5 пыли
+    goldCost: 5,               // 5 золота
+    etherOutput: 1,            // = 1 эфир
+  },
+};
+
 // Buff config
 const BUFFS = {
   haste: { effect: 'speed', value: 0.3, duration: 30000, cost: 500 },
@@ -2386,10 +2398,23 @@ app.prepare().then(async () => {
         player.isFirstLogin = user.isFirstLogin;
         player.gold = Number(user.gold);
         player.autoEther = user.autoEther || false;
+        player.autoAttack = user.autoAttack || false;
         player.ether = user.ether;
+        player.etherDust = user.etherDust || 0;
         player.potionHaste = user.potionHaste;
         player.potionAcumen = user.potionAcumen;
         player.potionLuck = user.potionLuck;
+
+        // Calculate offline meditation dust
+        const now = Date.now();
+        const lastOnlineTime = user.lastOnline ? user.lastOnline.getTime() : now;
+        const offlineMinutes = Math.min(
+          MEDITATION.maxOfflineMinutes,
+          Math.floor((now - lastOnlineTime) / 60000)
+        );
+        const pendingDust = offlineMinutes > 0 ? offlineMinutes * MEDITATION.dustPerMinute : 0;
+        player.pendingDust = pendingDust;
+        player.offlineMinutes = offlineMinutes;
 
         // Load active buffs from DB
         const activeBuffs = await prisma.activeBuff.findMany({
@@ -2450,7 +2475,12 @@ app.prepare().then(async () => {
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
           autoEther: user.autoEther || false,
+          autoAttack: user.autoAttack || false,
           ether: user.ether,
+          etherDust: user.etherDust || 0,
+          // Meditation (offline dust)
+          pendingDust: player.pendingDust,
+          offlineMinutes: player.offlineMinutes,
           potionHaste: user.potionHaste,
           potionAcumen: user.potionAcumen,
           potionLuck: user.potionLuck,
@@ -3599,6 +3629,135 @@ app.prepare().then(async () => {
       }
 
       socket.emit('ether:toggle:ack', { enabled, ether: player.ether });
+    });
+
+    // AUTO-ATTACK TOGGLE (Smart Auto-Hunt)
+    socket.on('autoAttack:toggle', async (data) => {
+      if (!player.odamage) return;
+
+      const enabled = data.enabled;
+      player.autoAttack = enabled;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { autoAttack: enabled },
+        });
+      } catch (err) {
+        console.error('[AutoAttack] Toggle error:', err.message);
+      }
+
+      socket.emit('autoAttack:toggle:ack', { enabled });
+    });
+
+    // MEDITATION: Collect pending dust
+    socket.on('meditation:collect', async () => {
+      if (!player.odamage) return;
+
+      const dustToAdd = player.pendingDust || 0;
+      if (dustToAdd <= 0) {
+        socket.emit('meditation:collected', { etherDust: player.etherDust, collected: 0 });
+        return;
+      }
+
+      // Cap at max dust
+      const newDust = Math.min(MEDITATION.maxDust, (player.etherDust || 0) + dustToAdd);
+      player.etherDust = newDust;
+      player.pendingDust = 0;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { etherDust: newDust },
+        });
+      } catch (err) {
+        console.error('[Meditation] Collect error:', err.message);
+      }
+
+      socket.emit('meditation:collected', { etherDust: newDust, collected: dustToAdd });
+    });
+
+    // ETHER CRAFT: Convert dust + gold to ether
+    socket.on('ether:craft', async (data) => {
+      if (!player.odamage) return;
+
+      const amount = Math.max(1, Math.floor(data.amount || 1)); // How many ether to craft
+      const dustNeeded = amount * MEDITATION.craftRecipe.dustCost;
+      const goldNeeded = amount * MEDITATION.craftRecipe.goldCost;
+
+      if (player.etherDust < dustNeeded) {
+        socket.emit('ether:craft:error', { message: 'Not enough dust' });
+        return;
+      }
+      if (player.gold < goldNeeded) {
+        socket.emit('ether:craft:error', { message: 'Not enough gold' });
+        return;
+      }
+
+      player.etherDust -= dustNeeded;
+      player.gold -= goldNeeded;
+      player.ether += amount * MEDITATION.craftRecipe.etherOutput;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            etherDust: player.etherDust,
+            gold: BigInt(player.gold),
+            ether: player.ether,
+          },
+        });
+      } catch (err) {
+        console.error('[Ether] Craft error:', err.message);
+      }
+
+      socket.emit('ether:craft:success', {
+        ether: player.ether,
+        etherDust: player.etherDust,
+        gold: player.gold,
+        crafted: amount,
+      });
+    });
+
+    // CRAFT ALL: Convert all possible dust to ether
+    socket.on('ether:craftAll', async () => {
+      if (!player.odamage) return;
+
+      const maxByDust = Math.floor((player.etherDust || 0) / MEDITATION.craftRecipe.dustCost);
+      const maxByGold = Math.floor(player.gold / MEDITATION.craftRecipe.goldCost);
+      const amount = Math.min(maxByDust, maxByGold);
+
+      if (amount <= 0) {
+        socket.emit('ether:craft:error', { message: 'Cannot craft any ether' });
+        return;
+      }
+
+      const dustNeeded = amount * MEDITATION.craftRecipe.dustCost;
+      const goldNeeded = amount * MEDITATION.craftRecipe.goldCost;
+
+      player.etherDust -= dustNeeded;
+      player.gold -= goldNeeded;
+      player.ether += amount * MEDITATION.craftRecipe.etherOutput;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            etherDust: player.etherDust,
+            gold: BigInt(player.gold),
+            ether: player.ether,
+          },
+        });
+      } catch (err) {
+        console.error('[Ether] CraftAll error:', err.message);
+      }
+
+      socket.emit('ether:craft:success', {
+        ether: player.ether,
+        etherDust: player.etherDust,
+        gold: player.gold,
+        crafted: amount,
+      });
     });
 
     // TASKS CLAIM - обработка наград за задачи

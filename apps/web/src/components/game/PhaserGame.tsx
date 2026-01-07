@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.58';
+const APP_VERSION = 'v1.0.59';
 
 interface BossState {
   name: string;
@@ -47,10 +47,16 @@ interface PlayerState {
   exhaustedUntil: number | null;
   gold: number;
   ether: number;
+  etherDust: number;
   // HUD fields
   level: number;
   crystals: number;
   photoUrl: string | null;
+}
+
+interface MeditationData {
+  pendingDust: number;
+  offlineMinutes: number;
 }
 
 interface Skill {
@@ -194,6 +200,7 @@ export default function PhaserGame() {
     exhaustedUntil: null,
     gold: 0,
     ether: 0,
+    etherDust: 0,
     level: 1,
     crystals: 0,
     photoUrl: null,
@@ -206,6 +213,13 @@ export default function PhaserGame() {
     }
     return false;
   });
+
+  // Auto-attack toggle (Smart Auto-Hunt)
+  const [autoAttack, setAutoAttack] = useState<boolean>(false);
+
+  // Meditation modal
+  const [meditationData, setMeditationData] = useState<MeditationData | null>(null);
+  const [showMeditation, setShowMeditation] = useState(false);
 
   // Skills
   const [skills, setSkills] = useState<Skill[]>(() => {
@@ -262,6 +276,26 @@ export default function PhaserGame() {
       getSocket().emit('ether:toggle', { enabled: newValue });
       return newValue;
     });
+  }, []);
+
+  // Toggle auto-attack (Smart Auto-Hunt)
+  const toggleAutoAttack = useCallback(() => {
+    setAutoAttack(prev => {
+      const newValue = !prev;
+      getSocket().emit('autoAttack:toggle', { enabled: newValue });
+      return newValue;
+    });
+  }, []);
+
+  // Collect meditation dust
+  const collectMeditationDust = useCallback(() => {
+    getSocket().emit('meditation:collect');
+  }, []);
+
+  // Craft all ether
+  const craftAllEther = useCallback(() => {
+    getSocket().emit('ether:craftAll');
+    setShowMeditation(false);
   }, []);
 
   // Use skill
@@ -498,14 +532,25 @@ export default function PhaserGame() {
         exhaustedUntil: data.exhaustedUntil ?? null,
         gold: data.gold ?? 0,
         ether: data.ether ?? 0,
+        etherDust: data.etherDust ?? 0,
         level: data.level ?? 1,
         crystals: data.ancientCoin ?? 0,
         photoUrl: data.photoUrl ?? null,
       });
+      // Set auto-attack state from server
+      setAutoAttack(data.autoAttack || false);
       // Set active buffs from auth data
       if (data.activeBuffs && Array.isArray(data.activeBuffs)) {
         const now = Date.now();
         setActiveBuffs(data.activeBuffs.filter((b: ActiveBuff) => b.expiresAt > now));
+      }
+      // Show meditation modal if pending dust > 0
+      if (data.pendingDust > 0) {
+        setMeditationData({
+          pendingDust: data.pendingDust,
+          offlineMinutes: data.offlineMinutes,
+        });
+        setShowMeditation(true);
       }
     });
 
@@ -522,6 +567,26 @@ export default function PhaserGame() {
           expiresAt: data.expiresAt,
         }];
       });
+    });
+
+    // Meditation dust collected
+    socket.on('meditation:collected', (data: { etherDust: number; collected: number }) => {
+      setPlayerState(p => ({ ...p, etherDust: data.etherDust }));
+    });
+
+    // Ether crafted
+    socket.on('ether:craft:success', (data: { ether: number; etherDust: number; gold: number }) => {
+      setPlayerState(p => ({
+        ...p,
+        ether: data.ether,
+        etherDust: data.etherDust,
+        gold: data.gold,
+      }));
+    });
+
+    // Auto-attack toggle ack
+    socket.on('autoAttack:toggle:ack', (data: { enabled: boolean }) => {
+      setAutoAttack(data.enabled);
     });
 
     // Exhaustion
@@ -867,34 +932,29 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* BOTTOM UI - Action Bar (Skills only) */}
+      {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
-        {/* Skill Buttons + Ether Slot */}
-        <div className="flex justify-center items-center gap-3">
-          {/* Ether Slot (x2 damage) */}
+        {/* AUTO + Skill Buttons + Ether Slot */}
+        <div className="flex justify-center items-center gap-2">
+          {/* AUTO Button (Smart Auto-Hunt) */}
           <button
-            onClick={toggleAutoEther}
+            onClick={toggleAutoAttack}
             className={`
-              relative w-14 h-14 rounded-lg border-2
-              ${autoUseEther && playerState.ether > 0 ? 'border-cyan-500 bg-cyan-900/30' : 'border-gray-600 bg-gray-900/90'}
+              relative w-12 h-14 rounded-lg border-2
+              ${autoAttack ? 'border-green-500 bg-green-900/40' : 'border-gray-600 bg-gray-900/90'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
-            <span className="text-2xl">✨</span>
-            <span className="absolute -top-1 -right-1 bg-black/80 text-[10px] px-1 rounded text-gray-300">
-              {playerState.ether > 999 ? '999+' : playerState.ether}
+            <span className="text-lg">{autoAttack ? '⏸️' : '▶️'}</span>
+            <span className={`text-[9px] font-bold ${autoAttack ? 'text-green-400' : 'text-gray-400'}`}>
+              AUTO
             </span>
-            {autoUseEther && playerState.ether > 0 && (
-              <span className="absolute bottom-0.5 text-[8px] text-cyan-400 font-bold">AUTO</span>
-            )}
-            {playerState.ether === 0 && (
-              <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
-                <span className="text-xs text-red-400">0</span>
-              </div>
-            )}
           </button>
+
+          {/* Separator */}
+          <div className="w-px h-10 bg-gray-700" />
 
           {skills.map(skill => {
             const now = Date.now();
@@ -932,6 +992,33 @@ export default function PhaserGame() {
               </button>
             );
           })}
+
+          {/* Separator */}
+          <div className="w-px h-10 bg-gray-700" />
+
+          {/* Ether Slot (x2 damage) */}
+          <button
+            onClick={toggleAutoEther}
+            className={`
+              relative w-14 h-14 rounded-lg border-2
+              ${autoUseEther && playerState.ether > 0 ? 'border-cyan-500 bg-cyan-900/30' : 'border-gray-600 bg-gray-900/90'}
+              flex flex-col items-center justify-center
+              transition-all active:scale-95
+            `}
+          >
+            <span className="text-2xl">✨</span>
+            <span className="absolute -top-1 -right-1 bg-black/80 text-[10px] px-1 rounded text-gray-300">
+              {playerState.ether > 999 ? '999+' : playerState.ether}
+            </span>
+            {autoUseEther && playerState.ether > 0 && (
+              <span className="absolute bottom-0.5 text-[8px] text-cyan-400 font-bold">AUTO</span>
+            )}
+            {playerState.ether === 0 && (
+              <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                <span className="text-xs text-red-400">0</span>
+              </div>
+            )}
+          </button>
         </div>
 
         {/* Session Damage + Activity Status */}
@@ -1263,6 +1350,100 @@ export default function PhaserGame() {
             <button onClick={() => setShowDropTable(false)} className="mt-4 w-full py-2 bg-purple-500/20 text-purple-300 rounded-lg">
               {lang === 'ru' ? 'Закрыть' : 'Close'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* MEDITATION MODAL (Ether Dust from offline) */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showMeditation && meditationData && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-gradient-to-b from-l2-panel to-black rounded-xl p-5 max-w-sm w-full border border-cyan-500/30">
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">🧘</div>
+              <h2 className="text-xl font-bold text-cyan-400">
+                {lang === 'ru' ? 'Медитация завершена' : 'Meditation Complete'}
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">
+                {lang === 'ru'
+                  ? `Вы медитировали ${Math.floor(meditationData.offlineMinutes / 60)}ч ${meditationData.offlineMinutes % 60}мин`
+                  : `You meditated for ${Math.floor(meditationData.offlineMinutes / 60)}h ${meditationData.offlineMinutes % 60}m`}
+              </p>
+            </div>
+
+            {/* Dust collected */}
+            <div className="bg-black/40 rounded-lg p-4 mb-4 border border-cyan-500/20">
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-3xl">🌫️</span>
+                <div>
+                  <div className="text-2xl font-bold text-cyan-300">+{meditationData.pendingDust}</div>
+                  <div className="text-xs text-gray-500">
+                    {lang === 'ru' ? 'Эфирная Пыль' : 'Ether Dust'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Crafting info */}
+            <div className="bg-black/30 rounded-lg p-3 mb-4 text-center">
+              <div className="text-sm text-gray-300 mb-2">
+                {lang === 'ru' ? 'Крафт Эфира:' : 'Craft Ether:'}
+              </div>
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <span className="text-cyan-300">5 🌫️</span>
+                <span className="text-gray-500">+</span>
+                <span className="text-l2-gold">5 🪙</span>
+                <span className="text-gray-500">=</span>
+                <span className="text-cyan-400 font-bold">1 ✨</span>
+              </div>
+              {meditationData.pendingDust >= 5 && (
+                <div className="text-xs text-gray-500 mt-2">
+                  {lang === 'ru'
+                    ? `≈ ${Math.floor(meditationData.pendingDust / 5)} Эфира (${Math.floor(meditationData.pendingDust / 5) * 5} золота)`
+                    : `≈ ${Math.floor(meditationData.pendingDust / 5)} Ether (${Math.floor(meditationData.pendingDust / 5) * 5} gold)`}
+                </div>
+              )}
+            </div>
+
+            {/* Current stats */}
+            <div className="flex justify-center gap-6 mb-4 text-sm">
+              <div className="text-center">
+                <div className="text-cyan-300">{playerState.etherDust + meditationData.pendingDust}</div>
+                <div className="text-[10px] text-gray-500">🌫️ {lang === 'ru' ? 'Пыль' : 'Dust'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-l2-gold">{playerState.gold}</div>
+                <div className="text-[10px] text-gray-500">🪙 {lang === 'ru' ? 'Золото' : 'Gold'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-cyan-400">{playerState.ether}</div>
+                <div className="text-[10px] text-gray-500">✨ {lang === 'ru' ? 'Эфир' : 'Ether'}</div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  collectMeditationDust();
+                  setShowMeditation(false);
+                  setMeditationData(null);
+                }}
+                className="flex-1 py-3 bg-gray-700 text-white font-bold rounded-lg active:scale-95 transition-transform"
+              >
+                {lang === 'ru' ? 'Собрать' : 'Collect'}
+              </button>
+              <button
+                onClick={() => {
+                  craftAllEther();
+                  setMeditationData(null);
+                }}
+                className="flex-1 py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-bold rounded-lg active:scale-95 transition-transform"
+              >
+                {lang === 'ru' ? '✨ Крафт всё' : '✨ Craft All'}
+              </button>
+            </div>
           </div>
         </div>
       )}

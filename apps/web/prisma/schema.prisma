@@ -89,10 +89,13 @@ model User {
   // Enchant scrolls
   enchantScrolls  Int      @default(0)    // Свитки заточки
 
-  // Consumables
+  // Ether System (Эфирный цикл)
   ether           Int      @default(100)
+  etherDust       Int      @default(0)     // Накапливается оффлайн (10/мин, лимит 4800)
   autoEther       Boolean  @default(false)
+  autoAttack      Boolean  @default(false) // AUTO toggle
 
+  // Potions/Scrolls
   potionHaste     Int      @default(0)
   potionAcumen    Int      @default(0)
   potionLuck      Int      @default(0)
