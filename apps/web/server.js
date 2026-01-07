@@ -248,9 +248,9 @@ const RAGE_PHASES = [
   { hpPercent: 25, multiplier: 2.0 },
 ];
 
-// Soulshot config
+// Soulshot config (NG = x2 per TZ)
 const SOULSHOTS = {
-  NG: { multiplier: 1.5, cost: 10 },
+  NG: { multiplier: 2.0, cost: 10 },
   D: { multiplier: 2.2, cost: 50 },
   C: { multiplier: 3.5, cost: 250 },
   B: { multiplier: 5.0, cost: 1000 },
@@ -2150,6 +2150,7 @@ app.prepare().then(async () => {
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
+        tapCount,
         // L2 Stamina
         stamina: player.stamina,
         maxStamina: player.maxStamina,
@@ -2159,6 +2160,7 @@ app.prepare().then(async () => {
         sessionDamage: player.sessionDamage,
         soulshotUsed,
         activeSoulshot: player.activeSoulshot,
+        soulshotNG: player.soulshotNG, // Always send NG count for battle UI
         [`soulshot${player.activeSoulshot}`]: player.activeSoulshot ? player[`soulshot${player.activeSoulshot}`] : undefined,
       });
 
@@ -3227,6 +3229,146 @@ app.prepare().then(async () => {
       socket.emit('shop:success', { activeSoulshot: grade });
     });
 
+    // SOULSHOT AUTO-USE (from battle screen slot)
+    socket.on('soulshot:autoUse', async (data) => {
+      if (!player.odamage) return;
+
+      const enabled = data.enabled;
+      // When auto-use enabled, set activeSoulshot to 'NG'
+      // When disabled, set to null
+      const grade = enabled ? 'NG' : null;
+      player.activeSoulshot = grade;
+
+      try {
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: { activeSoulshot: grade },
+        });
+      } catch (err) {
+        console.error('[Soulshot] AutoUse toggle error:', err.message);
+      }
+
+      socket.emit('soulshot:autoUse:ack', { enabled, activeSoulshot: grade });
+    });
+
+    // TASKS CLAIM - обработка наград за задачи
+    socket.on('tasks:claim', async (data) => {
+      if (!player.odamage) return;
+
+      const { taskId, rewards } = data;
+      if (!taskId || !rewards || !Array.isArray(rewards)) {
+        socket.emit('tasks:error', { message: 'Invalid data' });
+        return;
+      }
+
+      console.log(`[Tasks] User ${player.username} claiming task ${taskId}:`, rewards);
+
+      try {
+        // Build update object based on rewards
+        const updateData = {};
+        const chestsToCreate = [];
+
+        for (const reward of rewards) {
+          switch (reward.type) {
+            case 'ngPack':
+              updateData.soulshotNG = { increment: reward.amount };
+              break;
+            case 'dCharge':
+              updateData.soulshotD = { increment: reward.amount };
+              break;
+            case 'crystals':
+              updateData.ancientCoin = { increment: reward.amount };
+              break;
+            case 'scrollHaste':
+              updateData.potionHaste = { increment: reward.amount };
+              break;
+            case 'scrollAcumen':
+              updateData.potionAcumen = { increment: reward.amount };
+              break;
+            case 'scrollLuck':
+              updateData.potionLuck = { increment: reward.amount };
+              break;
+            case 'woodChest':
+              // Add wooden chests
+              for (let i = 0; i < reward.amount; i++) {
+                chestsToCreate.push({
+                  userId: player.odamage,
+                  chestType: 'WOODEN',
+                  openingDuration: 5 * 60 * 1000, // 5 min
+                });
+              }
+              break;
+            // chestBooster handled client-side (localStorage buff)
+          }
+        }
+
+        // Check chest slot availability before creating
+        if (chestsToCreate.length > 0) {
+          const user = await prisma.user.findUnique({
+            where: { id: player.odamage },
+            select: { chestSlots: true },
+          });
+          const currentChests = await prisma.chest.count({
+            where: { userId: player.odamage },
+          });
+          const availableSlots = (user?.chestSlots || 5) - currentChests;
+
+          if (availableSlots < chestsToCreate.length) {
+            socket.emit('tasks:error', { message: 'Not enough chest slots' });
+            return;
+          }
+        }
+
+        // Apply rewards
+        if (Object.keys(updateData).length > 0) {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: updateData,
+          });
+        }
+
+        // Create chests
+        if (chestsToCreate.length > 0) {
+          await prisma.chest.createMany({ data: chestsToCreate });
+        }
+
+        // Update local player state
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: player.odamage },
+        });
+        if (updatedUser) {
+          player.soulshotNG = updatedUser.soulshotNG;
+          player.soulshotD = updatedUser.soulshotD;
+          player.ancientCoin = updatedUser.ancientCoin;
+          player.potionHaste = updatedUser.potionHaste;
+          player.potionAcumen = updatedUser.potionAcumen;
+          player.potionLuck = updatedUser.potionLuck;
+        }
+
+        console.log(`[Tasks] Rewards applied for ${player.username}`);
+        socket.emit('tasks:claimed', { taskId });
+
+        // Refresh chest data if chests were created
+        if (chestsToCreate.length > 0) {
+          const chests = await prisma.chest.findMany({
+            where: { userId: player.odamage },
+            orderBy: { createdAt: 'asc' },
+          });
+          socket.emit('chest:data', {
+            chests: chests.map(c => ({
+              id: c.id,
+              chestType: c.chestType,
+              openingStarted: c.openingStarted?.getTime() || null,
+              openingDuration: c.openingDuration,
+            })),
+          });
+        }
+      } catch (err) {
+        console.error('[Tasks] Claim error:', err.message);
+        socket.emit('tasks:error', { message: 'Failed to claim rewards' });
+      }
+    });
+
     // USER EQUIPMENT (armor, weapons from UserEquipment table)
     socket.on('equipment:get', async () => {
       if (!player.odamage) {
@@ -3635,6 +3777,7 @@ app.prepare().then(async () => {
               crits,
               sessionDamage: player.sessionDamage,
               showHitEffect: true, // Trigger hit animation on client
+              soulshotNG: player.soulshotNG, // For battle UI
             });
           }
 

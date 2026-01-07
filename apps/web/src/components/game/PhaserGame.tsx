@@ -6,6 +6,8 @@ import { gameConfig } from '@/game/config';
 import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+import TasksModal from './TasksModal';
+import { getTaskManager } from '@/lib/taskManager';
 
 // ═══════════════════════════════════════════════════════════
 // PHASER GAME + REACT UI
@@ -16,7 +18,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.40';
+const APP_VERSION = 'v1.0.41';
 
 interface BossState {
   name: string;
@@ -43,6 +45,7 @@ interface PlayerState {
   maxMana: number;
   exhaustedUntil: number | null;
   gold: number;
+  soulshotNG: number;
 }
 
 interface Skill {
@@ -122,6 +125,15 @@ export default function PhaserGame() {
     maxMana: 1,
     exhaustedUntil: null,
     gold: 0,
+    soulshotNG: 0,
+  });
+
+  // Soulshot auto-use toggle (persisted in localStorage)
+  const [autoUseSoulshot, setAutoUseSoulshot] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ic_auto_soulshot') === 'true';
+    }
+    return false;
   });
 
   // Skills
@@ -160,11 +172,23 @@ export default function PhaserGame() {
   const [claimingReward, setClaimingReward] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
+  const [showTasks, setShowTasks] = useState(false);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
     return playerState.exhaustedUntil !== null && Date.now() < playerState.exhaustedUntil;
   }, [playerState.exhaustedUntil]);
+
+  // Toggle auto-use soulshot
+  const toggleAutoSoulshot = useCallback(() => {
+    setAutoUseSoulshot(prev => {
+      const newValue = !prev;
+      localStorage.setItem('ic_auto_soulshot', String(newValue));
+      // Notify server about toggle state
+      getSocket().emit('soulshot:autoUse', { enabled: newValue });
+      return newValue;
+    });
+  }, []);
 
   // Use skill
   const useSkill = useCallback((skill: Skill) => {
@@ -322,7 +346,14 @@ export default function PhaserGame() {
         stamina: data.stamina ?? p.stamina,
         maxStamina: data.maxStamina ?? p.maxStamina,
         gold: data.gold ?? p.gold,
+        soulshotNG: data.soulshotNG ?? p.soulshotNG,
       }));
+      // Track for tasks
+      if (data.damage > 0) {
+        const tm = getTaskManager();
+        tm.recordTap(data.tapCount || 1);
+        tm.recordDamage(data.damage);
+      }
     });
 
     // Auto-attack result
@@ -331,7 +362,12 @@ export default function PhaserGame() {
       setPlayerState(p => ({
         ...p,
         gold: data.gold ?? p.gold,
+        soulshotNG: data.soulshotNG ?? p.soulshotNG,
       }));
+      // Track damage for tasks
+      if (data.damage > 0) {
+        getTaskManager().recordDamage(data.damage);
+      }
     });
 
     // Player state (stamina/mana regen from server)
@@ -354,6 +390,11 @@ export default function PhaserGame() {
         maxMana: data.maxMana ?? p.maxMana,
         gold: data.gold ?? p.gold,
       }));
+      // Track for tasks
+      getTaskManager().recordSkillCast();
+      if (data.damage > 0) {
+        getTaskManager().recordDamage(data.damage);
+      }
     });
 
     // Auth success - server sends data directly (not nested in user object)
@@ -372,6 +413,7 @@ export default function PhaserGame() {
         maxMana: data.maxMana ?? 1000,
         exhaustedUntil: data.exhaustedUntil ?? null,
         gold: data.gold ?? 0,
+        soulshotNG: data.soulshotNG ?? 0,
       });
     });
 
@@ -479,6 +521,7 @@ export default function PhaserGame() {
           maxStamina: data.maxStamina ?? p.maxStamina,
           mana: data.mana ?? p.mana,
           maxMana: data.maxMana ?? p.maxMana,
+          soulshotNG: data.soulshotNG ?? p.soulshotNG,
         }));
       }
     });
@@ -571,12 +614,20 @@ export default function PhaserGame() {
             style={{ width: `${hpPercent}%` }}
           />
         </div>
-        <button
-          onClick={() => setShowDropTable(true)}
-          className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
-        >
-          🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
-        </button>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => setShowDropTable(true)}
+            className="px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
+          >
+            🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
+          </button>
+          <button
+            onClick={() => setShowTasks(true)}
+            className="px-3 py-1 bg-green-500/30 text-green-300 text-xs rounded-lg border border-green-500/40"
+          >
+            🎯 {lang === 'ru' ? 'Задачи' : 'Tasks'}
+          </button>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -636,8 +687,32 @@ export default function PhaserGame() {
           </div>
         </div>
 
-        {/* Skill Buttons */}
-        <div className="flex justify-center gap-3">
+        {/* Skill Buttons + Soulshot Slot */}
+        <div className="flex justify-center items-center gap-3">
+          {/* Soulshot Slot */}
+          <button
+            onClick={toggleAutoSoulshot}
+            className={`
+              relative w-14 h-14 rounded-lg border-2
+              ${autoUseSoulshot && playerState.soulshotNG > 0 ? 'border-orange-500 bg-orange-900/30' : 'border-gray-600 bg-gray-900/90'}
+              flex flex-col items-center justify-center
+              transition-all active:scale-95
+            `}
+          >
+            <span className="text-2xl">💥</span>
+            <span className="absolute -top-1 -right-1 bg-black/80 text-[10px] px-1 rounded text-gray-300">
+              {playerState.soulshotNG > 999 ? '999+' : playerState.soulshotNG}
+            </span>
+            {autoUseSoulshot && playerState.soulshotNG > 0 && (
+              <span className="absolute bottom-0.5 text-[8px] text-orange-400 font-bold">AUTO</span>
+            )}
+            {playerState.soulshotNG === 0 && (
+              <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                <span className="text-xs text-red-400">0</span>
+              </div>
+            )}
+          </button>
+
           {skills.map(skill => {
             const now = Date.now();
             const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
@@ -1007,6 +1082,11 @@ export default function PhaserGame() {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* TASKS MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { getSocket } from '@/lib/socket';
 import { Package, Gem, Coins, Lock, X, ScrollText } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import ChestOpenModal from '../modals/ChestOpenModal';
+import { getTaskManager } from '@/lib/taskManager';
 
 type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
 
@@ -93,6 +94,12 @@ export default function TreasuryTab() {
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
 
+  // Chest booster from tasks
+  const tm = getTaskManager();
+  const boosterMultiplier = tm.getChestBoosterMultiplier();
+  const boosterTimeLeft = tm.getChestBoosterTimeLeft();
+  const hasBooster = boosterMultiplier > 1;
+
   // Update timer every second
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -132,6 +139,8 @@ export default function TreasuryTab() {
       setClaimedReward(data);
       setIsOpeningAnimation(true);
       setSelectedChest(null);
+      // Track for tasks
+      getTaskManager().recordChestOpened();
       // Refresh stats
       socket.emit('loot:stats:get');
     });
@@ -357,6 +366,26 @@ export default function TreasuryTab() {
             </div>
           </div>
         </div>
+
+        {/* Booster Status */}
+        {hasBooster && (
+          <div className="mt-2 bg-green-500/20 border border-green-500/30 rounded-lg p-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚡</span>
+              <div>
+                <div className="text-green-400 text-xs font-bold">
+                  {lang === 'ru' ? 'Ускоритель x1.5' : 'Booster x1.5'}
+                </div>
+                <div className="text-green-300/70 text-[10px]">
+                  {lang === 'ru' ? 'Сундуки открываются быстрее' : 'Chests open faster'}
+                </div>
+              </div>
+            </div>
+            <div className="text-green-400 text-xs font-mono">
+              {Math.floor(boosterTimeLeft / 60000)}:{String(Math.floor((boosterTimeLeft % 60000) / 1000)).padStart(2, '0')}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* TZ Этап 2: Pending Rewards Block */}
@@ -484,10 +513,12 @@ export default function TreasuryTab() {
             // Slot with chest
             const config = CHEST_CONFIG[chest.chestType];
             const isOpening = chest.openingStarted !== null;
-            const elapsed = isOpening ? now - chest.openingStarted! : 0;
-            const remaining = chest.openingDuration - elapsed;
+            // Apply booster multiplier to elapsed time (visual effect)
+            const rawElapsed = isOpening ? now - chest.openingStarted! : 0;
+            const boostedElapsed = rawElapsed * boosterMultiplier;
+            const remaining = Math.max(0, chest.openingDuration - boostedElapsed);
             const isReady = isOpening && remaining <= 0;
-            const progress = isOpening ? Math.min(100, (elapsed / chest.openingDuration) * 100) : 0;
+            const progress = isOpening ? Math.min(100, (boostedElapsed / chest.openingDuration) * 100) : 0;
 
             return (
               <button
@@ -547,16 +578,28 @@ export default function TreasuryTab() {
               </div>
               {(() => {
                 const isOpening = selectedChest.openingStarted !== null;
-                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
-                const remaining = selectedChest.openingDuration - elapsed;
+                const rawElapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const boostedElapsed = rawElapsed * boosterMultiplier;
+                const remaining = Math.max(0, selectedChest.openingDuration - boostedElapsed);
                 const isReady = isOpening && remaining <= 0;
 
                 if (isReady) {
-                  return <div className="text-l2-gold text-sm mt-1">Готов к открытию!</div>;
+                  return <div className="text-l2-gold text-sm mt-1">{lang === 'ru' ? 'Готов к открытию!' : 'Ready to open!'}</div>;
                 } else if (isOpening) {
-                  return <div className="text-gray-400 text-sm mt-1">Осталось: {formatTime(remaining)}</div>;
+                  return (
+                    <div className="text-gray-400 text-sm mt-1">
+                      {lang === 'ru' ? 'Осталось: ' : 'Remaining: '}{formatTime(remaining)}
+                      {hasBooster && <span className="text-green-400 ml-1">⚡</span>}
+                    </div>
+                  );
                 } else {
-                  return <div className="text-gray-500 text-sm mt-1">Время открытия: {formatTime(selectedChest.openingDuration)}</div>;
+                  const displayDuration = Math.floor(selectedChest.openingDuration / boosterMultiplier);
+                  return (
+                    <div className="text-gray-500 text-sm mt-1">
+                      {lang === 'ru' ? 'Время открытия: ' : 'Opening time: '}{formatTime(displayDuration)}
+                      {hasBooster && <span className="text-green-400 ml-1">⚡x1.5</span>}
+                    </div>
+                  );
                 }
               })()}
             </div>
@@ -603,10 +646,12 @@ export default function TreasuryTab() {
             <div className="space-y-2">
               {(() => {
                 const isOpening = selectedChest.openingStarted !== null;
-                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
-                const remaining = selectedChest.openingDuration - elapsed;
+                const rawElapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const boostedElapsed = rawElapsed * boosterMultiplier;
+                const remaining = Math.max(0, selectedChest.openingDuration - boostedElapsed);
                 const isReady = isOpening && remaining <= 0;
                 const canOpen = !openingChest || openingChest.id === selectedChest.id;
+                const progressPercent = Math.min(100, (boostedElapsed / selectedChest.openingDuration) * 100);
 
                 if (isReady) {
                   return (
@@ -617,18 +662,21 @@ export default function TreasuryTab() {
                       }}
                       className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg text-sm"
                     >
-                      ✨ Забрать награду
+                      ✨ {lang === 'ru' ? 'Забрать награду' : 'Claim Reward'}
                     </button>
                   );
                 } else if (isOpening) {
                   return (
                     <>
                       <div className="py-3 bg-black/30 rounded-lg text-center">
-                        <div className="text-sm text-gray-400">Открывается...</div>
+                        <div className="text-sm text-gray-400">
+                          {lang === 'ru' ? 'Открывается...' : 'Opening...'}
+                          {hasBooster && <span className="text-green-400 ml-1">⚡x1.5</span>}
+                        </div>
                         <div className="w-full h-2 bg-black/50 rounded-full mt-2 overflow-hidden">
                           <div
-                            className="h-full bg-l2-gold rounded-full transition-all"
-                            style={{ width: `${Math.min(100, (elapsed / selectedChest.openingDuration) * 100)}%` }}
+                            className={`h-full rounded-full transition-all ${hasBooster ? 'bg-green-500' : 'bg-l2-gold'}`}
+                            style={{ width: `${progressPercent}%` }}
                           />
                         </div>
                       </div>
@@ -643,7 +691,7 @@ export default function TreasuryTab() {
                         }`}
                       >
                         <span>⚡</span>
-                        <span>Ускорить 30 мин</span>
+                        <span>{lang === 'ru' ? 'Ускорить 30 мин' : 'Boost 30 min'}</span>
                         <span className="flex items-center gap-1">
                           <Gem size={14} className="text-cyan-400" />
                           {BOOST_COST}
