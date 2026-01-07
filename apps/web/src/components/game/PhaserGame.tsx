@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.70';
+const APP_VERSION = 'v1.0.71';
 
 interface BossState {
   name: string;
@@ -408,6 +408,8 @@ export default function PhaserGame() {
             if (scene) {
               sceneRef.current = scene;
               scene.scene.restart({ socket });
+              // Ensure boss is visible after scene restart (fixes visibility bug)
+              setTimeout(() => scene.setBossVisible(true), 200);
             }
           },
         },
@@ -645,6 +647,8 @@ export default function PhaserGame() {
 
     // Boss killed
     socket.on('boss:killed', (data: any) => {
+      // Hide boss sprite when dead
+      sceneRef.current?.setBossVisible(false);
       setVictoryData({
         bossName: data.bossName,
         bossIcon: data.bossIcon || '👹',
@@ -663,6 +667,8 @@ export default function PhaserGame() {
     });
 
     socket.on('boss:respawn', (data: any) => {
+      // Show boss sprite when new boss spawns
+      sceneRef.current?.setBossVisible(true);
       setSessionDamage(0);
       setVictoryData(null);
       setRespawnCountdown(0);
@@ -835,11 +841,8 @@ export default function PhaserGame() {
     return unsubscribe;
   }, []);
 
-  // Hide boss sprite when dead
-  useEffect(() => {
-    const isDeadWithCountdown = bossState.hp <= 0 && respawnCountdown > 0;
-    sceneRef.current?.setBossVisible(!isDeadWithCountdown);
-  }, [bossState.hp, respawnCountdown]);
+  // Boss visibility is now controlled explicitly in boss:killed and boss:respawn handlers
+  // (removed useEffect that was causing timing issues)
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
   const staminaPercent = (playerState.stamina / playerState.maxStamina) * 100;
