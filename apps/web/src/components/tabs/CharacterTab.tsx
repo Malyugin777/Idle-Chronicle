@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
-import TasksModal from '../game/TasksModal';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -467,7 +466,6 @@ export default function CharacterTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
-  const [showTasks, setShowTasks] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
   const [selectedStat, setSelectedStat] = useState<string | null>(null); // Подсказка по стату
   const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null); // Описание consumable
@@ -813,12 +811,6 @@ export default function CharacterTab() {
         >
           ✨ {t.character.skills}
         </button>
-        <button
-          onClick={() => setShowTasks(true)}
-          className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-green-500/20 text-green-400 hover:text-green-300 hover:bg-green-500/30 transition-all"
-        >
-          🎯 {lang === 'ru' ? 'Задачи' : 'Tasks'}
-        </button>
       </div>
 
       {/* Inventory */}
@@ -1076,8 +1068,6 @@ export default function CharacterTab() {
         </div>
       )}
 
-      {/* Tasks Modal */}
-      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
     </div>
   );
 }
