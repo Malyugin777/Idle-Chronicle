@@ -6,7 +6,6 @@ import { gameConfig } from '@/game/config';
 import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
-import TasksModal from './TasksModal';
 import { getTaskManager } from '@/lib/taskManager';
 
 // ═══════════════════════════════════════════════════════════
@@ -18,7 +17,7 @@ import { getTaskManager } from '@/lib/taskManager';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.41';
+const APP_VERSION = 'v1.0.42';
 
 interface BossState {
   name: string;
@@ -172,7 +171,6 @@ export default function PhaserGame() {
   const [claimingReward, setClaimingReward] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [activityStatus, setActivityStatus] = useState<{ time: number; eligible: boolean }>({ time: 0, eligible: false });
-  const [showTasks, setShowTasks] = useState(false);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -614,20 +612,12 @@ export default function PhaserGame() {
             style={{ width: `${hpPercent}%` }}
           />
         </div>
-        <div className="flex gap-2 mt-2">
-          <button
-            onClick={() => setShowDropTable(true)}
-            className="px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
-          >
-            🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
-          </button>
-          <button
-            onClick={() => setShowTasks(true)}
-            className="px-3 py-1 bg-green-500/30 text-green-300 text-xs rounded-lg border border-green-500/40"
-          >
-            🎯 {lang === 'ru' ? 'Задачи' : 'Tasks'}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowDropTable(true)}
+          className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
+        >
+          🎁 {lang === 'ru' ? 'Дроп' : 'Drop'}
+        </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -1083,10 +1073,6 @@ export default function PhaserGame() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* TASKS MODAL */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
     </div>
   );
 }

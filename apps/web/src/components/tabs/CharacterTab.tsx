@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+import TasksModal from '../game/TasksModal';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -81,6 +82,13 @@ interface PlayerStats {
   critChance: number;
   attackSpeed: number;
   gold: number;
+  // Consumables
+  soulshotNG?: number;
+  soulshotD?: number;
+  soulshotC?: number;
+  potionHaste?: number;
+  potionAcumen?: number;
+  potionLuck?: number;
 }
 
 interface HeroState {
@@ -420,7 +428,16 @@ export default function CharacterTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
+  const [consumables, setConsumables] = useState<{
+    soulshotNG: number;
+    soulshotD: number;
+    soulshotC: number;
+    potionHaste: number;
+    potionAcumen: number;
+    potionLuck: number;
+  }>({ soulshotNG: 0, soulshotD: 0, soulshotC: 0, potionHaste: 0, potionAcumen: 0, potionLuck: 0 });
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
@@ -458,6 +475,17 @@ export default function CharacterTab() {
         newState.derivedStats = recalculateDerivedStats(newState);
         return newState;
       });
+
+      // Update consumables from player data
+      setConsumables({
+        soulshotNG: data.soulshotNG || 0,
+        soulshotD: data.soulshotD || 0,
+        soulshotC: data.soulshotC || 0,
+        potionHaste: data.potionHaste || 0,
+        potionAcumen: data.potionAcumen || 0,
+        potionLuck: data.potionLuck || 0,
+      });
+
       setIsLoading(false);
     };
 
@@ -707,7 +735,7 @@ export default function CharacterTab() {
         </div>
       </div>
 
-      {/* Stats & Skills Buttons */}
+      {/* Stats, Skills & Tasks Buttons */}
       <div className="px-2 mb-2 flex gap-2">
         <button
           onClick={() => setShowStatsPopup(true)}
@@ -721,7 +749,62 @@ export default function CharacterTab() {
         >
           ✨ {t.character.skills}
         </button>
+        <button
+          onClick={() => setShowTasks(true)}
+          className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-green-500/20 text-green-400 hover:text-green-300 hover:bg-green-500/30 transition-all"
+        >
+          🎯 {lang === 'ru' ? 'Задачи' : 'Tasks'}
+        </button>
       </div>
+
+      {/* Consumables (Soulshots & Potions) */}
+      {(consumables.soulshotNG > 0 || consumables.soulshotD > 0 || consumables.soulshotC > 0 ||
+        consumables.potionHaste > 0 || consumables.potionAcumen > 0 || consumables.potionLuck > 0) && (
+        <div className="px-2 mb-2">
+          <div className="text-xs text-gray-400 mb-1">{lang === 'ru' ? 'Расходники' : 'Consumables'}</div>
+          <div className="flex flex-wrap gap-2">
+            {consumables.soulshotNG > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">💚</span>
+                <span className="text-xs text-gray-300">NG</span>
+                <span className="text-xs text-green-400 font-bold">{consumables.soulshotNG}</span>
+              </div>
+            )}
+            {consumables.soulshotD > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">💙</span>
+                <span className="text-xs text-gray-300">D</span>
+                <span className="text-xs text-blue-400 font-bold">{consumables.soulshotD}</span>
+              </div>
+            )}
+            {consumables.soulshotC > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">💜</span>
+                <span className="text-xs text-gray-300">C</span>
+                <span className="text-xs text-purple-400 font-bold">{consumables.soulshotC}</span>
+              </div>
+            )}
+            {consumables.potionHaste > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">⚡</span>
+                <span className="text-xs text-yellow-400 font-bold">{consumables.potionHaste}</span>
+              </div>
+            )}
+            {consumables.potionAcumen > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">🔥</span>
+                <span className="text-xs text-orange-400 font-bold">{consumables.potionAcumen}</span>
+              </div>
+            )}
+            {consumables.potionLuck > 0 && (
+              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
+                <span className="text-sm">🍀</span>
+                <span className="text-xs text-green-400 font-bold">{consumables.potionLuck}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Inventory */}
       <div className="px-2 pb-2">
@@ -896,6 +979,9 @@ export default function CharacterTab() {
           </div>
         </div>
       )}
+
+      {/* Tasks Modal */}
+      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
     </div>
   );
 }

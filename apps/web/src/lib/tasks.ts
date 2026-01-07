@@ -41,12 +41,28 @@ export interface TaskDefinition {
 export const TRIAL_THRESHOLD = 10000; // 10k урона за сессию
 
 // ═══════════════════════════════════════════════════════════
-// SESSION TASKS (сбрасываются ежедневно)
+// SESSION TASKS (убраны - все задачи теперь daily)
 // ═══════════════════════════════════════════════════════════
-export const SESSION_TASKS: TaskDefinition[] = [
+export const SESSION_TASKS: TaskDefinition[] = [];
+
+// ═══════════════════════════════════════════════════════════
+// DAILY TASKS (сбрасываются в полночь)
+// ═══════════════════════════════════════════════════════════
+export const DAILY_TASKS: TaskDefinition[] = [
+  {
+    id: 'dailyLogin',
+    type: 'daily',
+    nameRu: 'Логин',
+    nameEn: 'Daily Login',
+    descRu: 'Зайди в игру',
+    descEn: 'Log into the game',
+    icon: '🎮',
+    condition: { type: 'login', target: 1 },
+    rewards: [{ type: 'crystals', amount: 5 }],
+  },
   {
     id: 'clicker',
-    type: 'session',
+    type: 'daily',
     nameRu: 'Кликер',
     nameEn: 'Clicker',
     descRu: 'Сделай 50 тапов',
@@ -57,7 +73,7 @@ export const SESSION_TASKS: TaskDefinition[] = [
   },
   {
     id: 'meatgrinder',
-    type: 'session',
+    type: 'daily',
     nameRu: 'Мясорубка',
     nameEn: 'Meatgrinder',
     descRu: 'Нанеси 10,000 урона',
@@ -67,19 +83,19 @@ export const SESSION_TASKS: TaskDefinition[] = [
     rewards: [{ type: 'woodChest', amount: 1 }],
   },
   {
-    id: 'trial',
-    type: 'session',
-    nameRu: 'Испытание силы',
-    nameEn: 'Trial of Strength',
-    descRu: 'Нанеси 10,000 урона за бой',
-    descEn: 'Deal 10,000 damage in one session',
-    icon: '🧪',
-    condition: { type: 'trial', target: TRIAL_THRESHOLD },
-    rewards: [{ type: 'woodChest', amount: 1 }],
+    id: 'dailyDamage',
+    type: 'daily',
+    nameRu: 'Дневной урон',
+    nameEn: 'Daily Damage',
+    descRu: 'Нанеси 100,000 урона за день',
+    descEn: 'Deal 100,000 damage today',
+    icon: '💥',
+    condition: { type: 'damage', target: 100000 },
+    rewards: [{ type: 'dCharge', amount: 100 }],
   },
   {
     id: 'chestHunter',
-    type: 'session',
+    type: 'daily',
     nameRu: 'Охотник за сундуками',
     nameEn: 'Chest Hunter',
     descRu: 'Открой 3 сундука',
@@ -94,7 +110,7 @@ export const SESSION_TASKS: TaskDefinition[] = [
   },
   {
     id: 'caster',
-    type: 'session',
+    type: 'daily',
     nameRu: 'Кастер',
     nameEn: 'Caster',
     descRu: 'Используй умения 30 раз',
@@ -105,7 +121,7 @@ export const SESSION_TASKS: TaskDefinition[] = [
   },
   {
     id: 'chestBoost',
-    type: 'session',
+    type: 'daily',
     nameRu: 'Ускоритель сундуков',
     nameEn: 'Chest Accelerator',
     descRu: 'Открой 1 сундук',
@@ -113,34 +129,6 @@ export const SESSION_TASKS: TaskDefinition[] = [
     icon: '⚡',
     condition: { type: 'chestsOpened', target: 1 },
     rewards: [{ type: 'chestBooster', amount: 1, duration: 30 * 60 * 1000 }], // 30 min
-  },
-];
-
-// ═══════════════════════════════════════════════════════════
-// DAILY TASKS (сбрасываются в полночь)
-// ═══════════════════════════════════════════════════════════
-export const DAILY_TASKS: TaskDefinition[] = [
-  {
-    id: 'dailyDamage',
-    type: 'daily',
-    nameRu: 'Дневной урон',
-    nameEn: 'Daily Damage',
-    descRu: 'Нанеси 100,000 урона за день',
-    descEn: 'Deal 100,000 damage today',
-    icon: '💥',
-    condition: { type: 'damage', target: 100000 },
-    rewards: [{ type: 'dCharge', amount: 100 }],
-  },
-  {
-    id: 'dailyLogin',
-    type: 'daily',
-    nameRu: 'Логин',
-    nameEn: 'Daily Login',
-    descRu: 'Зайди в игру',
-    descEn: 'Log into the game',
-    icon: '🎮',
-    condition: { type: 'login', target: 1 },
-    rewards: [{ type: 'crystals', amount: 5 }],
   },
 ];
 

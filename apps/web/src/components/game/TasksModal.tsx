@@ -161,9 +161,7 @@ interface TasksModalProps {
 
 export default function TasksModal({ isOpen, onClose }: TasksModalProps) {
   const [lang] = useState<Language>(() => detectLanguage());
-  const [activeTab, setActiveTab] = useState<'session' | 'daily'>('session');
-  const [sessionTasks, setSessionTasks] = useState<Array<TaskDefinition & { progress: number; completed: boolean; claimed: boolean }>>([]);
-  const [dailyTasks, setDailyTasks] = useState<Array<TaskDefinition & { progress: number; completed: boolean; claimed: boolean }>>([]);
+  const [tasks, setTasks] = useState<Array<TaskDefinition & { progress: number; completed: boolean; claimed: boolean }>>([]);
   const [claiming, setClaiming] = useState(false);
 
   // Subscribe to TaskManager updates
@@ -171,8 +169,7 @@ export default function TasksModal({ isOpen, onClose }: TasksModalProps) {
     const tm = getTaskManager();
 
     const updateTasks = () => {
-      setSessionTasks(tm.getSessionTasks());
-      setDailyTasks(tm.getDailyTasks());
+      setTasks(tm.getDailyTasks());
     };
 
     updateTasks();
@@ -198,8 +195,6 @@ export default function TasksModal({ isOpen, onClose }: TasksModalProps) {
 
   if (!isOpen) return null;
 
-  const tasks = activeTab === 'session' ? sessionTasks : dailyTasks;
-  const completedCount = tasks.filter(t => t.completed).length;
   const claimedCount = tasks.filter(t => t.claimed).length;
 
   return (
@@ -216,41 +211,11 @@ export default function TasksModal({ isOpen, onClose }: TasksModalProps) {
           <div className="flex items-center gap-2">
             <span className="text-xl">🎯</span>
             <span className="font-bold text-l2-gold">
-              {lang === 'ru' ? 'Задачи' : 'Tasks'}
+              {lang === 'ru' ? 'Ежедневные задачи' : 'Daily Tasks'}
             </span>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
             <X size={20} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-white/10">
-          <button
-            onClick={() => setActiveTab('session')}
-            className={`flex-1 py-2 text-sm font-bold transition-all ${
-              activeTab === 'session'
-                ? 'text-l2-gold border-b-2 border-l2-gold'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            {lang === 'ru' ? 'Сессия' : 'Session'}
-            <span className="ml-1 text-[10px] opacity-70">
-              ({sessionTasks.filter(t => t.completed && !t.claimed).length})
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('daily')}
-            className={`flex-1 py-2 text-sm font-bold transition-all ${
-              activeTab === 'daily'
-                ? 'text-l2-gold border-b-2 border-l2-gold'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            {lang === 'ru' ? 'Ежедневные' : 'Daily'}
-            <span className="ml-1 text-[10px] opacity-70">
-              ({dailyTasks.filter(t => t.completed && !t.claimed).length})
-            </span>
           </button>
         </div>
 
