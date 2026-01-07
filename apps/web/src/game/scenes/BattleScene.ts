@@ -58,8 +58,8 @@ export class BattleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
-    // Transparent background (React handles the gradient)
-    this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+    // DEBUG: Semi-transparent dark background to verify canvas renders
+    this.cameras.main.setBackgroundColor('rgba(50,50,80,0.5)');
 
     // DEBUG: Create a visible green circle to verify scene renders
     const debugCircle = this.add.graphics();

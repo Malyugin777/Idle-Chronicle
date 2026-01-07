@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.74';
+const APP_VERSION = 'v1.0.75';
 
 interface BossState {
   name: string;
@@ -1126,7 +1126,12 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* PHASER CANVAS - Boss only */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div ref={containerRef} id="game-container" className="flex-1 w-full" />
+      <div
+        ref={containerRef}
+        id="game-container"
+        className="absolute inset-0 z-0"
+        style={{ minHeight: '300px' }}
+      />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DAMAGE FEED - Right side, premium combat log */}
