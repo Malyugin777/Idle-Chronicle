@@ -4256,8 +4256,8 @@ app.prepare().then(async () => {
   }, 1000);
 
   // Auto-attack every second (for players with AUTO enabled)
-  const AUTO_ATTACKS_PER_SECOND = 3; // 3 hits per second when AUTO is ON
-  const AUTO_STAMINA_COST = 5; // Stamina cost per auto-hit
+  const AUTO_ATTACKS_PER_SECOND = 1; // 1 hit per second at base attack speed
+  const AUTO_STAMINA_COST = 1; // Stamina cost per auto-hit
 
   setInterval(async () => {
     if (bossState.currentHp <= 0) return; // Boss is dead
