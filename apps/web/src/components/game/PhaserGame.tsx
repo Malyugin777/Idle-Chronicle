@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.56';
+const APP_VERSION = 'v1.0.57';
 
 interface BossState {
   name: string;
@@ -749,15 +749,37 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* ACTIVE BUFFS - Left side, below HUD */}
+      {/* L2-STYLE RESOURCE BARS - Top-left under HUD */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {activeBuffs.length > 0 && (
-        <div className="absolute top-10 left-3 z-15 flex gap-1">
-          {activeBuffs.map(buff => (
-            <BuffIcon key={buff.type} buff={buff} />
-          ))}
+      <div className="absolute top-10 left-3 z-15 w-[45%]">
+        {/* Mana Bar */}
+        <div className="h-3 bg-black/70 rounded overflow-hidden relative border border-white/10 mb-1">
+          <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold drop-shadow">
+            {Math.floor(playerState.mana)}/{playerState.maxMana}
+          </span>
         </div>
-      )}
+        {/* Stamina Bar */}
+        <div className="h-3 bg-black/70 rounded overflow-hidden relative border border-white/10">
+          <div
+            className={`h-full transition-all duration-100 ${
+              exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
+            }`}
+            style={{ width: `${staminaPercent}%` }}
+          />
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold drop-shadow">
+            {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+          </span>
+        </div>
+        {/* Buffs - under resource bars */}
+        {activeBuffs.length > 0 && (
+          <div className="flex gap-1 mt-1">
+            {activeBuffs.map(buff => (
+              <BuffIcon key={buff.type} buff={buff} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* TASKS BUTTON - Right side, below HUD */}
@@ -811,13 +833,13 @@ export default function PhaserGame() {
             {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
           </span>
           <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
-          {/* Drop button */}
+          {/* Drop info button */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
-            className="w-6 h-6 bg-purple-500/30 rounded-full flex items-center justify-center
-                       border border-purple-500/40 active:scale-90 transition-transform"
+            className="w-6 h-6 bg-amber-700/40 rounded-full flex items-center justify-center
+                       border border-amber-600/50 active:scale-90 transition-transform"
           >
-            <span className="text-sm">🎁</span>
+            <span className="text-sm">📦</span>
           </button>
         </div>
       </div>
@@ -845,43 +867,9 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* BOTTOM UI - Bars + Skills */}
+      {/* BOTTOM UI - Action Bar (Skills only) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
-        {/* Compact Resource Bars - 50% width, side by side */}
-        <div className="flex gap-2 mb-2">
-          {/* Mana Bar - 50% */}
-          <div className="flex-1">
-            <div className="flex justify-between text-[10px] mb-0.5">
-              <span className="text-blue-400">💧</span>
-              <span className="text-blue-400">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
-            </div>
-            <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
-            </div>
-          </div>
-
-          {/* Stamina Bar - 50% */}
-          <div className="flex-1">
-            <div className="flex justify-between text-[10px] mb-0.5">
-              <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
-                {exhausted ? '😵' : '⚡'}
-              </span>
-              <span className={exhausted ? 'text-red-400' : 'text-green-400'}>
-                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
-              </span>
-            </div>
-            <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-100 ${
-                  exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
-                }`}
-                style={{ width: `${staminaPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Skill Buttons + Soulshot Slot */}
         <div className="flex justify-center items-center gap-3">
           {/* Soulshot Slot */}
