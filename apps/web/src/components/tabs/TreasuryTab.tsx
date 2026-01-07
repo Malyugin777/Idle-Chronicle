@@ -93,21 +93,6 @@ export default function TreasuryTab() {
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
-  const [boosterMultiplier, setBoosterMultiplier] = useState(1);
-  const [boosterTimeLeft, setBoosterTimeLeft] = useState(0);
-  const hasBooster = boosterMultiplier > 1;
-
-  // Chest booster from tasks (client-side only)
-  useEffect(() => {
-    const tm = getTaskManager();
-    const updateBooster = () => {
-      setBoosterMultiplier(tm.getChestBoosterMultiplier());
-      setBoosterTimeLeft(tm.getChestBoosterTimeLeft());
-    };
-    updateBooster();
-    const interval = setInterval(updateBooster, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Update timer every second
   useEffect(() => {
@@ -376,25 +361,6 @@ export default function TreasuryTab() {
           </div>
         </div>
 
-        {/* Booster Status */}
-        {hasBooster && (
-          <div className="mt-2 bg-green-500/20 border border-green-500/30 rounded-lg p-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⚡</span>
-              <div>
-                <div className="text-green-400 text-xs font-bold">
-                  {lang === 'ru' ? 'Ускоритель x1.5' : 'Booster x1.5'}
-                </div>
-                <div className="text-green-300/70 text-[10px]">
-                  {lang === 'ru' ? 'Сундуки открываются быстрее' : 'Chests open faster'}
-                </div>
-              </div>
-            </div>
-            <div className="text-green-400 text-xs font-mono">
-              {Math.floor(boosterTimeLeft / 60000)}:{String(Math.floor((boosterTimeLeft % 60000) / 1000)).padStart(2, '0')}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* TZ Этап 2: Pending Rewards Block */}
@@ -522,12 +488,10 @@ export default function TreasuryTab() {
             // Slot with chest
             const config = CHEST_CONFIG[chest.chestType];
             const isOpening = chest.openingStarted !== null;
-            // Apply booster multiplier to elapsed time (visual effect)
-            const rawElapsed = isOpening ? now - chest.openingStarted! : 0;
-            const boostedElapsed = rawElapsed * boosterMultiplier;
-            const remaining = Math.max(0, chest.openingDuration - boostedElapsed);
+            const elapsed = isOpening ? now - chest.openingStarted! : 0;
+            const remaining = Math.max(0, chest.openingDuration - elapsed);
             const isReady = isOpening && remaining <= 0;
-            const progress = isOpening ? Math.min(100, (boostedElapsed / chest.openingDuration) * 100) : 0;
+            const progress = isOpening ? Math.min(100, (elapsed / chest.openingDuration) * 100) : 0;
 
             return (
               <button
@@ -587,9 +551,8 @@ export default function TreasuryTab() {
               </div>
               {(() => {
                 const isOpening = selectedChest.openingStarted !== null;
-                const rawElapsed = isOpening ? now - selectedChest.openingStarted! : 0;
-                const boostedElapsed = rawElapsed * boosterMultiplier;
-                const remaining = Math.max(0, selectedChest.openingDuration - boostedElapsed);
+                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const remaining = Math.max(0, selectedChest.openingDuration - elapsed);
                 const isReady = isOpening && remaining <= 0;
 
                 if (isReady) {
@@ -598,15 +561,12 @@ export default function TreasuryTab() {
                   return (
                     <div className="text-gray-400 text-sm mt-1">
                       {lang === 'ru' ? 'Осталось: ' : 'Remaining: '}{formatTime(remaining)}
-                      {hasBooster && <span className="text-green-400 ml-1">⚡</span>}
                     </div>
                   );
                 } else {
-                  const displayDuration = Math.floor(selectedChest.openingDuration / boosterMultiplier);
                   return (
                     <div className="text-gray-500 text-sm mt-1">
-                      {lang === 'ru' ? 'Время открытия: ' : 'Opening time: '}{formatTime(displayDuration)}
-                      {hasBooster && <span className="text-green-400 ml-1">⚡x1.5</span>}
+                      {lang === 'ru' ? 'Время открытия: ' : 'Opening time: '}{formatTime(selectedChest.openingDuration)}
                     </div>
                   );
                 }
@@ -655,12 +615,11 @@ export default function TreasuryTab() {
             <div className="space-y-2">
               {(() => {
                 const isOpening = selectedChest.openingStarted !== null;
-                const rawElapsed = isOpening ? now - selectedChest.openingStarted! : 0;
-                const boostedElapsed = rawElapsed * boosterMultiplier;
-                const remaining = Math.max(0, selectedChest.openingDuration - boostedElapsed);
+                const elapsed = isOpening ? now - selectedChest.openingStarted! : 0;
+                const remaining = Math.max(0, selectedChest.openingDuration - elapsed);
                 const isReady = isOpening && remaining <= 0;
                 const canOpen = !openingChest || openingChest.id === selectedChest.id;
-                const progressPercent = Math.min(100, (boostedElapsed / selectedChest.openingDuration) * 100);
+                const progressPercent = Math.min(100, (elapsed / selectedChest.openingDuration) * 100);
 
                 if (isReady) {
                   return (
@@ -680,11 +639,10 @@ export default function TreasuryTab() {
                       <div className="py-3 bg-black/30 rounded-lg text-center">
                         <div className="text-sm text-gray-400">
                           {lang === 'ru' ? 'Открывается...' : 'Opening...'}
-                          {hasBooster && <span className="text-green-400 ml-1">⚡x1.5</span>}
                         </div>
                         <div className="w-full h-2 bg-black/50 rounded-full mt-2 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${hasBooster ? 'bg-green-500' : 'bg-l2-gold'}`}
+                            className="h-full rounded-full transition-all bg-l2-gold"
                             style={{ width: `${progressPercent}%` }}
                           />
                         </div>

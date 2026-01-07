@@ -3267,7 +3267,6 @@ app.prepare().then(async () => {
         // Build update object based on rewards
         const updateData = {};
         const chestsToCreate = [];
-        let boostApplied = false;
 
         for (const reward of rewards) {
           switch (reward.type) {
@@ -3299,28 +3298,7 @@ app.prepare().then(async () => {
                 });
               }
               break;
-            case 'chestBooster':
-              // Instantly boost currently opening chest by 30 minutes
-              const BOOST_TIME_MS = 30 * 60 * 1000; // 30 minutes
-              const openingChest = await prisma.chest.findFirst({
-                where: {
-                  userId: player.odamage,
-                  openingStarted: { not: null },
-                },
-              });
-              if (openingChest) {
-                // Move openingStarted back by 30 minutes (effectively reducing remaining time)
-                const newOpeningStarted = new Date(openingChest.openingStarted.getTime() - BOOST_TIME_MS);
-                await prisma.chest.update({
-                  where: { id: openingChest.id },
-                  data: { openingStarted: newOpeningStarted },
-                });
-                boostApplied = true;
-                console.log(`[Tasks] Applied chest boost to chest ${openingChest.id} for user ${player.username}`);
-              } else {
-                console.log(`[Tasks] No opening chest found for boost, user ${player.username}`);
-              }
-              break;
+            // chestBooster handled client-side (localStorage buff)
           }
         }
 
@@ -3380,8 +3358,8 @@ app.prepare().then(async () => {
           potionLuck: player.potionLuck,
         });
 
-        // Refresh chest data if chests were created or boost was applied
-        if (chestsToCreate.length > 0 || boostApplied) {
+        // Refresh chest data if chests were created
+        if (chestsToCreate.length > 0) {
           const chests = await prisma.chest.findMany({
             where: { userId: player.odamage },
             orderBy: { createdAt: 'asc' },

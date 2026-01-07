@@ -3,7 +3,6 @@
 // ═══════════════════════════════════════════════════════════
 
 export type Slot = 'weapon' | 'helmet' | 'chest' | 'gloves' | 'legs' | 'boots' | 'shield';
-export type ItemType = 'equipment' | 'consumable';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface ItemStats {
@@ -23,13 +22,10 @@ export interface ItemDefinition {
   nameRu: string;
   nameEn: string;
   icon: string;
-  type: ItemType;       // equipment или consumable
-  slot?: Slot;          // только для equipment
+  slot: Slot;
   rarity: Rarity;
-  stats?: ItemStats;    // только для equipment
+  stats: ItemStats;
   setId?: string;       // ID сета (например "novice")
-  stackable?: boolean;  // можно ли складывать (для consumable)
-  dbField?: string;     // поле в БД (для consumable)
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -37,103 +33,6 @@ export interface ItemDefinition {
 // ═══════════════════════════════════════════════════════════
 
 export const ITEMS: Record<string, ItemDefinition> = {
-  // ═══════════════════════════════════════════════════════════
-  // CONSUMABLES (Расходники)
-  // ═══════════════════════════════════════════════════════════
-
-  // ─────────────────────────────────────────────────────────
-  // SOULSHOTS (Соулшоты) - усиливают атаку
-  // ─────────────────────────────────────────────────────────
-  'soulshot-ng': {
-    id: 'soulshot-ng',
-    code: 'soulshot-ng',
-    nameRu: 'Заряд души (NG)',
-    nameEn: 'Soulshot (NG)',
-    icon: '💚',
-    type: 'consumable',
-    rarity: 'common',
-    stackable: true,
-    dbField: 'soulshotNG',
-  },
-  'soulshot-d': {
-    id: 'soulshot-d',
-    code: 'soulshot-d',
-    nameRu: 'Заряд души (D)',
-    nameEn: 'Soulshot (D)',
-    icon: '💙',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'soulshotD',
-  },
-  'soulshot-c': {
-    id: 'soulshot-c',
-    code: 'soulshot-c',
-    nameRu: 'Заряд души (C)',
-    nameEn: 'Soulshot (C)',
-    icon: '💜',
-    type: 'consumable',
-    rarity: 'rare',
-    stackable: true,
-    dbField: 'soulshotC',
-  },
-
-  // ─────────────────────────────────────────────────────────
-  // SCROLLS (Свитки)
-  // ─────────────────────────────────────────────────────────
-  'enchant-scroll': {
-    id: 'enchant-scroll',
-    code: 'enchant-scroll',
-    nameRu: 'Свиток заточки',
-    nameEn: 'Enchant Scroll',
-    icon: '📜',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'enchantScrolls',
-  },
-
-  // ─────────────────────────────────────────────────────────
-  // POTIONS (Зелья/Баффы)
-  // ─────────────────────────────────────────────────────────
-  'potion-haste': {
-    id: 'potion-haste',
-    code: 'potion-haste',
-    nameRu: 'Зелье скорости',
-    nameEn: 'Haste Potion',
-    icon: '⚡',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'potionHaste',
-  },
-  'potion-acumen': {
-    id: 'potion-acumen',
-    code: 'potion-acumen',
-    nameRu: 'Зелье силы',
-    nameEn: 'Acumen Potion',
-    icon: '🔥',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'potionAcumen',
-  },
-  'potion-luck': {
-    id: 'potion-luck',
-    code: 'potion-luck',
-    nameRu: 'Зелье удачи',
-    nameEn: 'Luck Potion',
-    icon: '🍀',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'potionLuck',
-  },
-
-  // ═══════════════════════════════════════════════════════════
-  // EQUIPMENT (Экипировка)
-  // ═══════════════════════════════════════════════════════════
-
   // ─────────────────────────────────────────────────────────
   // NOVICE SET (Common)
   // ─────────────────────────────────────────────────────────
@@ -143,7 +42,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Меч новичка',
     nameEn: 'Novice Sword',
     icon: '🗡️',
-    type: 'equipment',
     slot: 'weapon',
     rarity: 'common',
     stats: { pAtk: 8 },
@@ -155,7 +53,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Шлем новичка',
     nameEn: 'Novice Helmet',
     icon: '⛑️',
-    type: 'equipment',
     slot: 'helmet',
     rarity: 'common',
     stats: { pDef: 2 },
@@ -167,7 +64,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Нагрудник новичка',
     nameEn: 'Novice Chest',
     icon: '🎽',
-    type: 'equipment',
     slot: 'chest',
     rarity: 'common',
     stats: { pDef: 3 },
@@ -179,7 +75,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Перчатки новичка',
     nameEn: 'Novice Gloves',
     icon: '🧤',
-    type: 'equipment',
     slot: 'gloves',
     rarity: 'common',
     stats: { pDef: 1 },
@@ -191,7 +86,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Поножи новичка',
     nameEn: 'Novice Legs',
     icon: '👖',
-    type: 'equipment',
     slot: 'legs',
     rarity: 'common',
     stats: { pDef: 2 },
@@ -203,7 +97,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Ботинки новичка',
     nameEn: 'Novice Boots',
     icon: '👢',
-    type: 'equipment',
     slot: 'boots',
     rarity: 'common',
     stats: { pDef: 1 },
@@ -215,7 +108,6 @@ export const ITEMS: Record<string, ItemDefinition> = {
     nameRu: 'Щит новичка',
     nameEn: 'Novice Shield',
     icon: '🛡️',
-    type: 'equipment',
     slot: 'shield',
     rarity: 'common',
     stats: { pDef: 2 },
@@ -241,21 +133,6 @@ export function getItemByCode(code: string): ItemDefinition | undefined {
 // Получить все предметы сета
 export function getSetItems(setId: string): ItemDefinition[] {
   return Object.values(ITEMS).filter(item => item.setId === setId);
-}
-
-// Получить все consumables
-export function getConsumables(): ItemDefinition[] {
-  return Object.values(ITEMS).filter(item => item.type === 'consumable');
-}
-
-// Получить всю экипировку
-export function getEquipment(): ItemDefinition[] {
-  return Object.values(ITEMS).filter(item => item.type === 'equipment');
-}
-
-// Получить consumable по dbField
-export function getConsumableByDbField(dbField: string): ItemDefinition | undefined {
-  return Object.values(ITEMS).find(item => item.type === 'consumable' && item.dbField === dbField);
 }
 
 // Слоты и их порядок
