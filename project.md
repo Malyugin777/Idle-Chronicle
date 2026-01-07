@@ -1,16 +1,16 @@
-# World Boss Clicker
+# Idle Chronicle
 
-Multiplayer World Boss Clicker for Telegram Mini App.
-Part of [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) universe.
+Multiplayer World Boss Clicker для Telegram Mini App в стиле Lineage 2.
 
 ## Overview
 
 | | |
 |---|---|
-| **Genre** | Multiplayer Idle Clicker |
+| **Genre** | Multiplayer Idle Clicker RPG |
 | **Platform** | Telegram Mini App (TMA) |
-| **Version** | 2.0.0 |
+| **Version** | 1.0.49 |
 | **GitHub** | https://github.com/Malyugin777/Idle-Chronicle |
+| **Deploy** | Railway |
 
 ---
 
@@ -18,37 +18,38 @@ Part of [Pocket Chronicles](https://github.com/Malyugin777/l2-phaser-rpg) univer
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 14, TypeScript, Canvas 2D, Socket.io-client, TailwindCSS |
-| Backend | Fastify, Socket.io, Prisma |
+| Frontend | Next.js 14, TypeScript, Phaser 3, TailwindCSS |
+| Backend | Node.js, Socket.io, Prisma |
 | Database | PostgreSQL |
-| Deploy | Render (2 services + database) |
+| Deploy | Railway |
 
 ---
 
 ## Project Structure
 
 ```
-world-boss-clicker/
+idle-chronicle/
 ├── apps/
-│   ├── web/                    # Next.js 14 Frontend
-│   │   ├── src/
-│   │   │   ├── app/            # Pages
-│   │   │   ├── components/     # GameCanvas, UI
-│   │   │   └── lib/            # Socket, constants
-│   │   └── public/assets/      # Boss sprites
-│   │
-│   └── server/                 # Fastify + Socket.io Backend
+│   └── web/                     # Next.js Frontend + Backend
 │       ├── src/
-│       │   ├── config/         # Environment
-│       │   ├── shared/prisma/  # Prisma client
-│       │   └── index.ts        # Main server
-│       └── prisma/             # Schema
+│       │   ├── app/             # Next.js pages
+│       │   ├── components/      # React components
+│       │   │   ├── game/        # PhaserGame.tsx, TasksModal.tsx
+│       │   │   ├── tabs/        # CharacterTab, TreasuryTab, LeaderboardTab, ShopTab
+│       │   │   ├── modals/      # ChestOpenModal
+│       │   │   └── ui/          # BottomNav, ErrorBoundary
+│       │   ├── game/            # Phaser config + BattleScene
+│       │   └── lib/             # Socket, i18n, taskManager
+│       ├── server.js            # Socket.io backend (~4000 lines)
+│       ├── services/            # StatsService.js
+│       └── prisma/              # Schema
 │
-├── packages/
-│   └── shared/                 # Types, constants (optional)
-│
-├── render.yaml                 # Render Blueprint
-└── turbo.json
+└── packages/
+    └── shared/                  # Shared types & data
+        └── src/data/
+            ├── items.ts         # Item definitions (ITEMS)
+            ├── sets.ts          # Set bonuses (SETS)
+            └── lootTables.ts    # Chest drop rates (CHESTS)
 ```
 
 ---
@@ -58,16 +59,19 @@ world-boss-clicker/
 ### World Boss
 - **All players attack ONE boss** in real-time
 - HP syncs across all connected clients via WebSocket
-- Boss respawns 5 seconds after death
+- Boss respawns **5 hours** after death
 - Rage phases at 75%, 50%, 25% HP (damage multiplier increases)
+- 100 bosses total (cycling through templates)
 
 ### Stats (L2-style)
 
-| Stat | Effect |
-|------|--------|
-| STR | +8% damage per point |
-| DEX | +5% attack speed per point |
-| LUCK | +3% crit chance per point |
+| Stat | Base | Effect |
+|------|------|--------|
+| Power (СИЛ) | 10 | +8% damage per point |
+| Agility (ЛОВ) | 10 | Attack speed, crit chance |
+| Vitality (СТОЙ) | 12 | +80 max stamina per point |
+| Intellect (ИНТ) | 10 | Magic power |
+| Spirit (ДУХ) | 10 | +40 max mana per point |
 
 ### Damage Formula
 ```
@@ -76,14 +80,59 @@ variance = baseDamage * (0.9 to 1.1)
 critCheck = random < (0.05 + LUCK * 0.03)
 critDamage = damage * 2.0
 rageMultiplier = [1.0, 1.2, 1.5, 2.0][ragePhase]
+soulshotMultiplier = 1.0 / 2.0 / 2.2 / 3.5 (NG/D/C)
+buffMultiplier = 1.0 + acumenBonus (0.5)
 finalDamage = (damage - bossDefense) * rageMultiplier
 ```
 
-### Energy System (Anti-cheat)
-- 1 energy per tap
-- Max: 1000
-- Regen: 10/sec
-- Tap batching: up to 50 taps per batch
+### Stamina System
+- Tap cost: 1 + thornsDamage (boss thorns)
+- Max: 800 + (Vitality - 10) * 80
+- Regen: 1/sec
+- Exhaustion: 5 sec at 0 stamina (can't attack)
+
+### Consumables
+
+| Item | Effect | Duration |
+|------|--------|----------|
+| Soulshot NG | x2 damage | per tap |
+| Soulshot D | x2.2 damage | per tap |
+| Soulshot C | x3.5 damage | per tap |
+| Scroll Haste | +30% attack speed | 30 sec |
+| Scroll Acumen | +50% damage | 30 sec |
+| Scroll Luck | +10% crit chance | 60 sec |
+
+---
+
+## Reward System (TZ Этап 2)
+
+### Activity Requirement
+- Must be active 30+ seconds to be eligible
+- Activity ping every 5 seconds from client
+- Max 10 sec between pings (anti-cheat)
+
+### Chest Rewards by Rank
+
+| Rank | Wooden | Bronze | Silver | Gold | Badge |
+|------|--------|--------|--------|------|-------|
+| 1 | 2 | 2 | 2 | 1 | Slayer (7d) |
+| 2 | 2 | 2 | 1 | 1 | Elite (7d) |
+| 3 | 2 | 1 | 1 | 1 | Elite (3d) |
+| 4-10 | 2 | 1 | 1 | - | - |
+| 11-25 | 2 | - | 1 | - | - |
+| 26-50 | 3 | 1 | - | - | - |
+| 51-100 | 2 | 1 | - | - | - |
+| 101+ | 2 | - | - | - | - |
+| Not eligible | 0 | 0 | 0 | 0 | - |
+
+### Chest Types
+
+| Type | Open Time | Gold | Item % | Scroll % |
+|------|-----------|------|--------|----------|
+| Wooden | 5 min | 1000 | 55% | 3% |
+| Bronze | 30 min | 2500 | 80% | 15% |
+| Silver | 4 hours | 7000 | 100% | 25% |
+| Gold | 8 hours | 20000 | 100% | 45% |
 
 ---
 
@@ -92,35 +141,47 @@ finalDamage = (damage - bossDefense) * rageMultiplier
 ### Client → Server
 | Event | Data | Description |
 |-------|------|-------------|
-| `auth` | `{ telegramId, username, firstName, photoUrl }` | Authenticate user |
+| `auth` | `{ initData, language }` | Telegram auth |
 | `tap:batch` | `{ count }` | Batch of taps (1-50) |
-| `upgrade:stat` | `{ stat: 'str'|'dex'|'luck' }` | Buy stat upgrade |
-| `leaderboard:get` | - | Request leaderboard |
+| `activity:ping` | - | Activity tracking |
+| `buff:use` | `{ buffId }` | Use buff scroll |
+| `soulshot:toggle` | `{ grade }` | Toggle soulshot |
+| `chest:start` | `{ chestId }` | Start opening chest |
+| `chest:collect` | `{ chestId }` | Collect opened chest |
+| `equipment:equip` | `{ itemId }` | Equip item |
+| `equipment:unequip` | `{ itemId }` | Unequip item |
+| `rewards:claim` | `{ rewardId }` | Claim pending reward |
 
 ### Server → Client
 | Event | Data | Description |
 |-------|------|-------------|
-| `boss:state` | `{ id, name, hp, maxHp, ragePhase, playersOnline }` | Boss HP (100ms) |
-| `tap:result` | `{ damage, crits, energy, sessionDamage }` | Tap result |
-| `damage:feed` | `{ playerName, damage, isCrit }` | Other players' damage |
-| `boss:killed` | `{ bossName, finalBlowBy, leaderboard }` | Boss death |
-| `boss:respawn` | `{ id, name, hp, maxHp }` | New boss spawned |
-| `boss:rage` | `{ phase, multiplier }` | Rage phase change |
-| `auth:success` | `{ id, username, level, str, dex, luck, ... }` | Auth success |
+| `auth:success` | player data | Auth success |
+| `boss:state` | boss state | Boss HP (250ms) |
+| `boss:killed` | kill data | Boss death + rewards |
+| `boss:respawn` | boss state | New boss spawned |
+| `tap:result` | damage data | Tap result |
+| `damage:feed` | feed entry | Other players' damage |
+| `player:state` | stamina/mana | Resource update |
+| `activity:status` | activity data | Eligibility status |
+| `chest:data` | chests array | User's chests |
+| `chest:opened` | chest data | Chest ready to collect |
+| `rewards:available` | - | New rewards available |
+| `buff:success` | buff data | Buff activated |
 
 ---
 
-## Database Schema (PostgreSQL)
+## Database Schema
 
+### Key Models
 | Model | Description |
 |-------|-------------|
-| User | Telegram user, stats, currencies, energy |
-| Boss | Boss definition, HP, defense, loot table |
-| BossSession | Active boss instance, damage tracking |
-| DamageLog | Per-user damage per session |
-| Weapon | Upgradeable weapons |
-| Item | Loot drops |
-| Task | Daily/weekly quests |
+| User | Telegram user, stats, currencies, consumables |
+| Equipment | Item templates (weapons, armor) |
+| UserEquipment | User's items (equipped + inventory) |
+| Chest | User's chests (pending + opening) |
+| PendingReward | Boss kill rewards to claim |
+| ActiveBuff | Active buff timers |
+| GameState | Singleton: boss state, leaderboard, previousBossSession |
 
 ---
 
@@ -134,178 +195,42 @@ npm install -g pnpm
 pnpm install
 
 # 3. Start PostgreSQL (Docker)
-docker run -d --name worldboss-db \
-  -e POSTGRES_USER=worldboss \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=worldboss \
-  -p 5432:5432 postgres:15
+docker-compose up -d
 
-# 4. Setup server
-cp apps/server/.env.example apps/server/.env
-# Edit DATABASE_URL if needed
-pnpm db:push
+# 4. Setup database
+cd apps/web
+cp .env.example .env
+npx prisma db push
 
 # 5. Run development
 pnpm dev
 ```
 
-### Commands
-
-```bash
-pnpm dev                    # Start all (frontend + backend)
-pnpm --filter web dev       # Frontend only
-pnpm --filter server dev    # Backend only
-pnpm db:push                # Push Prisma schema
-pnpm db:studio              # Prisma Studio (DB GUI)
-pnpm build                  # Build all
-```
-
----
-
-## Deploy to Render
-
-### Option 1: Blueprint (Recommended)
-
-1. Go to [Render Dashboard](https://dashboard.render.com)
-2. **New** → **Blueprint**
-3. Connect GitHub repo
-4. Render will detect `render.yaml` and create:
-   - `world-boss-web` (Frontend)
-   - `world-boss-server` (Backend)
-   - `world-boss-db` (PostgreSQL)
-
-5. **After deployment**, set environment variables:
-   - **Frontend** (`world-boss-web`):
-     - `NEXT_PUBLIC_API_URL` = `https://world-boss-server.onrender.com`
-   - **Backend** (`world-boss-server`):
-     - `CORS_ORIGIN` = `https://world-boss-web.onrender.com`
-
-### Option 2: Manual Setup
-
-#### 1. Database
-- **New** → **PostgreSQL**
-- Name: `world-boss-db`
-- Copy **Internal Database URL**
-
-#### 2. Backend
-- **New** → **Web Service**
-- Connect repo
-- Settings:
-  - **Name:** `world-boss-server`
-  - **Root Directory:** `apps/server`
-  - **Build Command:** `npm i -g pnpm && cd ../.. && pnpm i && cd apps/server && pnpm build && pnpm db:push`
-  - **Start Command:** `pnpm start`
-- Environment Variables:
-  - `DATABASE_URL` = (from PostgreSQL)
-  - `CORS_ORIGIN` = (frontend URL after deploy)
-  - `NODE_ENV` = `production`
-
-#### 3. Frontend
-- **New** → **Web Service**
-- Connect repo
-- Settings:
-  - **Name:** `world-boss-web`
-  - **Root Directory:** `apps/web`
-  - **Build Command:** `npm i -g pnpm && cd ../.. && pnpm i && pnpm build:web`
-  - **Start Command:** `pnpm start`
-- Environment Variables:
-  - `NEXT_PUBLIC_API_URL` = (backend URL)
-  - `NODE_ENV` = `production`
-
----
-
-## Seeding Initial Boss
-
-After deploy, you need to add a boss to the database:
-
-```sql
--- Connect to Render PostgreSQL and run:
-INSERT INTO "Boss" (id, code, name, title, "baseHp", defense, "ragePhases", "isActive")
-VALUES (
-  'orfen-001',
-  'ORFEN',
-  'Orfen',
-  'Nightmare',
-  1000000,
-  0,
-  '[{"hpPercent": 75, "multiplier": 1.2}, {"hpPercent": 50, "multiplier": 1.5}, {"hpPercent": 25, "multiplier": 2.0}]',
-  true
-);
-```
-
-Or use Prisma Studio: `pnpm db:studio`
-
----
-
-## Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 05.01.2026 | Initial simple clicker |
-| 2.0.0 | 05.01.2026 | Turborepo, Next.js, Fastify, Prisma |
-| **2.1.0** | **05.01.2026** | **Full multiplayer implementation** |
-| | | - Server-side damage calculation |
-| | | - WebSocket real-time sync |
-| | | - Rage phases |
-| | | - Energy system |
-| | | - Damage feed |
-| | | - Session leaderboard |
-| | | - No Redis (in-memory state) |
-
----
-
-## Equipment System
-
-### Item Database
-Все предметы определены в `packages/shared/src/data/items.ts`:
-```typescript
-interface ItemDefinition {
-  id: string;
-  code: string;        // Совместимость со старым кодом
-  nameRu: string;
-  nameEn: string;
-  icon: string;
-  slot: Slot;
-  rarity: Rarity;
-  stats: ItemStats;
-  setId?: string;      // ID сета
-}
-```
-
-### Set Bonuses
-Сетовые бонусы в `packages/shared/src/data/sets.ts`:
-
-| Сет | Всего | 3/7 бонус | 6/7 бонус |
-|-----|-------|-----------|-----------|
-| Novice | 7 | +3% P.Atk | +5% P.Atk, +5% P.Def |
-| Iron | 7 | +5% P.Def | +10% P.Def, +5% Stamina |
-| Steel | 7 | +5% P.Atk, +1% Crit | +10% P.Atk, +8% P.Def, +2% Crit |
-
-### Stat Formulas (MVP)
-```
-P.Atk = 10 + (СИЛ-10)*1 + equipment
-P.Def = 0 + equipment
-MaxStamina = 800 + (СТОЙ-10)*80
-MaxMana = 100 + (ДУХ-10)*10
-```
-
-Базовые атрибуты: СИЛ=10, ЛОВ=10, СТОЙ=12, ИНТ=10, ДУХ=10
-
 ---
 
 ## TODO
 
+### Done
 - [x] Server-side damage calculation
 - [x] WebSocket real-time sync
 - [x] Rage phases
-- [x] Energy system
+- [x] Stamina system (replaced energy)
 - [x] Equipment system with set bonuses
 - [x] L2-style stat formulas
-- [ ] Telegram authentication verification
-- [ ] Persistent leaderboard (all-time)
-- [ ] Shop tab (soulshots, buffs)
-- [ ] Character upgrades UI
-- [ ] Treasury (RPG loot drops)
-- [ ] Offline progress
-- [ ] Multiple bosses rotation
+- [x] Telegram authentication
+- [x] Shop tab (soulshots, buffs)
+- [x] Character tab with equipment
+- [x] Treasury (chest system)
+- [x] Multiple bosses rotation (100 bosses)
+- [x] TZ Этап 2 reward system
+- [x] Activity tracking for eligibility
+- [x] Graceful shutdown
+- [x] onlineUsers cleanup
+- [x] Buff scroll usage from inventory
+
+### Pending
+- [ ] Offline progress (code exists but not connected)
 - [ ] Boss Spine animations
+- [ ] Persistent all-time leaderboard
+- [ ] Enchanting system
+- [ ] TON wallet integration

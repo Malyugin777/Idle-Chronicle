@@ -72,90 +72,220 @@ apps/web/
 │   │       └── BattleScene.ts  # ТОЛЬКО босс + эффекты
 │   │
 │   ├── components/
-│   │   └── game/
-│   │       ├── PhaserGame.tsx  # React wrapper + ВСЕ UI элементы
-│   │       ├── BattleBars.tsx  # HP/Mana/Stamina bars (React)
-│   │       ├── SkillButtons.tsx # Skill buttons (React)
-│   │       └── DamageFeed.tsx  # Damage feed (React)
+│   │   ├── game/
+│   │   │   ├── PhaserGame.tsx  # React wrapper + ВСЕ UI элементы
+│   │   │   └── TasksModal.tsx  # Daily tasks
+│   │   ├── tabs/
+│   │   │   ├── CharacterTab.tsx   # Equipment + stats + consumables
+│   │   │   ├── TreasuryTab.tsx    # Chests
+│   │   │   ├── LeaderboardTab.tsx # Session + all-time
+│   │   │   └── ShopTab.tsx        # Buy consumables
+│   │   ├── modals/
+│   │   │   └── ChestOpenModal.tsx # Chest opening animation
+│   │   └── ui/
+│   │       ├── BottomNav.tsx      # Tab navigation
+│   │       └── ErrorBoundary.tsx
 │   │
 │   └── lib/
-│       └── socket.ts           # Socket.io singleton
+│       ├── socket.ts           # Socket.io singleton
+│       ├── i18n.ts             # Translations (RU/EN)
+│       └── taskManager.ts      # Daily tasks state
 │
-├── server.js                   # Game server (НЕ ТРОГАТЬ формулы без причины)
-└── services/
-    └── StatsService.js         # L2 формулы расчёта статов
+├── server.js                   # Game server (~4000 lines)
+├── services/
+│   └── StatsService.js         # L2 формулы расчёта статов
+└── prisma/
+    └── schema.prisma           # Database schema
 ```
+
+---
+
+## Server Architecture (server.js)
+
+### Intervals
+| Interval | Frequency | Purpose |
+|----------|-----------|---------|
+| Boss state broadcast | 250ms | Sync HP to all clients |
+| Respawn check | 1000ms | Check if respawn timer expired |
+| Stamina/Mana regen | 1000ms | Regen resources for online users |
+| Auto-attack | 1000ms | Process auto-attacks |
+| Auto-save | 30000ms | Save player data to DB |
+| onlineUsers cleanup | 300000ms | Remove stale users (>30 min inactive) |
+| Boss state save | 10000ms | Persist boss state to DB |
+
+### Graceful Shutdown
+При SIGTERM/SIGINT:
+1. Сохраняет boss state в БД
+2. Сохраняет данные всех онлайн игроков
+3. Отключает Prisma
+4. Закрывает Socket.io и HTTP сервер
+5. Timeout 10 сек для forced exit
+
+### State Persistence
+| Data | Storage | Frequency |
+|------|---------|-----------|
+| Boss HP/state | GameState singleton | 10 sec |
+| Session leaderboard | GameState.sessionLeaderboard | 10 sec |
+| Previous boss session | GameState.previousBossSession | On boss kill |
+| Player progress | User table | 30 sec + on disconnect |
 
 ---
 
 ## Combat System (L2-style)
 
-### НЕ ТРОГАТЬ без понимания:
-
-1. **StatsService.js** - все формулы расчёта:
-   - `calculateDerived()` - производные статы
-   - `calculateThorns()` - урон от шипов босса
-   - `getAttackInterval()` - интервал авто-атаки
-   - `calculateOfflineProgress()` - оффлайн прогресс
-
-2. **server.js** - игровая логика:
-   - Stamina система (заменила mana для боя)
-   - Thorns механика (босс тратит stamina игрока)
-   - Exhaustion (5 сек при 0 stamina)
-   - Auto-attack loop
-
-### Ключевые формулы:
-
+### StatsService.js - Формулы:
 ```javascript
-// Stamina cost per tap
-staminaCost = 1 + thornsTaken
+// P.Atk
+physicalPower = 10 + (power - 10) * 1 + equipment
+
+// Max Stamina
+maxStamina = 800 + (vitality - 10) * 80
+
+// Max Mana
+maxMana = 400 + (spirit - 10) * 40
 
 // Thorns (softcap)
 thornsTaken = ceil(rawThorns * 100 / (100 + pDef))
 
-// Auto-attack interval (min 250ms)
+// Attack interval (min 250ms)
 interval = 300000 / attackSpeed
+```
 
-// Offline progress (cap 4 hours)
-goldEarned = floor(totalDamage / 100)
+### Damage Calculation (server.js):
+```javascript
+baseDamage = pAtk * (1 + str * 0.08)
+variance = baseDamage * (0.9 to 1.1)
+
+// Modifiers
+soulshotMultiplier = SOULSHOTS[grade].multiplier // 2.0/2.2/3.5
+acumenBonus = 0.5 // from buff
+critMultiplier = 2.0
+
+// Final
+damage = baseDamage * variance * soulshotMultiplier * (1 + acumenBonus)
+if (crit) damage *= critMultiplier
+damage *= ragePhaseMultiplier
+damage = max(1, damage - bossDefense)
 ```
 
 ---
 
-## Socket Events
+## Reward System (TZ Этап 2)
 
-### Client → Server:
-- `tap:batch` - пачка тапов
-- `skill:use` - использование скилла
-- `upgrade:stat` - прокачка стата
+### Activity Tracking
+1. Client sends `activity:ping` every 5 seconds
+2. Server caps time between pings at 10 sec (anti-cheat)
+3. After 30 sec total → `isEligible = true`
+4. Activity resets when boss changes
 
-### Server → Client:
-- `auth:success` - авторизация + начальные данные
-- `boss:state` - состояние босса (каждую секунду)
-- `tap:result` - результат тапов
-- `hero:exhausted` - игрок истощён
-- `combat:tick` - результат авто-атаки
-- `boss:killed` - босс убит
+### Reward Distribution
+1. On boss kill → build leaderboard from sessionLeaderboard Map
+2. Calculate rank for each participant
+3. Distribute chests based on rank (see project.md)
+4. Create PendingReward in DB
+5. Emit `rewards:available`
+6. Player claims via `rewards:claim` → chests created
+
+### Chest Overflow
+If user has no free chest slots:
+- Chest converts to 50% of base gold value
+- User receives gold instead
+
+---
+
+## Socket Events Flow
+
+### Auth Flow
+```
+Client                    Server
+   |                         |
+   |-- auth {initData} ----->|
+   |                         | verify Telegram
+   |                         | upsert User
+   |<-- auth:success --------|
+   |<-- player:state --------|
+   |<-- boss:state ----------|
+```
+
+### Tap Flow
+```
+Client                    Server
+   |                         |
+   |-- tap:batch {count} --->|
+   |                         | validate stamina
+   |                         | calculate damage
+   |                         | update leaderboard
+   |<-- tap:result ----------|
+   |                         |
+   |                         | broadcast to all
+   |<-- damage:feed ---------|
+```
+
+### Buff Usage Flow
+```
+Client                    Server
+   |                         |
+   |-- buff:use {buffId} --->|
+   |                         | check potion count
+   |                         | decrement count
+   |                         | add to activeBuffs
+   |                         | save to DB
+   |<-- buff:success --------|
+```
 
 ---
 
 ## Database (Prisma)
 
-### User - ключевые поля:
-- `gold` (бывший adena) - основная валюта
-- `stamina` / `maxStamina` - для боя
-- `mana` / `maxMana` - для скиллов
-- `power`, `agility`, `vitality` - L2 атрибуты
+### Key Models
+| Model | Purpose |
+|-------|---------|
+| User | Player data, stats, consumables |
+| Equipment | Item templates |
+| UserEquipment | Player's items (equipped/inventory) |
+| Chest | Player's chests |
+| PendingReward | Unclaimed boss rewards |
+| ActiveBuff | Active buff timers |
+| GameState | Singleton for server state |
 
-### Boss:
-- `thornsDamage` - обратка босса
+### GameState Fields
+- `currentBossIndex` - which boss is active
+- `bossCurrentHp` / `bossMaxHp` - HP
+- `respawnAt` - respawn timer
+- `sessionLeaderboard` - JSON array
+- `previousBossSession` - JSON for leaderboard tab
 
-### GameState:
-- Singleton для сохранения состояния сервера
+---
+
+## Dead Code (do not remove without permission)
+
+These are prepared for offline progress feature but not connected:
+
+| File | Function/Variable |
+|------|-------------------|
+| server.js | `calculateOfflineEarnings()` |
+| StatsService.js | `calculateOfflineProgress()` |
+| PhaserGame.tsx | `offlineEarnings` state |
+| PhaserGame.tsx | `socket.on('offline:earnings')` |
+| i18n.ts | `offline.*` translations |
 
 ---
 
 ## Changelog
+
+### 2026-01-07 (v1.0.49)
+- Buff scroll usage from CharacterTab inventory
+- Graceful shutdown
+- onlineUsers cleanup
+- Previous boss session persistence
+
+### 2026-01-06 (v1.0.46-48)
+- TZ Этап 2 reward system
+- Chest system
+- Activity tracking
+- Boss image sync fix
+- Equipment delta display
+- Stat/consumable tooltips
 
 ### 2024-01-06
 - Renamed `adena` → `gold` everywhere

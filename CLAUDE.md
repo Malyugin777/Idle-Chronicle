@@ -19,23 +19,26 @@ const APP_VERSION = 'v1.0.XX';  // Инкремент при каждом фик
 
 ## Основные технологии
 - Frontend: Next.js 14, TypeScript, Phaser 3
-- Backend: server.js (Fastify + Socket.io)
+- Backend: server.js (Node.js + Socket.io)
 - Database: PostgreSQL + Prisma
 - Shared: packages/shared (типы, константы, данные)
+- Deploy: Railway
 
 ## Структура проекта
 ```
 apps/web/
-  server.js              # Socket.io backend (single file)
+  server.js              # Socket.io backend (single file, ~4000 строк)
   prisma/schema.prisma   # Database schema
   src/components/        # React компоненты
+    game/PhaserGame.tsx  # Главный игровой UI
+    tabs/                # CharacterTab, TreasuryTab, LeaderboardTab, ShopTab
   src/game/              # Phaser (config + scenes)
-  services/              # StatsService, etc
+  services/              # StatsService.js
 
 packages/shared/src/
   data/items.ts          # База предметов (ITEMS)
   data/sets.ts           # Сетовые бонусы (SETS)
-  data/lootTables.ts     # Таблицы дропа сундуков
+  data/lootTables.ts     # Таблицы дропа сундуков (CHESTS)
   types/                 # Общие типы
 ```
 
@@ -44,7 +47,7 @@ packages/shared/src/
 |------|--------------|
 | `data/items.ts` | Все предметы: id, slot, rarity, stats, setId |
 | `data/sets.ts` | Сеты и бонусы (3/7, 6/7) |
-| `data/lootTables.ts` | DROP_RATES, CHESTS, RARITY_STYLES |
+| `data/lootTables.ts` | CHESTS, CHEST_UI, RARITY_STYLES |
 
 ## Баланс старта (MVP)
 ```
@@ -53,7 +56,7 @@ packages/shared/src/
 P.Atk = 10 + (СИЛ-10)*1 + equipment
 P.Def = 0 + equipment
 MaxStamina = 800 + (СТОЙ-10)*80  = 960 при СТОЙ=12
-MaxMana = 100 + (ДУХ-10)*10
+MaxMana = 400 + (ДУХ-10)*40
 
 Сет новичка (7 предметов):
 - Weapon: +8 pAtk
@@ -62,16 +65,45 @@ MaxMana = 100 + (ДУХ-10)*10
 - 6/7 бонус: +5% P.Atk, +5% P.Def
 ```
 
-## Награды за босса (Top-100)
+## Награды за босса (TZ Этап 2)
 ```
-Rank 1:     Gold + Silver сундук
-Rank 2-3:   Silver сундук
-Rank 4-10:  Bronze сундук
-Rank 11-50: Wooden сундук
-Rank 51-100: Wooden сундук
-Остальные (active 30s+): 1 Wooden
-Не участник (<30s active): ничего
+Все eligible (30+ сек активности): 2 Wooden базово
+
+Rank 1:     +1 Gold, +2 Silver, +2 Bronze, badge "Slayer" (7 дней)
+Rank 2:     +1 Gold, +1 Silver, +2 Bronze, badge "Elite" (7 дней)
+Rank 3:     +1 Gold, +1 Silver, +1 Bronze, badge "Elite" (3 дня)
+Rank 4-10:  +1 Silver, +1 Bronze
+Rank 11-25: +1 Silver
+Rank 26-50: +1 Bronze, +1 Wooden
+Rank 51-100: +1 Bronze
+Rank 101+:  только базовые 2 Wooden
+
+Не eligible (<30 сек): ничего
 ```
+
+## Consumables
+| Item | Эффект | Длительность |
+|------|--------|--------------|
+| Soulshot NG | x2 урона | 1 тап |
+| Soulshot D | x2.2 урона | 1 тап |
+| Soulshot C | x3.5 урона | 1 тап |
+| Scroll Haste | +30% скорость атаки | 30 сек |
+| Scroll Acumen | +50% урона | 30 сек |
+| Scroll Luck | +10% крит шанс | 60 сек |
+
+## Сундуки
+| Тип | Длительность | Лут |
+|-----|--------------|-----|
+| Wooden | 5 мин | 1000 gold, 55% шмот, 3% свиток |
+| Bronze | 30 мин | 2500 gold, 80% шмот, 15% свиток |
+| Silver | 4 часа | 7000 gold, 100% шмот, 25% свиток |
+| Gold | 8 часов | 20000 gold, 100% шмот, 45% свиток |
+
+## Server Features
+- **Graceful shutdown**: SIGTERM/SIGINT сохраняет boss state + данные игроков
+- **onlineUsers cleanup**: каждые 5 мин удаляет stale (>30 мин без активности)
+- **Boss state persistence**: сохраняется в БД каждые 10 сек
+- **Previous boss session**: сохраняется для вкладки лидерборда
 
 ## Важные правила
 1. **Всегда обновляй версию при коммите**
@@ -79,3 +111,11 @@ Rank 51-100: Wooden сундук
 3. **Не создавай новые файлы без необходимости**
 4. **Комментарии на русском в data/ файлах**
 5. **ITEMS таблицу (data/items.ts) изменять ТОЛЬКО с письменного разрешения!**
+6. **server.js содержит TODO-комментарии для синхронизации с shared**
+
+## Мёртвый код (не удалять без разрешения)
+- `calculateOfflineEarnings()` в server.js
+- `calculateOfflineProgress()` в StatsService.js
+- `offlineEarnings` state в PhaserGame.tsx
+- `offline:earnings` socket listener
+- переводы `offline.*` в i18n.ts
