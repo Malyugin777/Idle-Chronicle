@@ -58,32 +58,12 @@ export class BattleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
-    // DEBUG: Semi-transparent dark background to verify canvas renders
-    this.cameras.main.setBackgroundColor('rgba(50,50,80,0.5)');
-
-    // DEBUG: Create a visible green circle to verify scene renders
-    const debugCircle = this.add.graphics();
-    debugCircle.fillStyle(0x00ff00, 0.8);
-    debugCircle.fillCircle(width / 2, height / 2, 50);
-    debugCircle.setDepth(1000);
-    // Remove debug circle after 3 seconds
-    this.time.delayedCall(3000, () => debugCircle.destroy());
+    // Transparent background (React handles the gradient)
+    this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
 
     // Boss sprite (centered)
-    // Fallback: if texture didn't load, create a placeholder
-    if (!this.textures.exists('boss') || !this.textures.get('boss').getSourceImage().width) {
-      // Create red rectangle as placeholder
-      const graphics = this.add.graphics();
-      graphics.fillStyle(0xff0000, 0.5);
-      graphics.fillRect(width / 2 - 75, height / 2 - 100, 150, 200);
-      graphics.setDepth(999);
-    }
-
     this.bossSprite = this.add.sprite(width / 2, height / 2, 'boss');
     this.bossSprite.setInteractive();
-    this.bossSprite.setVisible(true);
-    this.bossSprite.setDepth(10); // Ensure boss is above background
-    this.bossSprite.setAlpha(1); // Ensure full opacity
     this.originalBossX = width / 2;
     this.originalBossY = height / 2;
     this.updateBossScale();
@@ -105,9 +85,6 @@ export class BattleScene extends Phaser.Scene {
 
     // Delay scale fix
     this.time.delayedCall(100, () => this.updateBossScale());
-
-    // Emit event to React that scene is ready and boss is visible
-    this.emitter.emit('sceneReady');
   }
 
   // ─────────────────────────────────────────────────────────
@@ -448,22 +425,7 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const imgWidth = this.bossSprite.width;
     const imgHeight = this.bossSprite.height;
-
-    // Safety check: if sprite has no dimensions, use default scale
-    if (!imgWidth || !imgHeight || imgWidth <= 0 || imgHeight <= 0) {
-      this.bossSprite.setScale(1);
-      this.originalBossScale = 1;
-      return;
-    }
-
-    let scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
-
-    // Safety check: ensure scale is valid number between 0.1 and 5
-    if (!Number.isFinite(scaleFit) || scaleFit <= 0) {
-      scaleFit = 1;
-    }
-    scaleFit = Math.max(0.1, Math.min(5, scaleFit));
-
+    const scaleFit = Math.min((width * 0.62) / imgWidth, (height * 0.50) / imgHeight);
     this.bossSprite.setScale(scaleFit);
     this.originalBossScale = scaleFit;
     this.originalBossX = this.bossSprite.x;

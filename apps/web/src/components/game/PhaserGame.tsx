@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.76';
+const APP_VERSION = 'v1.0.77';
 
 interface BossState {
   name: string;
@@ -396,29 +396,23 @@ export default function PhaserGame() {
       }
     }
 
-    // Initialize Phaser
+    // Initialize Phaser - SIMPLIFIED
     if (containerRef.current && !gameRef.current) {
       const config = {
         ...gameConfig,
         parent: containerRef.current,
-        // transparent: true, // DISABLED FOR DEBUG - should show blue background
-        callbacks: {
-          postBoot: (game: Phaser.Game) => {
-            const scene = game.scene.getScene('BattleScene') as BattleScene;
-            if (scene) {
-              sceneRef.current = scene;
-              // Listen for scene ready event BEFORE restart
-              const emitter = scene.getEmitter();
-              emitter.once('sceneReady', () => {
-                // Scene finished create(), boss sprite exists, ensure visible
-                scene.setBossVisible(true);
-              });
-              scene.scene.restart({ socket });
-            }
-          },
-        },
       };
-      gameRef.current = new Phaser.Game(config);
+      const game = new Phaser.Game(config);
+      gameRef.current = game;
+
+      // Wait for scene to be ready, then pass socket
+      game.events.once('ready', () => {
+        const scene = game.scene.getScene('BattleScene') as BattleScene;
+        if (scene) {
+          sceneRef.current = scene;
+          scene.scene.restart({ socket });
+        }
+      });
     }
 
     // Auth
@@ -469,10 +463,6 @@ export default function PhaserGame() {
           totalBosses: data.totalBosses || 100,
         };
       });
-      // Ensure boss is visible when alive (fallback fix)
-      if (data.hp > 0 && sceneRef.current) {
-        sceneRef.current.setBossVisible(true);
-      }
       // Mark boss data loaded
       setLoadingState(prev => ({ ...prev, boss: true }));
     });
@@ -655,8 +645,6 @@ export default function PhaserGame() {
 
     // Boss killed
     socket.on('boss:killed', (data: any) => {
-      // Hide boss sprite when dead
-      sceneRef.current?.setBossVisible(false);
       setVictoryData({
         bossName: data.bossName,
         bossIcon: data.bossIcon || '👹',
@@ -675,8 +663,6 @@ export default function PhaserGame() {
     });
 
     socket.on('boss:respawn', (data: any) => {
-      // Show boss sprite when new boss spawns
-      sceneRef.current?.setBossVisible(true);
       setSessionDamage(0);
       setVictoryData(null);
       setRespawnCountdown(0);
@@ -848,9 +834,6 @@ export default function PhaserGame() {
 
     return unsubscribe;
   }, []);
-
-  // Boss visibility is now controlled explicitly in boss:killed and boss:respawn handlers
-  // (removed useEffect that was causing timing issues)
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
   const staminaPercent = (playerState.stamina / playerState.maxStamina) * 100;
@@ -1129,8 +1112,7 @@ export default function PhaserGame() {
       <div
         ref={containerRef}
         id="game-container"
-        className="absolute inset-0 z-0"
-        style={{ minHeight: '300px' }}
+        className="flex-1 w-full"
       />
 
       {/* ═══════════════════════════════════════════════════════════ */}
