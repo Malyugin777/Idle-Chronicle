@@ -93,12 +93,21 @@ export default function TreasuryTab() {
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
-
-  // Chest booster from tasks
-  const tm = getTaskManager();
-  const boosterMultiplier = tm.getChestBoosterMultiplier();
-  const boosterTimeLeft = tm.getChestBoosterTimeLeft();
+  const [boosterMultiplier, setBoosterMultiplier] = useState(1);
+  const [boosterTimeLeft, setBoosterTimeLeft] = useState(0);
   const hasBooster = boosterMultiplier > 1;
+
+  // Chest booster from tasks (client-side only)
+  useEffect(() => {
+    const tm = getTaskManager();
+    const updateBooster = () => {
+      setBoosterMultiplier(tm.getChestBoosterMultiplier());
+      setBoosterTimeLeft(tm.getChestBoosterTimeLeft());
+    };
+    updateBooster();
+    const interval = setInterval(updateBooster, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Update timer every second
   useEffect(() => {

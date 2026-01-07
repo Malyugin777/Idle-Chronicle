@@ -22,7 +22,11 @@
       "Bash(docker compose:*)",
       "WebFetch(domain:tnsb.fun)",
       "Bash(gh run list:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(node --check:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(git fetch:*)",
+      "Bash(node -e:*)"
     ]
   }
 }
