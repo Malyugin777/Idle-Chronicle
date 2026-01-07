@@ -4,8 +4,7 @@
 
 export type TaskType = 'session' | 'daily';
 export type RewardType =
-  | 'ngPack'      // NG Soulshot pack (amount)
-  | 'dCharge'     // D-grade charges
+  | 'etherPack'   // Ether pack (amount)
   | 'woodChest'   // Wooden chest
   | 'crystals'    // Premium currency (ancientCoin)
   | 'scrollHaste' // Haste scroll
@@ -53,7 +52,7 @@ export const SESSION_TASKS: TaskDefinition[] = [
     descEn: 'Make 50 taps',
     icon: '👆',
     condition: { type: 'taps', target: 50 },
-    rewards: [{ type: 'ngPack', amount: 100 }],
+    rewards: [{ type: 'etherPack', amount: 100 }],
   },
   {
     id: 'meatgrinder',
@@ -101,7 +100,7 @@ export const SESSION_TASKS: TaskDefinition[] = [
     descEn: 'Use skills 30 times',
     icon: '✨',
     condition: { type: 'skillCasts', target: 30 },
-    rewards: [{ type: 'ngPack', amount: 400 }],
+    rewards: [{ type: 'etherPack', amount: 400 }],
   },
   {
     id: 'chestBoost',
@@ -129,7 +128,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
     descEn: 'Deal 100,000 damage today',
     icon: '💥',
     condition: { type: 'damage', target: 100000 },
-    rewards: [{ type: 'dCharge', amount: 100 }],
+    rewards: [{ type: 'etherPack', amount: 400 }],
   },
   {
     id: 'dailyLogin',

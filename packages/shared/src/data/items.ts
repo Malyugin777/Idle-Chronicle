@@ -42,40 +42,18 @@ export const ITEMS: Record<string, ItemDefinition> = {
   // ═══════════════════════════════════════════════════════════
 
   // ─────────────────────────────────────────────────────────
-  // SOULSHOTS (Соулшоты) - усиливают атаку
+  // ETHER (Эфир) - усиливает атаку x2, 1 шт за удар
   // ─────────────────────────────────────────────────────────
-  'soulshot-ng': {
-    id: 'soulshot-ng',
-    code: 'soulshot-ng',
-    nameRu: 'Заряд души (NG)',
-    nameEn: 'Soulshot (NG)',
-    icon: '💚',
+  'ether': {
+    id: 'ether',
+    code: 'ether',
+    nameRu: 'Эфир',
+    nameEn: 'Ether',
+    icon: '✨',
     type: 'consumable',
     rarity: 'common',
     stackable: true,
-    dbField: 'soulshotNG',
-  },
-  'soulshot-d': {
-    id: 'soulshot-d',
-    code: 'soulshot-d',
-    nameRu: 'Заряд души (D)',
-    nameEn: 'Soulshot (D)',
-    icon: '💙',
-    type: 'consumable',
-    rarity: 'uncommon',
-    stackable: true,
-    dbField: 'soulshotD',
-  },
-  'soulshot-c': {
-    id: 'soulshot-c',
-    code: 'soulshot-c',
-    nameRu: 'Заряд души (C)',
-    nameEn: 'Soulshot (C)',
-    icon: '💜',
-    type: 'consumable',
-    rarity: 'rare',
-    stackable: true,
-    dbField: 'soulshotC',
+    dbField: 'ether',
   },
 
   // ─────────────────────────────────────────────────────────

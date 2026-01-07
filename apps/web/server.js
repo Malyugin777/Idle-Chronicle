@@ -257,14 +257,10 @@ const RAGE_PHASES = [
   { hpPercent: 25, multiplier: 2.0 },
 ];
 
-// Soulshot config (NG = x2 per TZ)
-const SOULSHOTS = {
-  NG: { multiplier: 2.0, cost: 10 },
-  D: { multiplier: 2.2, cost: 50 },
-  C: { multiplier: 3.5, cost: 250 },
-  B: { multiplier: 5.0, cost: 1000 },
-  A: { multiplier: 7.0, cost: 5000 },
-  S: { multiplier: 10.0, cost: 20000 },
+// Ether config - x2 damage, 1 per tap
+const ETHER = {
+  multiplier: 2.0,
+  cost: 10, // gold per 100
 };
 
 // Buff config
@@ -397,7 +393,7 @@ function calculateOfflineEarnings(player, lastOnline) {
 function calculateDamage(player, tapCount) {
   let totalDamage = 0;
   let crits = 0;
-  let soulshotUsed = 0;
+  let etherUsed = 0;
 
   const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
   let critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
@@ -412,30 +408,26 @@ function calculateDamage(player, tapCount) {
     if (buff.type === 'luck') critChance = Math.min(0.75, critChance + buff.value);
   }
 
-  // Soulshot multiplier
-  let ssMultiplier = 1.0;
-  const ssGrade = player.activeSoulshot;
-  if (ssGrade && SOULSHOTS[ssGrade]) {
-    const ssKey = `soulshot${ssGrade}`;
-    if (player[ssKey] > 0) {
-      ssMultiplier = SOULSHOTS[ssGrade].multiplier;
-      // Consume soulshots (1 per tap)
-      const consumed = Math.min(player[ssKey], tapCount);
-      player[ssKey] -= consumed;
-      soulshotUsed = consumed;
-      // Auto-deactivate if ran out
-      if (player[ssKey] <= 0) {
-        player.activeSoulshot = null;
-      }
+  // Ether multiplier (x2 damage, 1 per tap)
+  let etherMultiplier = 1.0;
+  if (player.autoEther && player.ether > 0) {
+    etherMultiplier = ETHER.multiplier;
+    // Consume ether (1 per tap)
+    const consumed = Math.min(player.ether, tapCount);
+    player.ether -= consumed;
+    etherUsed = consumed;
+    // Auto-deactivate if ran out
+    if (player.ether <= 0) {
+      player.autoEther = false;
     }
   }
 
   for (let i = 0; i < tapCount; i++) {
     let dmg = baseDamage * (0.9 + Math.random() * 0.2);
 
-    // Apply soulshot (only for taps that had soulshots)
-    if (i < soulshotUsed) {
-      dmg *= ssMultiplier;
+    // Apply ether (only for taps that had ether)
+    if (i < etherUsed) {
+      dmg *= etherMultiplier;
     }
 
     // Apply damage buff
@@ -454,7 +446,7 @@ function calculateDamage(player, tapCount) {
     totalDamage += Math.floor(dmg);
   }
 
-  return { totalDamage, crits, soulshotUsed };
+  return { totalDamage, crits, etherUsed };
 }
 
 function updateRagePhase() {
@@ -1163,9 +1155,7 @@ app.prepare().then(async () => {
               totalGoldEarned: Number(user.totalGoldEarned || 0),
               // Consumables
               enchantScrolls: user.enchantScrolls,
-              soulshotNG: user.soulshotNG,
-              soulshotD: user.soulshotD,
-              soulshotC: user.soulshotC,
+              ether: user.ether,
               // Progress
               totalDamage: Number(user.totalDamage),
               totalClicks: Number(user.totalClicks || 0),
@@ -1212,10 +1202,8 @@ app.prepare().then(async () => {
             intellect: user.intellect,
             spirit: user.spirit,
             // Consumables
-            soulshotNG: user.soulshotNG,
-            soulshotD: user.soulshotD,
-            soulshotC: user.soulshotC,
-            activeSoulshot: user.activeSoulshot,
+            ether: user.ether,
+            autoEther: user.autoEther,
             potionHaste: user.potionHaste,
             potionAcumen: user.potionAcumen,
             potionLuck: user.potionLuck,
@@ -1227,8 +1215,8 @@ app.prepare().then(async () => {
             // Calculated
             baseDamagePerTap: Math.floor(baseDamage),
             damageWithCrit: Math.floor(baseDamage * 2),
-            damageWithSoulshotC: Math.floor(baseDamage * 3.5),
-            maxDamagePerTap: Math.floor(baseDamage * 3.5 * 1.5 * 2 * 2), // SS + Acumen + Rage + Crit
+            damageWithEther: Math.floor(baseDamage * 2),
+            maxDamagePerTap: Math.floor(baseDamage * 2 * 1.5 * 2 * 2), // Ether + Acumen + Rage + Crit
           });
           return;
         }
@@ -1766,12 +1754,10 @@ app.prepare().then(async () => {
         // Give Consumables
         if (parsedUrl.pathname === '/api/admin/consumables/give' && req.method === 'POST') {
           const body = await parseBody();
-          const { odamage, soulshotNG, soulshotD, soulshotC, potionHaste, potionAcumen, potionLuck, enchantScrolls } = body;
+          const { odamage, ether, potionHaste, potionAcumen, potionLuck, enchantScrolls } = body;
 
           const updateData = {};
-          if (soulshotNG) updateData.soulshotNG = { increment: soulshotNG };
-          if (soulshotD) updateData.soulshotD = { increment: soulshotD };
-          if (soulshotC) updateData.soulshotC = { increment: soulshotC };
+          if (ether) updateData.ether = { increment: ether };
           if (potionHaste) updateData.potionHaste = { increment: potionHaste };
           if (potionAcumen) updateData.potionAcumen = { increment: potionAcumen };
           if (potionLuck) updateData.potionLuck = { increment: potionLuck };
@@ -1780,7 +1766,7 @@ app.prepare().then(async () => {
           const user = await prisma.user.update({
             where: { id: odamage },
             data: updateData,
-            select: { soulshotNG: true, soulshotD: true, soulshotC: true, potionHaste: true, potionAcumen: true, potionLuck: true, enchantScrolls: true },
+            select: { ether: true, potionHaste: true, potionAcumen: true, potionLuck: true, enchantScrolls: true },
           });
           sendJson({ success: true, consumables: user });
           return;
@@ -1900,14 +1886,9 @@ app.prepare().then(async () => {
       sessionDamage: 0,
       sessionClicks: 0,
       sessionCrits: 0,
-      // Soulshots
-      activeSoulshot: null,
-      soulshotNG: 100,
-      soulshotD: 0,
-      soulshotC: 0,
-      soulshotB: 0,
-      soulshotA: 0,
-      soulshotS: 0,
+      // Ether
+      autoEther: false,
+      ether: 100,
       // Potions
       potionHaste: 0,
       potionAcumen: 0,
@@ -2025,10 +2006,8 @@ app.prepare().then(async () => {
             totalDamage: Number(user.totalDamage),
             bossesKilled: user.bossesKilled,
             // Consumables
-            activeSoulshot: user.activeSoulshot,
-            soulshotNG: user.soulshotNG,
-            soulshotD: user.soulshotD,
-            soulshotC: user.soulshotC,
+            autoEther: user.autoEther || false,
+            ether: user.ether,
             potionHaste: user.potionHaste,
             potionAcumen: user.potionAcumen,
             potionLuck: user.potionLuck,
@@ -2406,10 +2385,8 @@ app.prepare().then(async () => {
         player.autoAttackSpeed = user.autoAttackSpeed;
         player.isFirstLogin = user.isFirstLogin;
         player.gold = Number(user.gold);
-        player.activeSoulshot = user.activeSoulshot;
-        player.soulshotNG = user.soulshotNG;
-        player.soulshotD = user.soulshotD;
-        player.soulshotC = user.soulshotC;
+        player.autoEther = user.autoEther || false;
+        player.ether = user.ether;
         player.potionHaste = user.potionHaste;
         player.potionAcumen = user.potionAcumen;
         player.potionLuck = user.potionLuck;
@@ -2472,10 +2449,8 @@ app.prepare().then(async () => {
           isFirstLogin: user.isFirstLogin,
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
-          activeSoulshot: user.activeSoulshot,
-          soulshotNG: user.soulshotNG,
-          soulshotD: user.soulshotD,
-          soulshotC: user.soulshotC,
+          autoEther: user.autoEther || false,
+          ether: user.ether,
           potionHaste: user.potionHaste,
           potionAcumen: user.potionAcumen,
           potionLuck: user.potionLuck,
@@ -2545,7 +2520,7 @@ app.prepare().then(async () => {
       // Deduct stamina
       player.stamina -= tapCount * staminaCostPerTap;
 
-      const { totalDamage, crits, soulshotUsed } = calculateDamage(player, tapCount);
+      const { totalDamage, crits, etherUsed } = calculateDamage(player, tapCount);
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
 
@@ -2575,10 +2550,9 @@ app.prepare().then(async () => {
         // Legacy mana
         mana: player.mana,
         sessionDamage: player.sessionDamage,
-        soulshotUsed,
-        activeSoulshot: player.activeSoulshot,
-        soulshotNG: player.soulshotNG, // Always send NG count for battle UI
-        [`soulshot${player.activeSoulshot}`]: player.activeSoulshot ? player[`soulshot${player.activeSoulshot}`] : undefined,
+        etherUsed,
+        autoEther: player.autoEther,
+        ether: player.ether,
       });
 
       io.emit('damage:feed', {
@@ -3548,39 +3522,29 @@ app.prepare().then(async () => {
       }
 
       try {
-        if (data.type === 'soulshot') {
-          const grade = data.grade;
+        if (data.type === 'ether') {
           const quantity = data.quantity || 100;
 
-          if (!SOULSHOTS[grade]) {
-            socket.emit('shop:error', { message: 'Invalid grade' });
-            return;
-          }
-
-          const totalCost = SOULSHOTS[grade].cost * (quantity / 100);
+          const totalCost = ETHER.cost * (quantity / 100);
           if (player.gold < totalCost) {
             socket.emit('shop:error', { message: 'Not enough gold' });
             return;
           }
 
           player.gold -= totalCost;
-          const ssKey = `soulshot${grade}`;
-          player[ssKey] = (player[ssKey] || 0) + quantity;
-
-          // Update DB (only for NG, D, C which exist in schema)
-          const updateData = { gold: BigInt(player.gold) };
-          if (['NG', 'D', 'C'].includes(grade)) {
-            updateData[ssKey] = player[ssKey];
-          }
+          player.ether = (player.ether || 0) + quantity;
 
           await prisma.user.update({
             where: { id: player.odamage },
-            data: updateData,
+            data: {
+              gold: BigInt(player.gold),
+              ether: player.ether,
+            },
           });
 
           socket.emit('shop:success', {
             gold: player.gold,
-            [ssKey]: player[ssKey],
+            ether: player.ether,
           });
         } else if (data.type === 'buff') {
           const buffId = data.buffId;
@@ -3618,43 +3582,23 @@ app.prepare().then(async () => {
       }
     });
 
-    // SOULSHOT TOGGLE
-    socket.on('soulshot:toggle', async (data) => {
-      if (!player.odamage) return;
-
-      const grade = data.grade;
-      player.activeSoulshot = grade;
-
-      try {
-        await prisma.user.update({
-          where: { id: player.odamage },
-          data: { activeSoulshot: grade },
-        });
-      } catch (err) {}
-
-      socket.emit('shop:success', { activeSoulshot: grade });
-    });
-
-    // SOULSHOT AUTO-USE (from battle screen slot)
-    socket.on('soulshot:autoUse', async (data) => {
+    // ETHER TOGGLE (auto-use on/off)
+    socket.on('ether:toggle', async (data) => {
       if (!player.odamage) return;
 
       const enabled = data.enabled;
-      // When auto-use enabled, set activeSoulshot to 'NG'
-      // When disabled, set to null
-      const grade = enabled ? 'NG' : null;
-      player.activeSoulshot = grade;
+      player.autoEther = enabled;
 
       try {
         await prisma.user.update({
           where: { id: player.odamage },
-          data: { activeSoulshot: grade },
+          data: { autoEther: enabled },
         });
       } catch (err) {
-        console.error('[Soulshot] AutoUse toggle error:', err.message);
+        console.error('[Ether] Toggle error:', err.message);
       }
 
-      socket.emit('soulshot:autoUse:ack', { enabled, activeSoulshot: grade });
+      socket.emit('ether:toggle:ack', { enabled, ether: player.ether });
     });
 
     // TASKS CLAIM - обработка наград за задачи
@@ -3677,11 +3621,8 @@ app.prepare().then(async () => {
 
         for (const reward of rewards) {
           switch (reward.type) {
-            case 'ngPack':
-              updateData.soulshotNG = { increment: reward.amount };
-              break;
-            case 'dCharge':
-              updateData.soulshotD = { increment: reward.amount };
+            case 'etherPack':
+              updateData.ether = { increment: reward.amount };
               break;
             case 'crystals':
               updateData.ancientCoin = { increment: reward.amount };
@@ -3765,8 +3706,7 @@ app.prepare().then(async () => {
           where: { id: player.odamage },
         });
         if (updatedUser) {
-          player.soulshotNG = updatedUser.soulshotNG;
-          player.soulshotD = updatedUser.soulshotD;
+          player.ether = updatedUser.ether;
           player.ancientCoin = updatedUser.ancientCoin;
           player.potionHaste = updatedUser.potionHaste;
           player.potionAcumen = updatedUser.potionAcumen;
@@ -3778,8 +3718,7 @@ app.prepare().then(async () => {
 
         // Send updated consumables to client
         socket.emit('player:state', {
-          soulshotNG: player.soulshotNG,
-          soulshotD: player.soulshotD,
+          ether: player.ether,
           ancientCoin: player.ancientCoin,
           potionHaste: player.potionHaste,
           potionAcumen: player.potionAcumen,
@@ -4020,10 +3959,8 @@ app.prepare().then(async () => {
             // Legacy mana
             mana: Math.floor(player.mana),
             gold: BigInt(player.gold),
-            activeSoulshot: player.activeSoulshot,
-            soulshotNG: player.soulshotNG,
-            soulshotD: player.soulshotD,
-            soulshotC: player.soulshotC,
+            autoEther: player.autoEther,
+            ether: player.ether,
             lastOnline: new Date(),
           };
 
@@ -4215,7 +4152,7 @@ app.prepare().then(async () => {
               crits,
               sessionDamage: player.sessionDamage,
               showHitEffect: true, // Trigger hit animation on client
-              soulshotNG: player.soulshotNG, // For battle UI
+              ether: player.ether, // For battle UI
             });
           }
 

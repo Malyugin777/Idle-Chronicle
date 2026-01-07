@@ -90,15 +90,12 @@ model User {
   enchantScrolls  Int      @default(0)    // Свитки заточки
 
   // Consumables
-  soulshotNG      Int      @default(100)
-  soulshotD       Int      @default(0)
-  soulshotC       Int      @default(0)
+  ether           Int      @default(100)
+  autoEther       Boolean  @default(false)
 
   potionHaste     Int      @default(0)
   potionAcumen    Int      @default(0)
   potionLuck      Int      @default(0)
-
-  activeSoulshot  String?
 
   // Equipment (legacy weapon)
   weaponId        String?

@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.57';
+const APP_VERSION = 'v1.0.58';
 
 interface BossState {
   name: string;
@@ -46,7 +46,7 @@ interface PlayerState {
   maxMana: number;
   exhaustedUntil: number | null;
   gold: number;
-  soulshotNG: number;
+  ether: number;
   // HUD fields
   level: number;
   crystals: number;
@@ -193,16 +193,16 @@ export default function PhaserGame() {
     maxMana: 1,
     exhaustedUntil: null,
     gold: 0,
-    soulshotNG: 0,
+    ether: 0,
     level: 1,
     crystals: 0,
     photoUrl: null,
   });
 
-  // Soulshot auto-use toggle (persisted in localStorage)
-  const [autoUseSoulshot, setAutoUseSoulshot] = useState<boolean>(() => {
+  // Ether auto-use toggle (persisted in localStorage)
+  const [autoUseEther, setAutoUseEther] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('ic_auto_soulshot') === 'true';
+      return localStorage.getItem('ic_auto_ether') === 'true';
     }
     return false;
   });
@@ -253,13 +253,13 @@ export default function PhaserGame() {
     return playerState.exhaustedUntil !== null && Date.now() < playerState.exhaustedUntil;
   }, [playerState.exhaustedUntil]);
 
-  // Toggle auto-use soulshot
-  const toggleAutoSoulshot = useCallback(() => {
-    setAutoUseSoulshot(prev => {
+  // Toggle auto-use ether
+  const toggleAutoEther = useCallback(() => {
+    setAutoUseEther(prev => {
       const newValue = !prev;
-      localStorage.setItem('ic_auto_soulshot', String(newValue));
+      localStorage.setItem('ic_auto_ether', String(newValue));
       // Notify server about toggle state
-      getSocket().emit('soulshot:autoUse', { enabled: newValue });
+      getSocket().emit('ether:toggle', { enabled: newValue });
       return newValue;
     });
   }, []);
@@ -430,7 +430,7 @@ export default function PhaserGame() {
         stamina: data.stamina ?? p.stamina,
         maxStamina: data.maxStamina ?? p.maxStamina,
         gold: data.gold ?? p.gold,
-        soulshotNG: data.soulshotNG ?? p.soulshotNG,
+        ether: data.ether ?? p.ether,
       }));
       // Track for tasks
       if (data.damage > 0) {
@@ -446,7 +446,7 @@ export default function PhaserGame() {
       setPlayerState(p => ({
         ...p,
         gold: data.gold ?? p.gold,
-        soulshotNG: data.soulshotNG ?? p.soulshotNG,
+        ether: data.ether ?? p.ether,
       }));
       // Track damage for tasks
       if (data.damage > 0) {
@@ -497,7 +497,7 @@ export default function PhaserGame() {
         maxMana: data.maxMana ?? 1000,
         exhaustedUntil: data.exhaustedUntil ?? null,
         gold: data.gold ?? 0,
-        soulshotNG: data.soulshotNG ?? 0,
+        ether: data.ether ?? 0,
         level: data.level ?? 1,
         crystals: data.ancientCoin ?? 0,
         photoUrl: data.photoUrl ?? null,
@@ -628,7 +628,7 @@ export default function PhaserGame() {
           maxStamina: data.maxStamina ?? p.maxStamina,
           mana: data.mana ?? p.mana,
           maxMana: data.maxMana ?? p.maxMana,
-          soulshotNG: data.soulshotNG ?? p.soulshotNG,
+          ether: data.ether ?? p.ether,
         }));
       }
     });
@@ -870,26 +870,26 @@ export default function PhaserGame() {
       {/* BOTTOM UI - Action Bar (Skills only) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
-        {/* Skill Buttons + Soulshot Slot */}
+        {/* Skill Buttons + Ether Slot */}
         <div className="flex justify-center items-center gap-3">
-          {/* Soulshot Slot */}
+          {/* Ether Slot (x2 damage) */}
           <button
-            onClick={toggleAutoSoulshot}
+            onClick={toggleAutoEther}
             className={`
               relative w-14 h-14 rounded-lg border-2
-              ${autoUseSoulshot && playerState.soulshotNG > 0 ? 'border-orange-500 bg-orange-900/30' : 'border-gray-600 bg-gray-900/90'}
+              ${autoUseEther && playerState.ether > 0 ? 'border-cyan-500 bg-cyan-900/30' : 'border-gray-600 bg-gray-900/90'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
-            <span className="text-2xl">💥</span>
+            <span className="text-2xl">✨</span>
             <span className="absolute -top-1 -right-1 bg-black/80 text-[10px] px-1 rounded text-gray-300">
-              {playerState.soulshotNG > 999 ? '999+' : playerState.soulshotNG}
+              {playerState.ether > 999 ? '999+' : playerState.ether}
             </span>
-            {autoUseSoulshot && playerState.soulshotNG > 0 && (
-              <span className="absolute bottom-0.5 text-[8px] text-orange-400 font-bold">AUTO</span>
+            {autoUseEther && playerState.ether > 0 && (
+              <span className="absolute bottom-0.5 text-[8px] text-cyan-400 font-bold">AUTO</span>
             )}
-            {playerState.soulshotNG === 0 && (
+            {playerState.ether === 0 && (
               <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
                 <span className="text-xs text-red-400">0</span>
               </div>
