@@ -442,7 +442,9 @@ function calculateDamage(player, tapCount) {
 
     const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
     dmg *= rageMultiplier;
-    dmg = Math.max(1, dmg - bossState.defense);
+    // Defense из шаблона по currentBossIndex
+    const bossDefense = (DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0]).defense;
+    dmg = Math.max(1, dmg - bossDefense);
     totalDamage += Math.floor(dmg);
   }
 
@@ -1533,6 +1535,8 @@ app.prepare().then(async () => {
     onlineUsers.set(socket.id, player);
 
     // Send initial state (with all fields including image)
+    // Берём defense/image из шаблона по currentBossIndex
+    const initTemplate = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
     socket.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
@@ -1540,11 +1544,11 @@ app.prepare().then(async () => {
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
-      defense: bossState.defense,
+      defense: initTemplate.defense, // Из шаблона
       ragePhase: bossState.ragePhase,
       playersOnline: onlineUsers.size,
       icon: bossState.icon,
-      image: bossState.image,
+      image: initTemplate.image || bossState.image, // Из шаблона
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       // Respawn timer info
@@ -3470,6 +3474,8 @@ app.prepare().then(async () => {
 
   // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {
+    // Всегда берём defense/image из шаблона по currentBossIndex
+    const template = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
     io.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
@@ -3477,10 +3483,10 @@ app.prepare().then(async () => {
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
-      defense: bossState.defense,
+      defense: template.defense, // Из шаблона
       ragePhase: bossState.ragePhase,
       icon: bossState.icon,
-      image: bossState.image,
+      image: template.image || bossState.image, // Из шаблона
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
@@ -3504,6 +3510,8 @@ app.prepare().then(async () => {
       await respawnBoss(prisma);
       await saveBossState(prisma);
 
+      // После respawnBoss currentBossIndex уже обновлён
+      const respawnTemplate = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
       io.emit('boss:respawn', {
         id: bossState.id,
         name: bossState.name,
@@ -3512,8 +3520,8 @@ app.prepare().then(async () => {
         hp: bossState.currentHp,
         maxHp: bossState.maxHp,
         icon: bossState.icon,
-        image: bossState.image,
-        defense: bossState.defense,
+        image: respawnTemplate.image || bossState.image,
+        defense: respawnTemplate.defense,
         bossIndex: bossState.bossIndex,
         totalBosses: bossState.totalBosses,
         prizePool: {
@@ -3595,7 +3603,9 @@ app.prepare().then(async () => {
             crits++;
           }
 
-          dmg = Math.max(1, dmg - bossState.defense);
+          // Defense из шаблона по currentBossIndex
+          const autoDefense = (DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0]).defense;
+          dmg = Math.max(1, dmg - autoDefense);
           totalAutoDamage += Math.floor(dmg);
         }
 

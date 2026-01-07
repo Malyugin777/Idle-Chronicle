@@ -16,7 +16,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.37';
+const APP_VERSION = 'v1.0.38';
 
 interface BossState {
   name: string;
@@ -554,7 +554,10 @@ export default function PhaserGame() {
             <span className="text-xs text-gray-400">
               {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
             </span>
-            <div className="text-[10px] text-gray-600">{APP_VERSION}</div>
+            <div className="text-[10px] text-gray-600">
+              {APP_VERSION}
+              {bossState.defense > 0 && <span className="ml-2">🛡️{bossState.defense}</span>}
+            </div>
           </div>
         </div>
         <div className="text-xs text-white mb-1">
@@ -568,11 +571,6 @@ export default function PhaserGame() {
             style={{ width: `${hpPercent}%` }}
           />
         </div>
-        {bossState.defense > 0 && (
-          <div className="text-xs text-gray-400 mt-1">
-            🛡️ pDef: {bossState.defense}
-          </div>
-        )}
         <button
           onClick={() => setShowDropTable(true)}
           className="mt-2 px-3 py-1 bg-purple-500/30 text-purple-300 text-xs rounded-lg border border-purple-500/40"
