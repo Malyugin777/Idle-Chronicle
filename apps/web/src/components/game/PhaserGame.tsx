@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.71';
+const APP_VERSION = 'v1.0.72';
 
 interface BossState {
   name: string;
@@ -1000,81 +1000,118 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, 60% width) */}
+      {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, premium design) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-28 left-0 right-0 z-10 flex flex-col items-center px-3"
+        className="absolute top-24 left-0 right-0 z-10 flex flex-col items-center px-4"
         onClick={handleHeaderTap}
       >
         {bossState.hp <= 0 && respawnCountdown > 0 ? (
-          /* Boss dead - show countdown */
-          <>
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-base">💀</span>
-              <span className="text-gray-400 font-bold text-sm">
-                {lang === 'ru' ? 'Босс мёртв' : 'Boss defeated'}
-              </span>
-            </div>
-            <div className="bg-black/70 rounded-lg px-4 py-2 border border-white/10">
-              <div className="text-xs text-gray-400 text-center mb-1">
-                {lang === 'ru' ? 'Следующий босс через' : 'Next boss in'}
+          /* Boss dead - show countdown with premium styling */
+          <div className="bg-gradient-to-b from-gray-900/95 to-black/90 rounded-xl px-6 py-4 border border-red-900/50 shadow-lg shadow-red-900/20">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-900/80 to-red-950 border-2 border-red-700/50 flex items-center justify-center shadow-inner">
+                <span className="text-xl">💀</span>
               </div>
-              <div className="text-xl font-bold text-l2-gold font-mono text-center">
+              <div>
+                <span className="text-red-400 font-bold text-sm block">
+                  {lang === 'ru' ? 'Босс повержен' : 'Boss defeated'}
+                </span>
+                <span className="text-gray-500 text-[10px]">
+                  {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+                </span>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                {lang === 'ru' ? 'Следующий босс' : 'Next boss in'}
+              </div>
+              <div className="text-2xl font-bold text-l2-gold font-mono tracking-wide drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
                 {Math.floor(respawnCountdown / 3600000)}:{String(Math.floor((respawnCountdown % 3600000) / 60000)).padStart(2, '0')}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
               </div>
             </div>
-            {/* Online count */}
-            <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-[9px] text-gray-500">
-                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-              </span>
+            <div className="text-center mt-2">
               <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
             </div>
-          </>
+          </div>
         ) : (
-          /* Boss alive - show HP bar */
-          <>
-            {/* Boss name centered above bar */}
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-base">{bossState.icon}</span>
-              <span className="text-l2-gold font-bold text-sm">{bossDisplayName}</span>
-              <span className="text-gray-500 text-[10px]">({bossState.bossIndex}/{bossState.totalBosses})</span>
-            </div>
-
-            {/* Floating HP bar - 60% width, thicker */}
-            <div className="w-[60%] h-5 bg-black/70 rounded-lg overflow-hidden relative border border-white/10 shadow-lg">
-              <div
-                className={`h-full transition-all duration-100 ${
-                  hpPercent < 25 ? 'bg-red-600 hp-critical' :
-                  hpPercent < 50 ? 'bg-orange-500' :
-                  hpPercent < 75 ? 'bg-yellow-500' : 'bg-green-500'
-                }`}
-                style={{ width: `${hpPercent}%` }}
-              />
-              {/* HP numbers centered inside bar */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[11px] text-white font-bold drop-shadow-md">
-                  {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
+          /* Boss alive - show HP bar with premium styling */
+          <div className="w-[75%] max-w-xs">
+            {/* Boss name plate */}
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-800/60 to-amber-950/80 border border-amber-600/40 flex items-center justify-center shadow-lg shadow-amber-900/30">
+                <span className="text-lg drop-shadow-md">{bossState.icon}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-l2-gold font-bold text-sm drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
+                  {bossDisplayName}
+                </span>
+                <span className="text-gray-500 text-[9px]">
+                  #{bossState.bossIndex} / {bossState.totalBosses}
                 </span>
               </div>
             </div>
 
-            {/* Secondary info row */}
-            <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-[9px] text-gray-500">
-                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-              </span>
-              <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
-              {/* Drop info button */}
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
-                className="w-6 h-6 bg-amber-700/40 rounded-full flex items-center justify-center
-                           border border-amber-600/50 active:scale-90 transition-transform"
-              >
-                <span className="text-sm">📦</span>
-              </button>
+            {/* HP Bar Container with frame */}
+            <div className="relative">
+              {/* Decorative corners */}
+              <div className="absolute -top-1 -left-1 w-2 h-2 border-l-2 border-t-2 border-amber-600/60" />
+              <div className="absolute -top-1 -right-1 w-2 h-2 border-r-2 border-t-2 border-amber-600/60" />
+              <div className="absolute -bottom-1 -left-1 w-2 h-2 border-l-2 border-b-2 border-amber-600/60" />
+              <div className="absolute -bottom-1 -right-1 w-2 h-2 border-r-2 border-b-2 border-amber-600/60" />
+
+              {/* Main HP bar */}
+              <div className="h-6 bg-gradient-to-b from-gray-900 to-black rounded-md overflow-hidden relative border border-gray-700/50 shadow-inner">
+                {/* HP fill with gradient */}
+                <div
+                  className={`h-full transition-all duration-150 relative ${
+                    hpPercent < 25 ? 'hp-critical' : ''
+                  }`}
+                  style={{
+                    width: `${hpPercent}%`,
+                    background: hpPercent < 25
+                      ? 'linear-gradient(to bottom, #dc2626, #991b1b)'
+                      : hpPercent < 50
+                        ? 'linear-gradient(to bottom, #ea580c, #c2410c)'
+                        : hpPercent < 75
+                          ? 'linear-gradient(to bottom, #eab308, #ca8a04)'
+                          : 'linear-gradient(to bottom, #22c55e, #16a34a)'
+                  }}
+                >
+                  {/* Shine effect */}
+                  <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent" />
+                </div>
+
+                {/* HP numbers */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
+                  </span>
+                </div>
+              </div>
             </div>
-          </>
+
+            {/* Info row below HP bar */}
+            <div className="flex items-center justify-between mt-2 px-1">
+              <div className="flex items-center gap-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className="text-[9px] text-gray-400">
+                  {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+                {/* Drop info button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
+                  className="w-6 h-6 bg-gradient-to-b from-amber-700/50 to-amber-900/50 rounded-md flex items-center justify-center
+                             border border-amber-600/40 active:scale-90 transition-all hover:border-amber-500/60 shadow-sm"
+                >
+                  <span className="text-xs">📦</span>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -1084,46 +1121,64 @@ export default function PhaserGame() {
       <div ref={containerRef} id="game-container" className="flex-1 w-full" />
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* DAMAGE FEED - Right side, below boss HP bar */}
+      {/* DAMAGE FEED - Right side, premium combat log */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-44 bottom-24 right-3 z-10 text-right overflow-hidden flex flex-col justify-start">
-        <div className="space-y-1">
-          {damageFeed.map((item, i) => (
-            <div
-              key={item.timestamp}
-              className={`text-xs ${item.isCrit ? 'text-red-400' : 'text-gray-400'}`}
-              style={{ opacity: 1 - i * 0.2 }}
-            >
-              {item.playerName}: -{item.damage.toLocaleString()}
+      <div className="absolute top-48 right-2 z-10 w-32">
+        {damageFeed.length > 0 && (
+          <div className="bg-black/40 rounded-lg border border-gray-800/50 backdrop-blur-sm overflow-hidden">
+            <div className="px-2 py-1 bg-gradient-to-r from-gray-900/80 to-transparent border-b border-gray-800/50">
+              <span className="text-[8px] text-gray-500 uppercase tracking-wider">Combat Log</span>
             </div>
-          ))}
-        </div>
+            <div className="p-1.5 space-y-0.5 max-h-32 overflow-hidden">
+              {damageFeed.map((item, i) => (
+                <div
+                  key={item.timestamp}
+                  className={`text-[10px] text-right px-1 py-0.5 rounded transition-all ${
+                    item.isCrit
+                      ? 'bg-red-900/30 text-red-400 border-l-2 border-red-500'
+                      : 'text-gray-400'
+                  }`}
+                  style={{ opacity: 1 - i * 0.18 }}
+                >
+                  <span className="text-gray-500">{item.playerName.slice(0, 8)}</span>
+                  <span className={item.isCrit ? 'text-red-400 font-bold' : 'text-gray-300'}>
+                    {' '}-{item.damage.toLocaleString()}
+                  </span>
+                  {item.isCrit && <span className="text-red-500 text-[8px]"> !</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) */}
+      {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) - Premium Design */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/80 to-transparent">
-        {/* AUTO + Skill Buttons + Ether Slot */}
-        <div className="flex justify-center items-center gap-2">
+      <div className="absolute bottom-0 left-0 right-0 z-10 pb-3 pt-6 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
+        {/* Action Bar Container */}
+        <div className="flex justify-center items-center gap-1.5 bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl p-2 border border-gray-700/30 shadow-lg">
           {/* AUTO Button (Smart Auto-Hunt) */}
           <button
             onClick={toggleAutoAttack}
             className={`
-              relative w-12 h-14 rounded-lg border-2
-              ${autoAttack ? 'border-green-500 bg-green-900/40' : 'border-gray-600 bg-gray-900/90'}
+              relative w-12 h-14 rounded-lg
+              ${autoAttack
+                ? 'bg-gradient-to-b from-green-700/80 to-green-900/90 border-2 border-green-500/70 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
+                : 'bg-gradient-to-b from-gray-700/50 to-gray-900/80 border-2 border-gray-600/50'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
-            <span className="text-lg">{autoAttack ? '⏸️' : '▶️'}</span>
-            <span className={`text-[9px] font-bold ${autoAttack ? 'text-green-400' : 'text-gray-400'}`}>
+            <span className="text-lg drop-shadow-md">{autoAttack ? '⏸️' : '▶️'}</span>
+            <span className={`text-[8px] font-bold ${autoAttack ? 'text-green-300' : 'text-gray-400'}`}>
               AUTO
             </span>
+            {autoAttack && <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/10" />}
           </button>
 
           {/* Separator */}
-          <div className="w-px h-10 bg-gray-700" />
+          <div className="w-px h-12 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
 
           {skills.map(skill => {
             const now = Date.now();
@@ -1133,27 +1188,45 @@ export default function PhaserGame() {
             const dataLoaded = bossState.maxHp > 1;
             const canUse = dataLoaded && !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
 
+            // Skill-specific gradient colors
+            const skillGradient = skill.id === 'fireball'
+              ? 'from-orange-700/70 to-red-900/90'
+              : skill.id === 'iceball'
+                ? 'from-cyan-700/70 to-blue-900/90'
+                : 'from-yellow-600/70 to-amber-900/90';
+            const skillGlow = skill.id === 'fireball'
+              ? 'shadow-[0_0_12px_rgba(249,115,22,0.4)]'
+              : skill.id === 'iceball'
+                ? 'shadow-[0_0_12px_rgba(34,211,238,0.4)]'
+                : 'shadow-[0_0_12px_rgba(250,204,21,0.4)]';
+
             return (
               <button
                 key={skill.id}
                 onClick={() => useSkill(skill)}
                 disabled={!canUse}
                 className={`
-                  relative w-14 h-14 rounded-lg border-2 ${skill.color}
-                  bg-gray-900/90 flex flex-col items-center justify-center
-                  ${canUse ? 'opacity-100' : 'opacity-50'}
+                  relative w-14 h-14 rounded-lg ${skill.color}
+                  ${canUse
+                    ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
+                    : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
+                  flex flex-col items-center justify-center
                   transition-all
-                  ${pressedSkill === skill.id ? 'skill-btn-press' : ''}
+                  ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
                 `}
               >
-                <span className="text-2xl">{skill.icon}</span>
+                <span className="text-2xl drop-shadow-lg">{skill.icon}</span>
+                {/* Shine effect when available */}
+                {canUse && !onCooldown && (
+                  <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
+                )}
                 {onCooldown && (
                   <>
                     <div
-                      className="absolute inset-0 bg-black/70 rounded-lg"
+                      className="absolute inset-0 bg-black/75 rounded-lg"
                       style={{ height: `${(remaining / skill.cooldown) * 100}%`, top: 'auto', bottom: 0 }}
                     />
-                    <span className="absolute text-xs font-bold text-white">
+                    <span className="absolute text-sm font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                       {Math.ceil(remaining / 1000)}
                     </span>
                   </>
@@ -1163,28 +1236,39 @@ export default function PhaserGame() {
           })}
 
           {/* Separator */}
-          <div className="w-px h-10 bg-gray-700" />
+          <div className="w-px h-12 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
 
-          {/* Ether Slot (x2 damage) */}
+          {/* Ether Slot (x2 damage) - Premium */}
           <button
             onClick={toggleAutoEther}
             className={`
-              relative w-14 h-14 rounded-lg border-2
-              ${autoUseEther && playerState.ether > 0 ? 'border-cyan-500 bg-cyan-900/30' : 'border-gray-600 bg-gray-900/90'}
+              relative w-14 h-14 rounded-lg
+              ${autoUseEther && playerState.ether > 0
+                ? 'bg-gradient-to-b from-cyan-600/70 to-cyan-900/90 border-2 border-cyan-400/60 shadow-[0_0_14px_rgba(34,211,238,0.4)]'
+                : playerState.ether > 0
+                  ? 'bg-gradient-to-b from-purple-700/50 to-purple-900/80 border-2 border-purple-500/40'
+                  : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 border-2 border-gray-600/50 opacity-50'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
-            <span className="text-2xl">✨</span>
-            <span className="absolute -top-1 -right-1 bg-black/80 text-[10px] px-1 rounded text-gray-300">
-              {playerState.ether > 999 ? '999+' : playerState.ether}
-            </span>
+            <span className="text-2xl drop-shadow-lg">✨</span>
+            {/* Ether count badge */}
+            <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-b from-purple-600 to-purple-800 px-1.5 py-0.5 rounded-md border border-purple-400/50 shadow-md">
+              <span className="text-[9px] font-bold text-white">
+                {playerState.ether > 999 ? '999+' : playerState.ether}
+              </span>
+            </div>
+            {/* Shine effect when active */}
             {autoUseEther && playerState.ether > 0 && (
-              <span className="absolute bottom-0.5 text-[8px] text-cyan-400 font-bold">AUTO</span>
+              <>
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
+                <span className="absolute bottom-1 text-[7px] text-cyan-300 font-bold uppercase tracking-wider">Auto</span>
+              </>
             )}
             {playerState.ether === 0 && (
-              <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
-                <span className="text-xs text-red-400">0</span>
+              <div className="absolute inset-0 bg-black/70 rounded-lg flex items-center justify-center">
+                <span className="text-xs text-red-400 font-bold">0</span>
               </div>
             )}
           </button>
