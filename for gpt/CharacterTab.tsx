@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
-import TasksModal from '../game/TasksModal';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -61,6 +60,25 @@ const SETS: Record<string, SetDefinition> = {
       { pieces: 6, bonusPct: { pAtk: 0.05, pDef: 0.05 }, description: { ru: '+5% физ. атака, +5% физ. защита', en: '+5% P.Atk, +5% P.Def' } },
     ],
   },
+};
+
+// Описания базовых статов
+const STAT_TOOLTIPS: Record<string, { ru: string; en: string }> = {
+  power: { ru: 'Сила — увеличивает физ. урон (+8% за единицу)', en: 'Power — increases P.Atk (+8% per point)' },
+  vitality: { ru: 'Выносливость — увеличивает макс. стамину (+80 за единицу)', en: 'Vitality — increases max stamina (+80 per point)' },
+  agility: { ru: 'Ловкость — увеличивает скорость атаки', en: 'Agility — increases attack speed' },
+  intellect: { ru: 'Интеллект — увеличивает маг. урон', en: 'Intellect — increases M.Atk' },
+  spirit: { ru: 'Дух — увеличивает макс. ману (+10 за единицу)', en: 'Spirit — increases max mana (+10 per point)' },
+};
+
+// Описания consumables
+const CONSUMABLE_TOOLTIPS: Record<string, { ru: string; en: string }> = {
+  soulshotNG: { ru: 'Заряд души (NG) — x2 урона на 1 тап', en: 'Soulshot (NG) — x2 damage per tap' },
+  soulshotD: { ru: 'Заряд души (D) — x2.2 урона на 1 тап', en: 'Soulshot (D) — x2.2 damage per tap' },
+  soulshotC: { ru: 'Заряд души (C) — x3.5 урона на 1 тап', en: 'Soulshot (C) — x3.5 damage per tap' },
+  potionHaste: { ru: 'Свиток скорости — +30% скорость атаки на 30 сек', en: 'Haste Scroll — +30% attack speed for 30s' },
+  potionAcumen: { ru: 'Свиток силы магии — +50% урона на 30 сек', en: 'Acumen Scroll — +50% damage for 30s' },
+  potionLuck: { ru: 'Свиток удачи — +10% шанс крита на 60 сек', en: 'Luck Scroll — +10% crit chance for 60s' },
 };
 
 interface PlayerStats {
@@ -189,6 +207,26 @@ function getActiveSetBonuses(setId: string, count: number): SetBonus[] {
 // ═══════════════════════════════════════════════════════════
 // STAT SYSTEM (local recalculation with set bonuses)
 // ═══════════════════════════════════════════════════════════
+
+// Вычисляет бонусы от экипировки (для показа дельты)
+function calculateEquipmentBonuses(heroState: HeroState): { pAtk: number; pDef: number; mAtk: number; mDef: number } {
+  let pAtk = 0;
+  let pDef = 0;
+  let mAtk = 0;
+  let mDef = 0;
+
+  // Flat bonuses from equipment
+  Object.values(heroState.equipment).forEach(item => {
+    if (item?.stats) {
+      pAtk += item.stats.pAtkFlat || 0;
+      pDef += item.stats.pDefFlat || 0;
+      mAtk += item.stats.mAtkFlat || 0;
+      mDef += item.stats.mDefFlat || 0;
+    }
+  });
+
+  return { pAtk, pDef, mAtk, mDef };
+}
 
 function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'] {
   const base = heroState.baseStats;
@@ -428,8 +466,9 @@ export default function CharacterTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
-  const [showTasks, setShowTasks] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
+  const [selectedStat, setSelectedStat] = useState<string | null>(null); // Подсказка по стату
+  const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null); // Описание consumable
   const [consumables, setConsumables] = useState<{
     soulshotNG: number;
     soulshotD: number;
@@ -531,10 +570,32 @@ export default function CharacterTab() {
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
 
+    // Buff usage feedback
+    const handleBuffSuccess = (data: { buffId: string; expiresAt: number; [key: string]: any }) => {
+      console.log('[Buff] Used:', data.buffId);
+      // Update consumables count
+      const potionKey = `potion${data.buffId.charAt(0).toUpperCase() + data.buffId.slice(1)}` as keyof typeof data;
+      if (data[potionKey] !== undefined) {
+        setConsumables(prev => ({
+          ...prev,
+          [potionKey]: data[potionKey] as number,
+        }));
+      }
+    };
+
+    const handleBuffError = (data: { message: string }) => {
+      console.error('[Buff] Error:', data.message);
+    };
+
+    socket.on('buff:success', handleBuffSuccess);
+    socket.on('buff:error', handleBuffError);
+
     return () => {
       socket.off('player:data');
       socket.off('auth:success');
       socket.off('equipment:data');
+      socket.off('buff:success');
+      socket.off('buff:error');
     };
   }, []);
 
@@ -577,6 +638,7 @@ export default function CharacterTab() {
 
   const stats = heroState.baseStats;
   const derived = heroState.derivedStats;
+  const equipBonus = calculateEquipmentBonuses(heroState); // Дельта от экипировки
   const expPercent = Math.min(100, (stats.exp / stats.expToNext) * 100);
 
   return (
@@ -749,36 +811,30 @@ export default function CharacterTab() {
         >
           ✨ {t.character.skills}
         </button>
-        <button
-          onClick={() => setShowTasks(true)}
-          className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-green-500/20 text-green-400 hover:text-green-300 hover:bg-green-500/30 transition-all"
-        >
-          🎯 {lang === 'ru' ? 'Задачи' : 'Tasks'}
-        </button>
       </div>
 
       {/* Inventory */}
       <div className="px-2 pb-2">
         {(() => {
           // Build consumables array for inventory display
-          const consumableSlots: { id: string; icon: string; count: number; color: string }[] = [];
+          const consumableSlots: { id: string; dbField: string; icon: string; count: number; color: string }[] = [];
           if (consumables.soulshotNG > 0) {
-            consumableSlots.push({ id: 'ssNG', icon: '💚', count: consumables.soulshotNG, color: 'text-green-400' });
+            consumableSlots.push({ id: 'ssNG', dbField: 'soulshotNG', icon: '💚', count: consumables.soulshotNG, color: 'text-green-400' });
           }
           if (consumables.soulshotD > 0) {
-            consumableSlots.push({ id: 'ssD', icon: '💙', count: consumables.soulshotD, color: 'text-blue-400' });
+            consumableSlots.push({ id: 'ssD', dbField: 'soulshotD', icon: '💙', count: consumables.soulshotD, color: 'text-blue-400' });
           }
           if (consumables.soulshotC > 0) {
-            consumableSlots.push({ id: 'ssC', icon: '💜', count: consumables.soulshotC, color: 'text-purple-400' });
+            consumableSlots.push({ id: 'ssC', dbField: 'soulshotC', icon: '💜', count: consumables.soulshotC, color: 'text-purple-400' });
           }
           if (consumables.potionHaste > 0) {
-            consumableSlots.push({ id: 'potHaste', icon: '⚡', count: consumables.potionHaste, color: 'text-yellow-400' });
+            consumableSlots.push({ id: 'potHaste', dbField: 'potionHaste', icon: '⚡', count: consumables.potionHaste, color: 'text-yellow-400' });
           }
           if (consumables.potionAcumen > 0) {
-            consumableSlots.push({ id: 'potAcumen', icon: '🔥', count: consumables.potionAcumen, color: 'text-orange-400' });
+            consumableSlots.push({ id: 'potAcumen', dbField: 'potionAcumen', icon: '🔥', count: consumables.potionAcumen, color: 'text-orange-400' });
           }
           if (consumables.potionLuck > 0) {
-            consumableSlots.push({ id: 'potLuck', icon: '🍀', count: consumables.potionLuck, color: 'text-green-400' });
+            consumableSlots.push({ id: 'potLuck', dbField: 'potionLuck', icon: '🍀', count: consumables.potionLuck, color: 'text-green-400' });
           }
 
           const totalSlots = heroState.inventory.length + consumableSlots.length;
@@ -789,18 +845,40 @@ export default function CharacterTab() {
                 <span className="text-xs text-gray-400">{t.character.inventory || 'Инвентарь'}</span>
                 <span className="text-xs text-gray-500">{totalSlots}/20</span>
               </div>
+              {/* Tooltip для выбранного consumable */}
+              {selectedConsumable && CONSUMABLE_TOOLTIPS[selectedConsumable] && (
+                <div className="mb-2 bg-purple-500/10 border border-purple-500/30 rounded p-2">
+                  <div className="text-[10px] text-purple-300 mb-1">
+                    {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
+                  </div>
+                  {/* Кнопка использования для баффов (не соулшотов) */}
+                  {selectedConsumable.startsWith('potion') && (
+                    <button
+                      onClick={() => {
+                        const buffId = selectedConsumable.replace('potion', '').toLowerCase(); // potionHaste → haste
+                        getSocket().emit('buff:use', { buffId });
+                        setSelectedConsumable(null);
+                      }}
+                      className="w-full mt-1 px-2 py-1 bg-purple-600/50 hover:bg-purple-600/70 border border-purple-500/50 rounded text-[10px] text-white font-medium active:scale-95 transition-all"
+                    >
+                      {lang === 'ru' ? '⚡ Использовать' : '⚡ Use'}
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-5 gap-2">
                 {/* Consumable slots (soulshots, potions) */}
                 {consumableSlots.map((cons) => (
-                  <div
+                  <button
                     key={cons.id}
-                    className="aspect-square bg-black/40 rounded-lg border border-white/20 flex items-center justify-center relative"
+                    onClick={() => setSelectedConsumable(selectedConsumable === cons.dbField ? null : cons.dbField)}
+                    className={`aspect-square bg-black/40 rounded-lg border ${selectedConsumable === cons.dbField ? 'border-purple-500 ring-1 ring-purple-500' : 'border-white/20'} flex items-center justify-center relative hover:brightness-110 active:scale-95 transition-all`}
                   >
                     <span className="text-xl">{cons.icon}</span>
                     <span className={`absolute top-0.5 right-1 text-[10px] font-bold ${cons.color}`}>
                       {cons.count > 999 ? `${Math.floor(cons.count / 1000)}k` : cons.count}
                     </span>
-                  </div>
+                  </button>
                 ))}
                 {/* Equipment items */}
                 {heroState.inventory.map((item) => {
@@ -863,11 +941,17 @@ export default function CharacterTab() {
               <div className="grid grid-cols-3 gap-1 mb-3">
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.pAtk}</div>
-                  <div className="text-xs font-bold text-red-400">{derived.pAtk}</div>
+                  <div className="text-xs font-bold text-red-400">
+                    {derived.pAtk}
+                    {equipBonus.pAtk > 0 && <span className="text-[8px] text-green-400 ml-0.5">(+{equipBonus.pAtk})</span>}
+                  </div>
                 </div>
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.pDef}</div>
-                  <div className="text-xs font-bold text-blue-400">{derived.pDef}</div>
+                  <div className="text-xs font-bold text-blue-400">
+                    {derived.pDef}
+                    {equipBonus.pDef > 0 && <span className="text-[8px] text-green-400 ml-0.5">(+{equipBonus.pDef})</span>}
+                  </div>
                 </div>
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.critChance}</div>
@@ -875,11 +959,17 @@ export default function CharacterTab() {
                 </div>
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.mAtk}</div>
-                  <div className="text-xs font-bold text-purple-400">{derived.mAtk}</div>
+                  <div className="text-xs font-bold text-purple-400">
+                    {derived.mAtk}
+                    {equipBonus.mAtk > 0 && <span className="text-[8px] text-green-400 ml-0.5">(+{equipBonus.mAtk})</span>}
+                  </div>
                 </div>
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.mDef}</div>
-                  <div className="text-xs font-bold text-cyan-400">{derived.mDef}</div>
+                  <div className="text-xs font-bold text-cyan-400">
+                    {derived.mDef}
+                    {equipBonus.mDef > 0 && <span className="text-[8px] text-green-400 ml-0.5">(+{equipBonus.mDef})</span>}
+                  </div>
                 </div>
                 <div className="bg-black/30 rounded p-1.5 text-center">
                   <div className="text-[9px] text-gray-500">{t.character.atkSpd}</div>
@@ -890,27 +980,33 @@ export default function CharacterTab() {
               {/* Base Stats */}
               <div className="text-[10px] text-gray-400 mb-1">{t.character.baseStats}</div>
               <div className="grid grid-cols-5 gap-1">
-                <div className="bg-black/30 rounded p-1.5 text-center">
+                <button onClick={() => setSelectedStat(selectedStat === 'power' ? null : 'power')} className={`bg-black/30 rounded p-1.5 text-center ${selectedStat === 'power' ? 'ring-1 ring-l2-gold' : ''}`}>
                   <div className="text-[8px] text-gray-500">{t.character.power}</div>
                   <div className="text-xs font-bold text-white">{stats.power}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
+                </button>
+                <button onClick={() => setSelectedStat(selectedStat === 'vitality' ? null : 'vitality')} className={`bg-black/30 rounded p-1.5 text-center ${selectedStat === 'vitality' ? 'ring-1 ring-l2-gold' : ''}`}>
                   <div className="text-[8px] text-gray-500">{t.character.vitality}</div>
                   <div className="text-xs font-bold text-white">{stats.vitality}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
+                </button>
+                <button onClick={() => setSelectedStat(selectedStat === 'agility' ? null : 'agility')} className={`bg-black/30 rounded p-1.5 text-center ${selectedStat === 'agility' ? 'ring-1 ring-l2-gold' : ''}`}>
                   <div className="text-[8px] text-gray-500">{t.character.agility}</div>
                   <div className="text-xs font-bold text-white">{stats.agility}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
+                </button>
+                <button onClick={() => setSelectedStat(selectedStat === 'intellect' ? null : 'intellect')} className={`bg-black/30 rounded p-1.5 text-center ${selectedStat === 'intellect' ? 'ring-1 ring-l2-gold' : ''}`}>
                   <div className="text-[8px] text-gray-500">{t.character.intellect}</div>
                   <div className="text-xs font-bold text-white">{stats.intellect}</div>
-                </div>
-                <div className="bg-black/30 rounded p-1.5 text-center">
+                </button>
+                <button onClick={() => setSelectedStat(selectedStat === 'spirit' ? null : 'spirit')} className={`bg-black/30 rounded p-1.5 text-center ${selectedStat === 'spirit' ? 'ring-1 ring-l2-gold' : ''}`}>
                   <div className="text-[8px] text-gray-500">{t.character.spirit}</div>
                   <div className="text-xs font-bold text-white">{stats.spirit}</div>
-                </div>
+                </button>
               </div>
+              {/* Tooltip для выбранного стата */}
+              {selectedStat && STAT_TOOLTIPS[selectedStat] && (
+                <div className="mt-2 bg-l2-gold/10 border border-l2-gold/30 rounded p-2 text-[10px] text-l2-gold">
+                  {lang === 'ru' ? STAT_TOOLTIPS[selectedStat].ru : STAT_TOOLTIPS[selectedStat].en}
+                </div>
+              )}
             </div>
             <div className="p-3 pt-0">
               <button
@@ -972,8 +1068,6 @@ export default function CharacterTab() {
         </div>
       )}
 
-      {/* Tasks Modal */}
-      <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
     </div>
   );
 }

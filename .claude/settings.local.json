@@ -26,7 +26,10 @@
       "Bash(node --check:*)",
       "Bash(./node_modules/.bin/tsc:*)",
       "Bash(git fetch:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(railway:*)"
     ]
   }
 }

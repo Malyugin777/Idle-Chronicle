@@ -2044,6 +2044,7 @@ app.prepare().then(async () => {
             // Consumables
             autoEther: user.autoEther || false,
             ether: user.ether,
+            etherDust: user.etherDust || 0,
             potionHaste: user.potionHaste,
             potionAcumen: user.potionAcumen,
             potionLuck: user.potionLuck,
