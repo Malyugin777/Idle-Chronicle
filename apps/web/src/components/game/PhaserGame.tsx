@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.69';
+const APP_VERSION = 'v1.0.70';
 
 interface BossState {
   name: string;
@@ -885,68 +885,110 @@ export default function PhaserGame() {
   return (
     <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* COMPACT PLAYER HUD - Top bar */}
+      {/* TOP HUD - Player info + Resources */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-0 left-0 right-0 z-20 px-3 py-1.5 bg-black/60">
-        <div className="flex items-center justify-between">
+      <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
+        {/* Row 1: Avatar + Level + Currency */}
+        <div className="flex items-center justify-between mb-2">
           {/* Left: Avatar + Level */}
-          <div className="flex items-center gap-1.5">
-            {playerState.photoUrl ? (
-              <img
-                src={playerState.photoUrl}
-                alt=""
-                className="w-7 h-7 rounded-full border border-l2-gold/50"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-l2-panel flex items-center justify-center">
-                <span className="text-xs">👤</span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              {playerState.photoUrl ? (
+                <img
+                  src={playerState.photoUrl}
+                  alt=""
+                  className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  <span className="text-lg">👤</span>
+                </div>
+              )}
+              {/* Level badge */}
+              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
+                {playerState.level}
               </div>
-            )}
-            <div className="bg-l2-gold/20 px-1.5 py-0.5 rounded">
-              <span className="text-[10px] font-bold text-l2-gold">Lv.{playerState.level}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400 leading-none">{lang === 'ru' ? 'Уровень' : 'Level'}</span>
+              <span className="text-sm font-bold text-amber-400">{playerState.level}</span>
             </div>
           </div>
 
           {/* Right: Gold + Crystals */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <span className="text-xs">🪙</span>
-              <span className="text-xs font-bold text-l2-gold">{formatCompact(playerState.gold)}</span>
+            {/* Gold */}
+            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2.5 py-1.5 rounded-lg border border-amber-600/40">
+              <span className="text-sm">🪙</span>
+              <span className="text-sm font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
             </div>
-            <div className="flex items-center gap-1 bg-purple-500/20 px-1.5 py-0.5 rounded">
-              <Gem className="text-purple-400" size={12} />
-              <span className="text-xs font-bold text-purple-400">{playerState.crystals}</span>
+            {/* Crystals */}
+            <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2.5 py-1.5 rounded-lg border border-purple-500/40">
+              <Gem className="text-purple-400" size={14} />
+              <span className="text-sm font-bold text-purple-300">{playerState.crystals}</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* L2-STYLE RESOURCE BARS - Top-left under HUD */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-10 left-3 z-15 w-[45%]">
-        {/* Mana Bar */}
-        <div className="h-3 bg-black/70 rounded overflow-hidden relative border border-white/10 mb-1">
-          <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${manaPercent}%` }} />
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold drop-shadow">
-            {Math.floor(playerState.mana)}/{playerState.maxMana}
-          </span>
+        {/* Row 2: Resource Bars */}
+        <div className="flex gap-2">
+          {/* Mana Bar */}
+          <div className="flex-1">
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-[10px]">💧</span>
+              <span className="text-[9px] text-blue-300 font-medium">MP</span>
+            </div>
+            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-blue-500/30 shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-200"
+                style={{ width: `${manaPercent}%` }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
+                {Math.floor(playerState.mana)}/{playerState.maxMana}
+              </span>
+            </div>
+          </div>
+
+          {/* Stamina Bar */}
+          <div className="flex-1">
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-[10px]">⚡</span>
+              <span className="text-[9px] text-green-300 font-medium">SP</span>
+            </div>
+            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-green-500/30 shadow-inner">
+              <div
+                className={`h-full transition-all duration-200 ${
+                  exhausted
+                    ? 'bg-gradient-to-r from-red-600 to-red-400'
+                    : staminaPercent < 25
+                      ? 'bg-gradient-to-r from-orange-600 to-orange-400'
+                      : 'bg-gradient-to-r from-green-600 to-green-400'
+                }`}
+                style={{ width: `${staminaPercent}%` }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
+                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+              </span>
+            </div>
+          </div>
+
+          {/* Tasks Button */}
+          <button
+            onClick={() => setShowTasks(true)}
+            className="relative w-10 h-10 bg-gray-900/80 rounded-lg border-2 border-gray-600
+                       flex items-center justify-center active:scale-90 transition-all
+                       hover:border-amber-500/50 hover:bg-gray-800/80"
+          >
+            <span className="text-lg">🎯</span>
+            {hasClaimable && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-400" />
+            )}
+          </button>
         </div>
-        {/* Stamina Bar */}
-        <div className="h-3 bg-black/70 rounded overflow-hidden relative border border-white/10">
-          <div
-            className={`h-full transition-all duration-100 ${
-              exhausted ? 'bg-red-500' : staminaPercent < 25 ? 'bg-orange-500' : 'bg-green-500'
-            }`}
-            style={{ width: `${staminaPercent}%` }}
-          />
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold drop-shadow">
-            {Math.floor(playerState.stamina)}/{playerState.maxStamina}
-          </span>
-        </div>
-        {/* Buffs - under resource bars */}
+
+        {/* Buffs Row */}
         {activeBuffs.length > 0 && (
-          <div className="flex gap-1 mt-1">
+          <div className="flex gap-1.5 mt-2">
             {activeBuffs.map(buff => (
               <BuffIcon key={buff.type} buff={buff} />
             ))}
@@ -955,24 +997,10 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* TASKS BUTTON - Right side, below HUD */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      <button
-        onClick={() => setShowTasks(true)}
-        className="absolute top-10 right-3 z-15 w-9 h-9 bg-black/70 rounded-lg border border-white/20
-                   flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all"
-      >
-        <span className="text-lg">🎯</span>
-        {hasClaimable && (
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-        )}
-      </button>
-
-      {/* ═══════════════════════════════════════════════════════════ */}
       {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, 60% width) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-20 left-0 right-0 z-10 flex flex-col items-center px-3"
+        className="absolute top-28 left-0 right-0 z-10 flex flex-col items-center px-3"
         onClick={handleHeaderTap}
       >
         {bossState.hp <= 0 && respawnCountdown > 0 ? (
@@ -1053,9 +1081,9 @@ export default function PhaserGame() {
       <div ref={containerRef} id="game-container" className="flex-1 w-full" />
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* DAMAGE FEED - Right side, between HP bar and Mana bar */}
+      {/* DAMAGE FEED - Right side, below boss HP bar */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-28 bottom-48 right-3 z-10 text-right overflow-hidden flex flex-col justify-start">
+      <div className="absolute top-44 bottom-24 right-3 z-10 text-right overflow-hidden flex flex-col justify-start">
         <div className="space-y-1">
           {damageFeed.map((item, i) => (
             <div
