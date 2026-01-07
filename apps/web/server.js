@@ -3348,6 +3348,16 @@ app.prepare().then(async () => {
         console.log(`[Tasks] Rewards applied for ${player.username}`);
         socket.emit('tasks:claimed', { taskId });
 
+        // Send updated consumables to client
+        socket.emit('player:state', {
+          soulshotNG: player.soulshotNG,
+          soulshotD: player.soulshotD,
+          ancientCoin: player.ancientCoin,
+          potionHaste: player.potionHaste,
+          potionAcumen: player.potionAcumen,
+          potionLuck: player.potionLuck,
+        });
+
         // Refresh chest data if chests were created
         if (chestsToCreate.length > 0) {
           const chests = await prisma.chest.findMany({

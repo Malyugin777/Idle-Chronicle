@@ -219,17 +219,24 @@ export default function TasksModal({ isOpen, onClose }: TasksModalProps) {
           </button>
         </div>
 
-        {/* Task List */}
+        {/* Task List - unclaimed first, claimed at bottom */}
         <div className="flex-1 overflow-auto p-3 space-y-2">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              lang={lang}
-              onClaim={handleClaim}
-              claiming={claiming}
-            />
-          ))}
+          {[...tasks]
+            .sort((a, b) => {
+              // Unclaimed first, claimed last
+              if (a.claimed && !b.claimed) return 1;
+              if (!a.claimed && b.claimed) return -1;
+              return 0;
+            })
+            .map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                lang={lang}
+                onClaim={handleClaim}
+                claiming={claiming}
+              />
+            ))}
         </div>
 
         {/* Footer */}

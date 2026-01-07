@@ -757,86 +757,78 @@ export default function CharacterTab() {
         </button>
       </div>
 
-      {/* Consumables (Soulshots & Potions) */}
-      {(consumables.soulshotNG > 0 || consumables.soulshotD > 0 || consumables.soulshotC > 0 ||
-        consumables.potionHaste > 0 || consumables.potionAcumen > 0 || consumables.potionLuck > 0) && (
-        <div className="px-2 mb-2">
-          <div className="text-xs text-gray-400 mb-1">{lang === 'ru' ? 'Расходники' : 'Consumables'}</div>
-          <div className="flex flex-wrap gap-2">
-            {consumables.soulshotNG > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">💚</span>
-                <span className="text-xs text-gray-300">NG</span>
-                <span className="text-xs text-green-400 font-bold">{consumables.soulshotNG}</span>
-              </div>
-            )}
-            {consumables.soulshotD > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">💙</span>
-                <span className="text-xs text-gray-300">D</span>
-                <span className="text-xs text-blue-400 font-bold">{consumables.soulshotD}</span>
-              </div>
-            )}
-            {consumables.soulshotC > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">💜</span>
-                <span className="text-xs text-gray-300">C</span>
-                <span className="text-xs text-purple-400 font-bold">{consumables.soulshotC}</span>
-              </div>
-            )}
-            {consumables.potionHaste > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">⚡</span>
-                <span className="text-xs text-yellow-400 font-bold">{consumables.potionHaste}</span>
-              </div>
-            )}
-            {consumables.potionAcumen > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">🔥</span>
-                <span className="text-xs text-orange-400 font-bold">{consumables.potionAcumen}</span>
-              </div>
-            )}
-            {consumables.potionLuck > 0 && (
-              <div className="flex items-center gap-1 bg-black/30 rounded px-2 py-1">
-                <span className="text-sm">🍀</span>
-                <span className="text-xs text-green-400 font-bold">{consumables.potionLuck}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Inventory */}
       <div className="px-2 pb-2">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-400">{t.character.inventory || 'Инвентарь'}</span>
-          <span className="text-xs text-gray-500">{heroState.inventory.length}/20</span>
-        </div>
-        <div className="grid grid-cols-5 gap-2">
-          {/* Filled slots */}
-          {heroState.inventory.map((item) => {
-            const style = RARITY_STYLES[item.rarity];
-            return (
-              <button
-                key={item.id}
-                onClick={() => setSelectedItem({ item, isEquipped: false })}
-                className={`aspect-square bg-black/40 rounded-lg border-2 ${style.border} ${style.glow}
-                  flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
-              >
-                <span className="text-xl">{item.icon}</span>
-              </button>
-            );
-          })}
-          {/* Empty slots */}
-          {Array.from({ length: Math.max(0, 20 - heroState.inventory.length) }).map((_, i) => (
-            <div
-              key={`empty-${i}`}
-              className="aspect-square bg-black/20 rounded-lg border border-white/5 flex items-center justify-center"
-            >
-              <span className="text-[10px] text-gray-700">-</span>
-            </div>
-          ))}
-        </div>
+        {(() => {
+          // Build consumables array for inventory display
+          const consumableSlots: { id: string; icon: string; count: number; color: string }[] = [];
+          if (consumables.soulshotNG > 0) {
+            consumableSlots.push({ id: 'ssNG', icon: '💚', count: consumables.soulshotNG, color: 'text-green-400' });
+          }
+          if (consumables.soulshotD > 0) {
+            consumableSlots.push({ id: 'ssD', icon: '💙', count: consumables.soulshotD, color: 'text-blue-400' });
+          }
+          if (consumables.soulshotC > 0) {
+            consumableSlots.push({ id: 'ssC', icon: '💜', count: consumables.soulshotC, color: 'text-purple-400' });
+          }
+          if (consumables.potionHaste > 0) {
+            consumableSlots.push({ id: 'potHaste', icon: '⚡', count: consumables.potionHaste, color: 'text-yellow-400' });
+          }
+          if (consumables.potionAcumen > 0) {
+            consumableSlots.push({ id: 'potAcumen', icon: '🔥', count: consumables.potionAcumen, color: 'text-orange-400' });
+          }
+          if (consumables.potionLuck > 0) {
+            consumableSlots.push({ id: 'potLuck', icon: '🍀', count: consumables.potionLuck, color: 'text-green-400' });
+          }
+
+          const totalSlots = heroState.inventory.length + consumableSlots.length;
+
+          return (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">{t.character.inventory || 'Инвентарь'}</span>
+                <span className="text-xs text-gray-500">{totalSlots}/20</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {/* Consumable slots (soulshots, potions) */}
+                {consumableSlots.map((cons) => (
+                  <div
+                    key={cons.id}
+                    className="aspect-square bg-black/40 rounded-lg border border-white/20 flex items-center justify-center relative"
+                  >
+                    <span className="text-xl">{cons.icon}</span>
+                    <span className={`absolute top-0.5 right-1 text-[10px] font-bold ${cons.color}`}>
+                      {cons.count > 999 ? `${Math.floor(cons.count / 1000)}k` : cons.count}
+                    </span>
+                  </div>
+                ))}
+                {/* Equipment items */}
+                {heroState.inventory.map((item) => {
+                  const style = RARITY_STYLES[item.rarity];
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedItem({ item, isEquipped: false })}
+                      className={`aspect-square bg-black/40 rounded-lg border-2 ${style.border} ${style.glow}
+                        flex items-center justify-center hover:brightness-110 active:scale-95 transition-all`}
+                    >
+                      <span className="text-xl">{item.icon}</span>
+                    </button>
+                  );
+                })}
+                {/* Empty slots */}
+                {Array.from({ length: Math.max(0, 20 - totalSlots) }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="aspect-square bg-black/20 rounded-lg border border-white/5 flex items-center justify-center"
+                  >
+                    <span className="text-[10px] text-gray-700">-</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Item Tooltip */}

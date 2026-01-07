@@ -17,7 +17,7 @@ import { getTaskManager } from '@/lib/taskManager';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.43';
+const APP_VERSION = 'v1.0.44';
 
 interface BossState {
   name: string;
