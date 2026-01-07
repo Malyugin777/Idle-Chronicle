@@ -171,6 +171,12 @@ async function loadBossState(prisma) {
       }
     }
 
+    // Load previous boss session
+    if (state.previousBossSession) {
+      previousBossSession = state.previousBossSession;
+      console.log('[Boss] Loaded previous boss session');
+    }
+
     console.log(`[Boss] Loaded state: ${bossState.name} (${bossState.nameRu}) HP=${bossState.currentHp}/${bossState.maxHp}`);
     return true;
   } catch (err) {
@@ -204,6 +210,7 @@ async function saveBossState(prisma) {
         bossChestsReward: bossState.chestsReward || 10,
         respawnAt: bossRespawnAt,
         sessionLeaderboard: leaderboardArray,
+        previousBossSession: previousBossSession, // Сохраняем предыдущего босса
       },
       create: {
         id: 'singleton',
@@ -221,6 +228,7 @@ async function saveBossState(prisma) {
         bossChestsReward: bossState.chestsReward || 10,
         respawnAt: bossRespawnAt,
         sessionLeaderboard: leaderboardArray,
+        previousBossSession: previousBossSession, // Сохраняем предыдущего босса
       },
     });
   } catch (err) {
@@ -275,19 +283,14 @@ const CHEST_CONFIG = {
   GOLD: { duration: 8 * 60 * 60 * 1000, icon: '🟨', name: 'Золотой' },       // 8 hours
 };
 
-// DEBUG: Быстрое открытие сундуков для тестовых аккаунтов (30 сек)
-const DEBUG_FAST_CHEST_USERNAMES = ['malyugin777', 'malyugin7777'];
-const DEBUG_CHEST_DURATION = 30 * 1000; // 30 секунд
-
-function getChestDuration(chestType, username) {
-  if (username && DEBUG_FAST_CHEST_USERNAMES.includes(username)) {
-    return DEBUG_CHEST_DURATION;
-  }
-  return CHEST_CONFIG[chestType].duration;
+// Получить длительность открытия сундука
+function getChestDuration(chestType) {
+  return CHEST_CONFIG[chestType]?.duration || CHEST_CONFIG.WOODEN.duration;
 }
 
 // ═══════════════════════════════════════════════════════════
-// CHEST DROP CONFIG — GPT формат (itemChance + rarityWeights)
+// CHEST DROP CONFIG — синхронизировано с packages/shared/src/data/lootTables.ts
+// TODO: После сборки shared импортировать оттуда напрямую
 // ═══════════════════════════════════════════════════════════
 const CHEST_DROP_RATES = {
   WOODEN: {
@@ -325,6 +328,8 @@ const CHEST_DROP_RATES = {
 };
 
 // Starter equipment set (Novice Set)
+// Синхронизировано с packages/shared/src/data/items.ts (novice set)
+// TODO: После сборки shared импортировать оттуда напрямую
 const STARTER_EQUIPMENT = [
   { code: 'starter-sword', slot: 'WEAPON', name: 'Меч новичка', icon: '🗡️', pAtk: 8, setId: 'novice' },
   { code: 'starter-helmet', slot: 'HELMET', name: 'Шлем новичка', icon: '⛑️', pDef: 2, setId: 'novice' },
@@ -863,7 +868,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     }
   }
 
-  // Set respawn timer (5 minutes)
+  // Set respawn timer (5 hours)
   bossRespawnAt = new Date(Date.now() + BOSS_RESPAWN_TIME_MS);
 
   io.emit('boss:killed', {
@@ -1095,7 +1100,7 @@ app.prepare().then(async () => {
           return;
         }
 
-        // Get single user
+        // Get single user by ID
         if (parsedUrl.pathname.match(/^\/api\/admin\/users\/[^/]+$/) && req.method === 'GET') {
           const userId = parsedUrl.pathname.split('/').pop();
           const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -1112,6 +1117,61 @@ app.prepare().then(async () => {
               exp: user.exp.toString(),
               totalDamage: user.totalDamage.toString(),
             },
+          });
+          return;
+        }
+
+        // Get user stats by username (for debugging damage)
+        if (parsedUrl.pathname === '/api/admin/user-stats' && req.method === 'GET') {
+          const username = parsedUrl.query.username;
+          if (!username) {
+            sendJson({ success: false, error: 'Username required' }, 400);
+            return;
+          }
+          const user = await prisma.user.findFirst({
+            where: { username: { equals: username, mode: 'insensitive' } },
+            include: { equipment: true },
+          });
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+          // Calculate damage formula
+          const baseDamage = user.pAtk * (1 + user.str * 0.08);
+          sendJson({
+            success: true,
+            username: user.username,
+            firstName: user.firstName,
+            // Combat stats
+            pAtk: user.pAtk,
+            str: user.str,
+            dex: user.dex,
+            luck: user.luck,
+            critChance: user.critChance,
+            // L2 attributes
+            power: user.power,
+            agility: user.agility,
+            vitality: user.vitality,
+            intellect: user.intellect,
+            spirit: user.spirit,
+            // Consumables
+            soulshotNG: user.soulshotNG,
+            soulshotD: user.soulshotD,
+            soulshotC: user.soulshotC,
+            activeSoulshot: user.activeSoulshot,
+            potionHaste: user.potionHaste,
+            potionAcumen: user.potionAcumen,
+            potionLuck: user.potionLuck,
+            // Progress
+            totalDamage: user.totalDamage.toString(),
+            bossesKilled: user.bossesKilled,
+            // Equipment
+            equipment: user.equipment,
+            // Calculated
+            baseDamagePerTap: Math.floor(baseDamage),
+            damageWithCrit: Math.floor(baseDamage * 2),
+            damageWithSoulshotC: Math.floor(baseDamage * 3.5),
+            maxDamagePerTap: Math.floor(baseDamage * 3.5 * 1.5 * 2 * 2), // SS + Acumen + Rage + Crit
           });
           return;
         }
@@ -1789,7 +1849,7 @@ app.prepare().then(async () => {
               chestsToCreate.push({
                 userId: player.odamage,
                 chestType: type,
-                openingDuration: getChestDuration(type, player.username),
+                openingDuration: getChestDuration(type),
                 fromBossId: null,
                 fromSessionId: reward.bossSessionId,
               });
@@ -1952,7 +2012,7 @@ app.prepare().then(async () => {
         // Update player state from DB
         player.odamage = user.id;
         player.odamageN = user.firstName || user.username || 'Player';
-        player.username = user.username || null; // Для DEBUG_FAST_CHEST_USERNAMES
+        player.username = user.username || null;
         player.photoUrl = user.photoUrl || null;
         // Legacy stats
         player.str = user.str;
@@ -3853,6 +3913,35 @@ app.prepare().then(async () => {
     }
   }, 30000);
 
+  // Cleanup stale onlineUsers (every 5 minutes)
+  // Удаляем пользователей без активности > 30 минут
+  setInterval(() => {
+    const now = Date.now();
+    const STALE_THRESHOLD = 30 * 60 * 1000; // 30 минут
+    let cleaned = 0;
+
+    for (const [socketId, player] of onlineUsers.entries()) {
+      // Проверяем, есть ли socket в io.sockets.sockets
+      const socket = io.sockets.sockets.get(socketId);
+      if (!socket) {
+        // Socket отключен, но не удалён из Map
+        onlineUsers.delete(socketId);
+        cleaned++;
+        continue;
+      }
+
+      // Проверяем время последней активности
+      if (player.lastActivityPing && (now - player.lastActivityPing) > STALE_THRESHOLD) {
+        onlineUsers.delete(socketId);
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log(`[Cleanup] Removed ${cleaned} stale users. Online: ${onlineUsers.size}`);
+    }
+  }, 5 * 60 * 1000);
+
   // ─────────────────────────────────────────────────────────
   // START
   // ─────────────────────────────────────────────────────────
@@ -3862,4 +3951,61 @@ app.prepare().then(async () => {
     console.log(`> Socket.IO ready`);
     console.log(`> Boss: ${bossState.name} (${bossState.currentHp} HP)`);
   });
+
+  // ─────────────────────────────────────────────────────────
+  // GRACEFUL SHUTDOWN
+  // ─────────────────────────────────────────────────────────
+
+  const shutdown = async (signal) => {
+    console.log(`\n[Shutdown] Received ${signal}, saving state...`);
+
+    try {
+      // Сохраняем состояние босса
+      await saveBossState(prisma);
+      console.log('[Shutdown] Boss state saved');
+
+      // Сохраняем данные онлайн игроков
+      for (const [socketId, player] of onlineUsers.entries()) {
+        if (player.odamage && player.sessionDamage > 0) {
+          try {
+            await prisma.user.update({
+              where: { id: player.odamage },
+              data: {
+                gold: BigInt(player.gold),
+                stamina: Math.floor(player.stamina),
+                mana: Math.floor(player.mana),
+                totalDamage: { increment: BigInt(player.sessionDamage) },
+                totalClicks: { increment: BigInt(player.sessionClicks) },
+              },
+            });
+            console.log(`[Shutdown] Saved user ${player.odamageN}`);
+          } catch (e) {
+            console.error(`[Shutdown] Error saving ${player.odamage}:`, e.message);
+          }
+        }
+      }
+
+      // Закрываем соединения
+      await prisma.$disconnect();
+      console.log('[Shutdown] Database disconnected');
+
+      io.close();
+      server.close(() => {
+        console.log('[Shutdown] Server closed');
+        process.exit(0);
+      });
+
+      // Timeout если сервер не закрылся
+      setTimeout(() => {
+        console.log('[Shutdown] Forced exit');
+        process.exit(1);
+      }, 10000);
+    } catch (err) {
+      console.error('[Shutdown] Error:', err.message);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 });

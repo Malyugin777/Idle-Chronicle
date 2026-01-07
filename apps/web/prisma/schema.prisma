@@ -570,5 +570,8 @@ model GameState {
   // Session leaderboard (JSON - resets on boss kill)
   sessionLeaderboard Json?
 
+  // Previous boss session (for leaderboard tab)
+  previousBossSession Json?
+
   updatedAt        DateTime @updatedAt
 }

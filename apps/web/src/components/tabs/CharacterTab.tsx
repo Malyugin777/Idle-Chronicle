@@ -572,10 +572,32 @@ export default function CharacterTab() {
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
 
+    // Buff usage feedback
+    const handleBuffSuccess = (data: { buffId: string; expiresAt: number; [key: string]: any }) => {
+      console.log('[Buff] Used:', data.buffId);
+      // Update consumables count
+      const potionKey = `potion${data.buffId.charAt(0).toUpperCase() + data.buffId.slice(1)}` as keyof typeof data;
+      if (data[potionKey] !== undefined) {
+        setConsumables(prev => ({
+          ...prev,
+          [potionKey]: data[potionKey] as number,
+        }));
+      }
+    };
+
+    const handleBuffError = (data: { message: string }) => {
+      console.error('[Buff] Error:', data.message);
+    };
+
+    socket.on('buff:success', handleBuffSuccess);
+    socket.on('buff:error', handleBuffError);
+
     return () => {
       socket.off('player:data');
       socket.off('auth:success');
       socket.off('equipment:data');
+      socket.off('buff:success');
+      socket.off('buff:error');
     };
   }, []);
 
@@ -833,8 +855,23 @@ export default function CharacterTab() {
               </div>
               {/* Tooltip для выбранного consumable */}
               {selectedConsumable && CONSUMABLE_TOOLTIPS[selectedConsumable] && (
-                <div className="mb-2 bg-purple-500/10 border border-purple-500/30 rounded p-2 text-[10px] text-purple-300">
-                  {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
+                <div className="mb-2 bg-purple-500/10 border border-purple-500/30 rounded p-2">
+                  <div className="text-[10px] text-purple-300 mb-1">
+                    {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
+                  </div>
+                  {/* Кнопка использования для баффов (не соулшотов) */}
+                  {selectedConsumable.startsWith('potion') && (
+                    <button
+                      onClick={() => {
+                        const buffId = selectedConsumable.replace('potion', '').toLowerCase(); // potionHaste → haste
+                        getSocket().emit('buff:use', { buffId });
+                        setSelectedConsumable(null);
+                      }}
+                      className="w-full mt-1 px-2 py-1 bg-purple-600/50 hover:bg-purple-600/70 border border-purple-500/50 rounded text-[10px] text-white font-medium active:scale-95 transition-all"
+                    >
+                      {lang === 'ru' ? '⚡ Использовать' : '⚡ Use'}
+                    </button>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-5 gap-2">
