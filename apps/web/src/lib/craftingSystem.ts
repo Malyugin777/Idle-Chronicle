@@ -508,7 +508,7 @@ export function debugEnchantChances(): void {
 }
 
 /**
- * Тест: проверка выхода от разбора
+ * Тест: проверка выхода от разбора (v1.2 - только dust)
  */
 export function debugSalvageOutput(): void {
   console.log('=== Salvage Output (Enchant Dust) ===');

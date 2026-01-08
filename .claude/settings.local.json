@@ -30,7 +30,9 @@
       "Bash(git checkout:*)",
       "Bash(git restore:*)",
       "Bash(railway:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npx @railway/cli run:*)",
+      "Bash(npx @railway/cli:*)"
     ]
   }
 }
