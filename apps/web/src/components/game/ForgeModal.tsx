@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Hammer, Flame, Package, Check, AlertTriangle, RefreshCw, Trash2, Zap, Plus } from 'lucide-react';
+import { X, Hammer, Package, Check, AlertTriangle, RefreshCw, Trash2, Zap, Plus } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
@@ -9,21 +9,12 @@ import {
   Rarity,
   PlayerResources,
   previewSalvage,
-  getFusionRequirements,
-  getItemsForFusion,
-  canFuse,
-  getMaxFusions,
   getRestoreCost,
   getBrokenTimeRemaining,
   formatBrokenTimer,
   RARITY_COLORS,
   RARITY_BG_COLORS,
   RARITY_NAMES,
-  // Merge imports
-  MERGE_TARGET_TO_CHEST,
-  MERGE_MAX_ITEMS,
-  calculateMergeChance,
-  canTargetRarityForMerge,
   ChestType,
 } from '@/lib/craftingSystem';
 
@@ -42,7 +33,7 @@ interface ForgeState {
   resources: PlayerResources;
 }
 
-type ForgeTab = 'salvage' | 'broken' | 'fusion' | 'merge';
+type ForgeTab = 'salvage' | 'broken' | 'merge';
 
 // Merge preview response from server
 interface MergePreview {
@@ -77,9 +68,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
   // Salvage state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-
-  // Fusion state
-  const [selectedFusionRarity, setSelectedFusionRarity] = useState<Rarity>('common');
+  const [showSalvageConfirm, setShowSalvageConfirm] = useState(false);
 
   // Merge state
   const [mergeSlots, setMergeSlots] = useState<(InventoryItem | null)[]>([null, null, null, null, null]);
@@ -178,7 +167,13 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
   const handleSalvage = useCallback(() => {
     if (selectedItems.size === 0 || loading) return;
+    setShowSalvageConfirm(true);
+  }, [selectedItems, loading]);
+
+  const confirmSalvage = useCallback(() => {
+    if (selectedItems.size === 0 || loading) return;
     setLoading(true);
+    setShowSalvageConfirm(false);
     const socket = getSocket();
     socket.emit('forge:salvage', { itemIds: Array.from(selectedItems) });
     setSelectedItems(new Set());
@@ -205,18 +200,6 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
     const socket = getSocket();
     socket.emit('forge:abandon', { itemId });
   }, [loading]);
-
-  // ─────────────────────────────────────────────────────────
-  // FUSION HANDLERS
-  // ─────────────────────────────────────────────────────────
-
-  const handleFusion = useCallback(() => {
-    if (loading) return;
-    if (!canFuse(forgeState.inventory, selectedFusionRarity)) return;
-    setLoading(true);
-    const socket = getSocket();
-    socket.emit('forge:fusion', { rarity: selectedFusionRarity });
-  }, [forgeState.inventory, selectedFusionRarity, loading]);
 
   // ─────────────────────────────────────────────────────────
   // MERGE HANDLERS
@@ -291,8 +274,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       icon: <AlertTriangle size={16} />,
       badge: forgeState.brokenItems.length || undefined,
     },
-    { id: 'fusion', label: lang === 'ru' ? 'Слияние' : 'Fusion', icon: <Flame size={16} /> },
-    { id: 'merge', label: lang === 'ru' ? 'Merge' : 'Merge', icon: <Zap size={16} /> },
+    { id: 'merge', label: lang === 'ru' ? 'Слияние' : 'Merge', icon: <Zap size={16} /> },
   ];
 
   return (
@@ -385,17 +367,6 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             />
           )}
 
-          {activeTab === 'fusion' && (
-            <FusionTab
-              inventory={forgeState.inventory}
-              selectedRarity={selectedFusionRarity}
-              setSelectedRarity={setSelectedFusionRarity}
-              onFusion={handleFusion}
-              loading={loading}
-              lang={lang}
-            />
-          )}
-
           {activeTab === 'merge' && (
             <MergeTab
               inventory={mergeEligibleItems}
@@ -420,6 +391,46 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             onClose={closeMergeResult}
             lang={lang}
           />
+        )}
+
+        {/* Salvage Confirm Modal */}
+        {showSalvageConfirm && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-10">
+            <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-5 max-w-sm w-full border border-red-500/50">
+              <div className="text-center mb-4">
+                <div className="text-4xl mb-2">⚠️</div>
+                <h3 className="text-lg font-bold text-red-400">
+                  {lang === 'ru' ? 'Подтвердите разбор' : 'Confirm Salvage'}
+                </h3>
+              </div>
+              <div className="bg-black/30 rounded-lg p-4 mb-4">
+                <p className="text-gray-400 text-sm mb-3">
+                  {lang === 'ru'
+                    ? `Вы разберёте ${selectedItems.size} предмет(ов)`
+                    : `You will salvage ${selectedItems.size} item(s)`}
+                </p>
+                <div className="flex items-center justify-center gap-2 text-lg">
+                  <span className="text-gray-400">{lang === 'ru' ? 'Получите:' : 'You get:'}</span>
+                  <span className="text-cyan-400 font-bold">✨ +{salvagePreview.dustAmount}</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSalvageConfirm(false)}
+                  className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 font-bold"
+                >
+                  {lang === 'ru' ? 'Отмена' : 'Cancel'}
+                </button>
+                <button
+                  onClick={confirmSalvage}
+                  disabled={loading}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white font-bold"
+                >
+                  {loading ? '...' : lang === 'ru' ? 'Разобрать' : 'Salvage'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -571,70 +582,83 @@ function BrokenTab({
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-gray-400">
-        {lang === 'ru'
-          ? 'Восстановите за 💎 или предмет будет удалён'
-          : 'Restore for 💎 or item will be deleted'}
-      </p>
+    <div className="space-y-4">
+      {/* Urgent warning */}
+      <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-3 animate-pulse">
+        <p className="text-red-400 text-sm font-bold text-center">
+          ⚠️ {lang === 'ru' ? 'ВОССТАНОВИТЕ ИЛИ ПОТЕРЯЕТЕ!' : 'RESTORE OR LOSE!'}
+        </p>
+      </div>
 
       {brokenItems.map(item => {
         const timeRemaining = getBrokenTimeRemaining(item.brokenUntil || null);
         const restoreCost = getRestoreCost(item.rarity, item.enchantOnBreak || 0);
         const canAfford = crystals >= restoreCost;
+        const isUrgent = timeRemaining < 3600000; // Less than 1 hour
 
         return (
           <div
             key={item.id}
-            className="bg-red-900/20 border border-red-500/30 rounded-lg p-3"
+            className={`rounded-xl p-4 border-2 ${
+              isUrgent
+                ? 'bg-red-900/40 border-red-500 animate-pulse'
+                : 'bg-red-900/20 border-red-500/30'
+            }`}
           >
-            <div className="flex items-center gap-3">
-              {/* Icon with crack overlay */}
-              <div className={`relative w-12 h-12 rounded-lg ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-xl opacity-60`}>
+            {/* Large icon + name row */}
+            <div className="flex items-center gap-4 mb-3">
+              <div className={`relative w-16 h-16 rounded-xl ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-3xl opacity-70`}>
                 <span>{item.icon}</span>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-red-500 text-2xl">💔</span>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
+                  <span className="text-red-500 text-3xl">💔</span>
                 </div>
               </div>
-
-              {/* Info */}
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className={`font-medium ${RARITY_COLORS[item.rarity]}`}>
+                  <span className={`font-bold text-lg ${RARITY_COLORS[item.rarity]}`}>
                     {item.name}
                   </span>
                   {(item.enchantOnBreak || 0) > 0 && (
-                    <span className="text-amber-400 text-sm">+{item.enchantOnBreak}</span>
+                    <span className="text-amber-400 font-bold">+{item.enchantOnBreak}</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                  <span className="text-red-400">⏳ {formatBrokenTimer(timeRemaining)}</span>
-                </div>
+                <p className="text-gray-500 text-xs mt-0.5">
+                  {lang === 'ru' ? 'Сломан при заточке' : 'Broken during enchant'}
+                </p>
               </div>
+            </div>
 
-              {/* Actions */}
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => onRestore(item.id)}
-                  disabled={!canAfford || loading}
-                  className={`px-3 py-1 rounded text-xs font-bold flex items-center gap-1 ${
-                    canAfford && !loading
-                      ? 'bg-purple-600 hover:bg-purple-500 text-white'
-                      : 'bg-gray-700 text-gray-500'
-                  }`}
-                >
-                  <RefreshCw size={12} />
-                  💎{restoreCost}
-                </button>
-                <button
-                  onClick={() => onAbandon(item.id)}
-                  disabled={loading}
-                  className="px-3 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center gap-1"
-                >
-                  <Trash2 size={12} />
-                  {lang === 'ru' ? 'Удалить' : 'Delete'}
-                </button>
-              </div>
+            {/* BIG countdown timer */}
+            <div className={`text-center py-3 rounded-lg mb-3 ${isUrgent ? 'bg-red-600/30' : 'bg-black/30'}`}>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
+                {lang === 'ru' ? 'Удаление через' : 'Deleted in'}
+              </p>
+              <p className={`text-2xl font-bold font-mono ${isUrgent ? 'text-red-400' : 'text-orange-400'}`}>
+                ⏳ {formatBrokenTimer(timeRemaining)}
+              </p>
+            </div>
+
+            {/* Action buttons - Restore is PRIMARY */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => onRestore(item.id)}
+                disabled={!canAfford || loading}
+                className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 text-sm transition-all ${
+                  canAfford && !loading
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-900/30'
+                    : 'bg-gray-700 text-gray-500'
+                }`}
+              >
+                <RefreshCw size={16} />
+                {lang === 'ru' ? 'Восстановить' : 'Restore'} 💎{restoreCost}
+              </button>
+              <button
+                onClick={() => onAbandon(item.id)}
+                disabled={loading}
+                className="px-4 py-3 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           </div>
         );
@@ -644,138 +668,7 @@ function BrokenTab({
 }
 
 // ═══════════════════════════════════════════════════════════
-// FUSION TAB
-// ═══════════════════════════════════════════════════════════
-
-interface FusionTabProps {
-  inventory: InventoryItem[];
-  selectedRarity: Rarity;
-  setSelectedRarity: (r: Rarity) => void;
-  onFusion: () => void;
-  loading: boolean;
-  lang: Language;
-}
-
-function FusionTab({
-  inventory,
-  selectedRarity,
-  setSelectedRarity,
-  onFusion,
-  loading,
-  lang,
-}: FusionTabProps) {
-  const rarities: Rarity[] = ['common', 'uncommon', 'rare'];
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-gray-400">
-        {lang === 'ru'
-          ? 'Объедините предметы одной редкости в сундук следующего уровня'
-          : 'Combine items of same rarity into a higher tier chest'}
-      </p>
-
-      {/* Rarity selector */}
-      <div className="flex gap-2">
-        {rarities.map(rarity => {
-          const req = getFusionRequirements(rarity);
-          const items = getItemsForFusion(inventory, rarity);
-          const maxFusions = getMaxFusions(inventory, rarity);
-
-          return (
-            <button
-              key={rarity}
-              onClick={() => setSelectedRarity(rarity)}
-              className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
-                selectedRarity === rarity
-                  ? 'border-amber-400 bg-amber-500/20'
-                  : `${RARITY_BG_COLORS[rarity]} border-transparent`
-              }`}
-            >
-              <div className={`text-sm font-bold ${RARITY_COLORS[rarity]}`}>
-                {lang === 'ru' ? RARITY_NAMES[rarity].ru : RARITY_NAMES[rarity].en}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">
-                {items.length}/{req?.count || 0}
-              </div>
-              {maxFusions > 0 && (
-                <div className="text-xs text-amber-400 mt-1">
-                  x{maxFusions}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Fusion info */}
-      {(() => {
-        const req = getFusionRequirements(selectedRarity);
-        const items = getItemsForFusion(inventory, selectedRarity);
-
-        if (!req) return null;
-
-        const chestNames: Record<string, { ru: string; en: string }> = {
-          bronze: { ru: 'Бронзовый сундук', en: 'Bronze Chest' },
-          silver: { ru: 'Серебряный сундук', en: 'Silver Chest' },
-          gold: { ru: 'Золотой сундук', en: 'Gold Chest' },
-        };
-
-        return (
-          <div className="bg-black/30 rounded-lg p-4">
-            <div className="text-center">
-              <div className="text-gray-400 text-sm mb-2">
-                {req.count}x {lang === 'ru' ? RARITY_NAMES[selectedRarity].ru : RARITY_NAMES[selectedRarity].en}
-              </div>
-              <div className="text-2xl mb-2">⬇️</div>
-              <div className="text-amber-400 font-bold">
-                {lang === 'ru' ? chestNames[req.resultChest].ru : chestNames[req.resultChest].en}
-              </div>
-            </div>
-
-            {/* Items preview */}
-            {items.length > 0 && (
-              <div className="mt-4 grid grid-cols-5 gap-1">
-                {items.slice(0, req.count).map((item) => (
-                  <div
-                    key={item.id}
-                    className={`w-10 h-10 rounded border flex items-center justify-center text-lg ${RARITY_BG_COLORS[item.rarity]}`}
-                  >
-                    {item.icon}
-                  </div>
-                ))}
-                {Array.from({ length: Math.max(0, req.count - items.length) }).map((_, i) => (
-                  <div
-                    key={`empty-${i}`}
-                    className="w-10 h-10 rounded border bg-gray-800 border-gray-700 flex items-center justify-center text-gray-600"
-                  >
-                    ?
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Fusion button */}
-      <button
-        onClick={onFusion}
-        disabled={!canFuse(inventory, selectedRarity) || loading}
-        className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
-          canFuse(inventory, selectedRarity) && !loading
-            ? 'bg-purple-600 hover:bg-purple-500 text-white'
-            : 'bg-gray-700 text-gray-500'
-        }`}
-      >
-        <Flame size={18} />
-        {loading ? '...' : lang === 'ru' ? 'Объединить' : 'Fuse'}
-      </button>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// MERGE TAB (Probability-based fusion)
+// MERGE TAB (Слияние - probability-based fusion)
 // ═══════════════════════════════════════════════════════════
 
 interface MergeTabProps {

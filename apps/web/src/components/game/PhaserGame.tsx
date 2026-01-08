@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.100';
+const APP_VERSION = 'v1.0.101';
 
 interface BossState {
   name: string;
@@ -1147,6 +1147,16 @@ export default function PhaserGame() {
                 </button>
               </div>
             </div>
+
+            {/* Your Damage display */}
+            {sessionDamage > 0 && (
+              <div className="mt-2 bg-black/60 rounded-lg px-3 py-1.5 border border-amber-600/30">
+                <div className="flex items-center justify-center gap-2 text-[10px]">
+                  <span className="text-gray-400">⚔️ {lang === 'ru' ? 'Твой урон:' : 'Your Damage:'}</span>
+                  <span className="text-amber-400 font-bold">{formatCompact(sessionDamage)}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1199,23 +1209,28 @@ export default function PhaserGame() {
       <div className="absolute bottom-0 left-0 right-0 z-10 pb-3 pt-6 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
         {/* Action Bar Container */}
         <div className="flex justify-center items-center gap-1.5 bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl p-2 border border-gray-700/30 shadow-lg">
-          {/* AUTO Button (Smart Auto-Hunt) */}
+          {/* AUTO Button (Smart Auto-Hunt) - Premium with pulse when ON */}
           <button
             onClick={toggleAutoAttack}
             className={`
               relative w-12 h-14 rounded-lg
               ${autoAttack
-                ? 'bg-gradient-to-b from-green-700/80 to-green-900/90 border-2 border-green-500/70 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
+                ? 'bg-gradient-to-b from-green-600 to-green-800 border-2 border-green-400 shadow-[0_0_16px_rgba(34,197,94,0.5)] animate-auto-pulse'
                 : 'bg-gradient-to-b from-gray-700/50 to-gray-900/80 border-2 border-gray-600/50'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
-            <span className="text-lg drop-shadow-md">{autoAttack ? '⏸️' : '▶️'}</span>
-            <span className={`text-[8px] font-bold ${autoAttack ? 'text-green-300' : 'text-gray-400'}`}>
-              AUTO
+            <span className="text-lg drop-shadow-md">{autoAttack ? '⚡' : '▶️'}</span>
+            <span className={`text-[7px] font-bold uppercase tracking-wider ${autoAttack ? 'text-green-200' : 'text-gray-400'}`}>
+              {autoAttack ? (lang === 'ru' ? 'АВТО' : 'ON') : 'AUTO'}
             </span>
-            {autoAttack && <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/10" />}
+            {autoAttack && (
+              <>
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/20 pointer-events-none" />
+                <div className="absolute -inset-0.5 rounded-lg border border-green-400/50 animate-ping opacity-30" />
+              </>
+            )}
           </button>
 
           {/* Separator */}
