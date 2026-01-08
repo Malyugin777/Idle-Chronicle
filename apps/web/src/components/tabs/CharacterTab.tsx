@@ -83,9 +83,7 @@ interface PlayerStats {
   attackSpeed: number;
   gold: number;
   ancientCoin?: number;
-  soulshotNG?: number;
-  soulshotD?: number;
-  soulshotC?: number;
+  ether?: number;
   potionHaste?: number;
   potionAcumen?: number;
   potionLuck?: number;

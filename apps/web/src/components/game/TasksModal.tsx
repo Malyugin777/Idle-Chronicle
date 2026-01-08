@@ -24,8 +24,7 @@ interface TaskCardProps {
 function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Language }) {
   const getRewardText = (reward: TaskReward): string => {
     const labels: Record<string, { ru: string; en: string }> = {
-      ngPack: { ru: 'NG Pack', en: 'NG Pack' },
-      dCharge: { ru: 'D Заряды', en: 'D Charges' },
+      ether: { ru: 'Эфир', en: 'Ether' },
       woodChest: { ru: 'Дерев. сундук', en: 'Wood Chest' },
       crystals: { ru: 'Кристаллы', en: 'Crystals' },
       scrollHaste: { ru: 'Haste', en: 'Haste' },
@@ -39,8 +38,7 @@ function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Languag
 
   const getRewardIcon = (type: string): string => {
     const icons: Record<string, string> = {
-      ngPack: '🔥',
-      dCharge: '💚',
+      ether: '✨',
       woodChest: '📦',
       crystals: '💎',
       scrollHaste: '⚡',

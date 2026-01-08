@@ -145,19 +145,12 @@ export const translations = {
     // Shop
     shop: {
       gold: 'Gold',
-      soulshots: 'Charges',
-      soulshotsDesc: 'Increase damage per tap. Toggle to activate.',
+      ether: 'Ether',
+      etherDesc: 'Doubles damage per tap.',
       owned: 'Owned',
       buffs: 'Buffs',
       buffsDesc: 'Temporary boosts. Use wisely!',
       use: 'Use',
-      // Charges
-      ssNG: 'NG Charge',
-      ssD: 'D Charge',
-      ssC: 'C Charge',
-      ssB: 'B Charge',
-      ssA: 'A Charge',
-      ssS: 'S Charge',
       // Buffs
       haste: 'Haste',
       hasteEffect: '+30% speed',
@@ -340,19 +333,12 @@ export const translations = {
     // Shop
     shop: {
       gold: 'Золото',
-      soulshots: 'Заряды',
-      soulshotsDesc: 'Увеличивают урон за тап. Нажми чтобы активировать.',
+      ether: 'Эфир',
+      etherDesc: 'Удваивает урон за тап.',
       owned: 'Есть',
       buffs: 'Баффы',
       buffsDesc: 'Временные усиления. Используй с умом!',
       use: 'Юзать',
-      // Заряды
-      ssNG: 'NG Заряд',
-      ssD: 'D Заряд',
-      ssC: 'C Заряд',
-      ssB: 'B Заряд',
-      ssA: 'A Заряд',
-      ssS: 'S Заряд',
       // Buffs
       haste: 'Хаст',
       hasteEffect: '+30% скорости',

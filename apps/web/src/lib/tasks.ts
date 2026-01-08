@@ -4,8 +4,7 @@
 
 export type TaskType = 'session' | 'daily';
 export type RewardType =
-  | 'ngPack'      // NG Charge pack (amount)
-  | 'dCharge'     // D-grade charges
+  | 'ether'       // Эфир (x2 урон)
   | 'woodChest'   // Wooden chest
   | 'crystals'    // Premium currency (ancientCoin)
   | 'scrollHaste' // Haste scroll
@@ -69,7 +68,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
     descEn: 'Make 50 taps',
     icon: '👆',
     condition: { type: 'taps', target: 50 },
-    rewards: [{ type: 'ngPack', amount: 100 }],
+    rewards: [{ type: 'ether', amount: 50 }],
   },
   {
     id: 'meatgrinder',
@@ -91,7 +90,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
     descEn: 'Deal 100,000 damage today',
     icon: '💥',
     condition: { type: 'damage', target: 100000 },
-    rewards: [{ type: 'dCharge', amount: 100 }],
+    rewards: [{ type: 'ether', amount: 100 }],
   },
   {
     id: 'chestHunter',
@@ -117,7 +116,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
     descEn: 'Use skills 30 times',
     icon: '✨',
     condition: { type: 'skillCasts', target: 30 },
-    rewards: [{ type: 'ngPack', amount: 400 }],
+    rewards: [{ type: 'ether', amount: 200 }],
   },
   {
     id: 'chestBoost',
