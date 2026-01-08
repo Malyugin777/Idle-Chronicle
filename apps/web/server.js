@@ -648,6 +648,68 @@ function calculateOfflineEarnings(player, lastOnline) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// EQUIPMENT STATS CALCULATION
+// ═══════════════════════════════════════════════════════════
+
+async function recalculateEquipmentStats(player, prisma) {
+  if (!player.odamage) return;
+
+  try {
+    // Get all equipped items with their equipment template (for slot info)
+    const equippedItems = await prisma.userEquipment.findMany({
+      where: {
+        userId: player.odamage,
+        isEquipped: true,
+        isBroken: false,  // Broken items don't give stats
+      },
+      include: { equipment: true },
+    });
+
+    // Sum up equipment bonuses
+    let equipPAtk = 0;
+    let equipPDef = 0;
+    let enchantPAtk = 0;
+    let enchantPDef = 0;
+
+    // Enchant bonus per level (weapons get pAtk, armor gets pDef)
+    const ENCHANT_PATK_PER_LEVEL = 2;  // +2 pAtk per enchant level on weapons
+    const ENCHANT_PDEF_PER_LEVEL = 1;  // +1 pDef per enchant level on armor
+
+    const WEAPON_SLOTS = ['WEAPON'];
+    const ARMOR_SLOTS = ['HELMET', 'CHEST', 'GLOVES', 'LEGS', 'BOOTS', 'SHIELD'];
+
+    for (const item of equippedItems) {
+      // Base stats from item
+      equipPAtk += item.pAtk || 0;
+      equipPDef += item.pDef || 0;
+
+      // Enchant bonus based on slot type
+      const slot = item.equipment?.slot;
+      const enchantLevel = item.enchant || 0;
+
+      if (WEAPON_SLOTS.includes(slot)) {
+        enchantPAtk += enchantLevel * ENCHANT_PATK_PER_LEVEL;
+      } else if (ARMOR_SLOTS.includes(slot)) {
+        enchantPDef += enchantLevel * ENCHANT_PDEF_PER_LEVEL;
+      }
+    }
+
+    // Store equipment bonuses separately
+    player.equipmentPAtk = equipPAtk + enchantPAtk;
+    player.equipmentPDef = equipPDef + enchantPDef;
+
+    // Update total pAtk (base + equipment + enchant)
+    // Base pAtk is stored in user.pAtk in DB (default 10)
+    player.pAtk = (player.basePAtk || 10) + equipPAtk + enchantPAtk;
+    player.pDef = (player.basePDef || 0) + equipPDef + enchantPDef;
+
+    console.log(`[Equipment] Recalculated stats for ${player.odamage}: pAtk=${player.pAtk} (base=${player.basePAtk}, equip=${equipPAtk}, enchant=+${enchantPAtk}), pDef=${player.pDef} (equip=${equipPDef}, enchant=+${enchantPDef})`);
+  } catch (err) {
+    console.error('[Equipment] Recalculate stats error:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // DAMAGE CALCULATION
 // ═══════════════════════════════════════════════════════════
 
@@ -2605,9 +2667,11 @@ app.prepare().then(async () => {
             agility: user.agility,
             intellect: user.intellect,
             spirit: user.spirit,
-            // Combat stats
-            pAtk: user.pAtk,
-            pDef: user.physicalDefense,
+            // Combat stats (use in-memory values which include equipment bonuses)
+            pAtk: player.pAtk ?? user.pAtk,
+            basePAtk: player.basePAtk ?? user.pAtk,
+            equipmentPAtk: player.equipmentPAtk ?? 0,
+            pDef: player.pDef ?? user.physicalDefense,
             mAtk: user.intellect * 2, // Magic attack based on intellect
             mDef: user.spirit * 2, // Magic defense based on spirit
             critChance: user.critChance,
@@ -3031,7 +3095,9 @@ app.prepare().then(async () => {
         player.str = user.str;
         player.dex = user.dex;
         player.luck = user.luck;
-        player.pAtk = user.pAtk;
+        player.basePAtk = user.pAtk;  // Store base pAtk
+        player.basePDef = user.physicalDefense || 0;
+        player.pAtk = user.pAtk;  // Will be recalculated with equipment
         player.critChance = user.critChance;
         // L2 Core Attributes (NEW)
         player.power = user.power || 10;
@@ -3066,11 +3132,13 @@ app.prepare().then(async () => {
         player.gold = Number(user.gold);
         player.autoEther = user.autoEther || false;
         player.autoAttack = user.autoAttack || false;
-        player.ether = user.ether;
-        player.etherDust = user.etherDust || 0;
-        player.potionHaste = user.potionHaste;
-        player.potionAcumen = user.potionAcumen;
-        player.potionLuck = user.potionLuck;
+        // Preserve in-memory values if already set (re-auth on tab switch)
+        // Only use DB values on first auth in this session
+        player.ether = player.ether ?? user.ether;
+        player.etherDust = player.etherDust ?? user.etherDust ?? 0;
+        player.potionHaste = player.potionHaste ?? user.potionHaste;
+        player.potionAcumen = player.potionAcumen ?? user.potionAcumen;
+        player.potionLuck = player.potionLuck ?? user.potionLuck;
 
         // Calculate offline meditation dust
         const now = Date.now();
@@ -3120,6 +3188,9 @@ app.prepare().then(async () => {
           expiresAt: b.expiresAt.getTime(),
         }));
 
+        // Recalculate stats from equipped items
+        await recalculateEquipmentStats(player, prisma);
+
         // Calculate expToNext based on level
         const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
 
@@ -3135,7 +3206,9 @@ app.prepare().then(async () => {
           str: user.str,
           dex: user.dex,
           luck: user.luck,
-          pAtk: user.pAtk,
+          pAtk: player.pAtk,  // Includes equipment bonuses
+          basePAtk: player.basePAtk,
+          equipmentPAtk: player.equipmentPAtk || 0,
           critChance: user.critChance,
           // L2 Core Attributes (NEW)
           power: player.power,
@@ -3168,16 +3241,17 @@ app.prepare().then(async () => {
           isFirstLogin: user.isFirstLogin,
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
-          autoEther: user.autoEther || false,
-          autoAttack: user.autoAttack || false,
-          ether: user.ether,
-          etherDust: user.etherDust || 0,
+          autoEther: player.autoEther ?? user.autoEther ?? false,
+          autoAttack: player.autoAttack ?? user.autoAttack ?? false,
+          // Use in-memory values (preserved from session, or DB on first auth)
+          ether: player.ether,
+          etherDust: player.etherDust,
           // Meditation (offline dust)
           pendingDust: player.pendingDust,
           offlineMinutes: player.offlineMinutes,
-          potionHaste: user.potionHaste,
-          potionAcumen: user.potionAcumen,
-          potionLuck: user.potionLuck,
+          potionHaste: player.potionHaste,
+          potionAcumen: player.potionAcumen,
+          potionLuck: player.potionLuck,
           activeBuffs: player.activeBuffs,
         });
       } catch (err) {
@@ -3305,11 +3379,11 @@ app.prepare().then(async () => {
       const { skillId } = data;
       const now = Date.now();
 
-      // Skill config
+      // Skill config (unified: 100 base + pAtk * 3)
       const SKILLS = {
-        fireball: { manaCost: 100, baseDamage: 500, multiplier: 1.5, cooldown: 10000 },
-        iceball: { manaCost: 100, baseDamage: 400, multiplier: 1.3, cooldown: 10000 },
-        lightning: { manaCost: 100, baseDamage: 600, multiplier: 1.8, cooldown: 10000 },
+        fireball: { manaCost: 100, baseDamage: 100, multiplier: 3.0, cooldown: 10000 },
+        iceball: { manaCost: 100, baseDamage: 100, multiplier: 3.0, cooldown: 10000 },
+        lightning: { manaCost: 100, baseDamage: 100, multiplier: 3.0, cooldown: 10000 },
       };
 
       const skill = SKILLS[skillId];
@@ -4750,8 +4824,19 @@ app.prepare().then(async () => {
           data: { isEquipped: true },
         });
 
+        // Recalculate player stats with new equipment
+        await recalculateEquipmentStats(player, prisma);
+
         console.log(`[Equipment] User ${player.odamage} equipped ${itemToEquip.equipment.name} in ${slot}`);
-        socket.emit('equipment:equipped', { success: true, itemId, slot });
+        socket.emit('equipment:equipped', {
+          success: true,
+          itemId,
+          slot,
+          pAtk: player.pAtk,
+          pDef: player.pDef,
+          equipmentPAtk: player.equipmentPAtk,
+          equipmentPDef: player.equipmentPDef,
+        });
       } catch (err) {
         console.error('[Equipment] Equip error:', err.message);
         socket.emit('equipment:equipped', { success: false, error: err.message });
@@ -4770,8 +4855,18 @@ app.prepare().then(async () => {
           data: { isEquipped: false },
         });
 
+        // Recalculate player stats without this equipment
+        await recalculateEquipmentStats(player, prisma);
+
         console.log(`[Equipment] User ${player.odamage} unequipped item ${itemId}`);
-        socket.emit('equipment:unequipped', { success: true, itemId });
+        socket.emit('equipment:unequipped', {
+          success: true,
+          itemId,
+          pAtk: player.pAtk,
+          pDef: player.pDef,
+          equipmentPAtk: player.equipmentPAtk,
+          equipmentPDef: player.equipmentPDef,
+        });
       } catch (err) {
         console.error('[Equipment] Unequip error:', err.message);
         socket.emit('equipment:unequipped', { success: false, error: err.message });
