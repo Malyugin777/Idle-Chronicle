@@ -441,15 +441,31 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 
         {/* Stats */}
         <div className="p-4 space-y-2">
+          {/* Set info */}
+          {item.setId && SETS[item.setId] && (
+            <div className="flex justify-between items-center p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
+              <span className="text-gray-300 text-sm">📜 {lang === 'ru' ? 'Сэт' : 'Set'}</span>
+              <span className="text-purple-400 font-bold text-xs">
+                {lang === 'ru' ? SETS[item.setId].nameRu : SETS[item.setId].nameEn}
+              </span>
+            </div>
+          )}
+          {/* Enchant level */}
+          {(item.enchantLevel ?? 0) > 0 && (
+            <div className="flex justify-between items-center p-2 bg-amber-900/30 rounded-lg border border-amber-500/30">
+              <span className="text-gray-300 text-sm">✨ {lang === 'ru' ? 'Заточка' : 'Enchant'}</span>
+              <span className="text-amber-400 font-bold">+{item.enchantLevel}</span>
+            </div>
+          )}
           {(item.stats.pAtkFlat ?? 0) > 0 && (
             <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
-              <span className="text-gray-300 text-sm">⚔️ П. Атака</span>
+              <span className="text-gray-300 text-sm">⚔️ {lang === 'ru' ? 'П. Атака' : 'P.Atk'}</span>
               <span className="text-red-400 font-bold">+{item.stats.pAtkFlat}</span>
             </div>
           )}
           {(item.stats.pDefFlat ?? 0) > 0 && (
             <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
-              <span className="text-gray-300 text-sm">🛡️ П. Защита</span>
+              <span className="text-gray-300 text-sm">🛡️ {lang === 'ru' ? 'П. Защита' : 'P.Def'}</span>
               <span className="text-blue-400 font-bold">+{item.stats.pDefFlat}</span>
             </div>
           )}

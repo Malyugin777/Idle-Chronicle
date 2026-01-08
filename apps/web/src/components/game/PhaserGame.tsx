@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.109';
+const APP_VERSION = 'v1.0.110';
 
 interface BossState {
   name: string;
@@ -1106,10 +1106,10 @@ export default function PhaserGame() {
                   <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent" />
                 </div>
 
-                {/* HP numbers */}
+                {/* HP numbers - full format for clarity */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                    {formatCompact(bossState.hp)} / {formatCompact(bossState.maxHp)}
+                  <span className="text-[10px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -1141,12 +1141,12 @@ export default function PhaserGame() {
               </div>
             </div>
 
-            {/* Your Damage display */}
+            {/* Your Damage display - accumulated damage to current boss */}
             {sessionDamage > 0 && (
               <div className="mt-2 bg-black/60 rounded-lg px-3 py-1.5 border border-amber-600/30">
                 <div className="flex items-center justify-center gap-2 text-[10px]">
                   <span className="text-gray-400">⚔️ {lang === 'ru' ? 'Твой урон:' : 'Your Damage:'}</span>
-                  <span className="text-amber-400 font-bold">{formatCompact(sessionDamage)}</span>
+                  <span className="text-amber-400 font-bold">{sessionDamage.toLocaleString()}</span>
                 </div>
               </div>
             )}
