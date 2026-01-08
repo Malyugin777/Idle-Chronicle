@@ -113,11 +113,13 @@ const sessionLeaderboard = new Map();
 
 async function loadBossState(prisma) {
   try {
+    console.log('[Boss] Loading state from DB...');
     const state = await prisma.gameState.findUnique({ where: { id: 'singleton' } });
     if (!state) {
-      console.log('[Boss] No saved state, will use defaults');
+      console.log('[Boss] No gameState record found in DB!');
       return false;
     }
+    console.log(`[Boss] Found gameState: bossIndex=${state.currentBossIndex}, HP=${state.bossCurrentHp}/${state.bossMaxHp}`);
 
     // Check if boss is respawning
     if (state.respawnAt && new Date(state.respawnAt) > new Date()) {
@@ -1157,11 +1159,15 @@ app.prepare().then(async () => {
 
   // Try to load saved boss state first
   const loadedState = await loadBossState(prisma);
+  console.log(`[Startup] loadBossState returned: ${loadedState}`);
   if (!loadedState || loadedState === 'respawn') {
     // No saved state OR boss HP=0 with expired respawn timer - spawn (next) boss
     const forceNext = loadedState === 'respawn'; // Move to next boss if HP=0
+    console.log(`[Startup] Calling respawnBoss with forceNext=${forceNext}`);
     await respawnBoss(prisma, forceNext);
     await saveBossState(prisma);
+  } else {
+    console.log(`[Startup] Boss loaded from DB: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp}`);
   }
 
   // Periodic boss state save (every 10 seconds)

@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.79';
+const APP_VERSION = 'v1.0.80';
 
 interface BossState {
   name: string;
@@ -840,41 +840,6 @@ export default function PhaserGame() {
   const manaPercent = (playerState.mana / playerState.maxMana) * 100;
   const bossDisplayName = lang === 'ru' && bossState.nameRu ? bossState.nameRu : bossState.name;
   const exhausted = isExhausted();
-
-  // Loading screen
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
-        <div className="text-center">
-          {/* Logo/Title */}
-          <div className="text-4xl mb-4">⚔️</div>
-          <h1 className="text-2xl font-bold text-l2-gold mb-2">Idle Chronicle</h1>
-          <p className="text-gray-400 text-sm mb-6">
-            {lang === 'ru' ? 'Загрузка...' : 'Loading...'}
-          </p>
-          {/* Loading spinner */}
-          <div className="flex justify-center items-center gap-2">
-            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
-          {/* Status indicators */}
-          <div className="mt-6 text-xs text-gray-500 space-y-1">
-            <div className={loadingState.auth ? 'text-green-400' : 'text-gray-500'}>
-              {loadingState.auth ? '✓' : '○'} {lang === 'ru' ? 'Авторизация' : 'Authentication'}
-            </div>
-            <div className={loadingState.boss ? 'text-green-400' : 'text-gray-500'}>
-              {loadingState.boss ? '✓' : '○'} {lang === 'ru' ? 'Данные босса' : 'Boss data'}
-            </div>
-            <div className={loadingState.player ? 'text-green-400' : 'text-gray-500'}>
-              {loadingState.player ? '✓' : '○'} {lang === 'ru' ? 'Данные игрока' : 'Player data'}
-            </div>
-          </div>
-          <div className="mt-4 text-[10px] text-gray-600">{APP_VERSION}</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full relative bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
@@ -1779,6 +1744,38 @@ export default function PhaserGame() {
       {/* TASKS MODAL */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* LOADING OVERLAY - Shows while data loading */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {isLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
+          <div className="text-center">
+            <div className="text-4xl mb-4">⚔️</div>
+            <h1 className="text-2xl font-bold text-l2-gold mb-2">Idle Chronicle</h1>
+            <p className="text-gray-400 text-sm mb-6">
+              {lang === 'ru' ? 'Загрузка...' : 'Loading...'}
+            </p>
+            <div className="flex justify-center items-center gap-2">
+              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <div className="mt-6 text-xs text-gray-500 space-y-1">
+              <div className={loadingState.auth ? 'text-green-400' : 'text-gray-500'}>
+                {loadingState.auth ? '✓' : '○'} {lang === 'ru' ? 'Авторизация' : 'Authentication'}
+              </div>
+              <div className={loadingState.boss ? 'text-green-400' : 'text-gray-500'}>
+                {loadingState.boss ? '✓' : '○'} {lang === 'ru' ? 'Данные босса' : 'Boss data'}
+              </div>
+              <div className={loadingState.player ? 'text-green-400' : 'text-gray-500'}>
+                {loadingState.player ? '✓' : '○'} {lang === 'ru' ? 'Данные игрока' : 'Player data'}
+              </div>
+            </div>
+            <div className="mt-4 text-[10px] text-gray-600">{APP_VERSION}</div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
