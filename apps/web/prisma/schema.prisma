@@ -90,12 +90,9 @@ model User {
   enchantScrolls  Int      @default(0)    // Свитки заточки (old)
 
   // Crafting Materials
-  matOre          Int      @default(0)    // Руда (от оружия)
-  matLeather      Int      @default(0)    // Кожа (от брони)
-  matCoal         Int      @default(0)    // Уголь (от аксессуаров)
-  matEnchantDust  Int      @default(0)    // Пыль энчанта (универсальная)
+  matEnchantDust  Int      @default(0)    // Пыль энчанта (от разбора шмота)
 
-  // Crafting Scrolls (LEGACY - оставлено для обратной совместимости)
+  // Crafting Scrolls
   scrollEnchantWeapon  Int @default(0)    // Свиток энчанта оружия
   scrollEnchantArmor   Int @default(0)    // Свиток энчанта брони
   scrollProtection     Int @default(0)    // Свиток защиты

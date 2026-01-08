@@ -731,12 +731,23 @@ export default function CharacterTab() {
       setConsumables(prev => ({ ...prev, ether: data.ether }));
     };
 
+    // Sync consumables when task rewards are claimed
+    const handlePlayerState = (data: { ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+      setConsumables(prev => ({
+        ether: data.ether ?? prev.ether,
+        scrollHaste: data.potionHaste ?? prev.scrollHaste,
+        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
+        scrollLuck: data.potionLuck ?? prev.scrollLuck,
+      }));
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
     socket.on('buff:success', handleBuffSuccess);
     socket.on('tap:result', handleTapResult);
     socket.on('ether:craft:success', handleEtherCraft);
+    socket.on('player:state', handlePlayerState);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -746,6 +757,7 @@ export default function CharacterTab() {
       socket.off('buff:success', handleBuffSuccess);
       socket.off('tap:result', handleTapResult);
       socket.off('ether:craft:success', handleEtherCraft);
+      socket.off('player:state', handlePlayerState);
     };
   }, []);
 

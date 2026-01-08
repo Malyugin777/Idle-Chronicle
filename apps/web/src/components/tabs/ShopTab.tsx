@@ -78,12 +78,24 @@ export default function ShopTab() {
       }
     };
 
+    // Sync consumables when task rewards are claimed
+    const handlePlayerState = (data: { ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+      setShopState(prev => ({
+        ...prev,
+        ether: data.ether ?? prev.ether,
+        potionHaste: data.potionHaste ?? prev.potionHaste,
+        potionAcumen: data.potionAcumen ?? prev.potionAcumen,
+        potionLuck: data.potionLuck ?? prev.potionLuck,
+      }));
+    };
+
     socket.on('player:data', updateShopState);
     socket.on('auth:success', updateShopState);
     socket.on('shop:success', handleShopSuccess);
     socket.on('shop:error', handleShopError);
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('tap:result', handleTapResult);
+    socket.on('player:state', handlePlayerState);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -93,6 +105,7 @@ export default function ShopTab() {
       socket.off('shop:error', handleShopError);
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('tap:result', handleTapResult);
+      socket.off('player:state', handlePlayerState);
     };
   }, []);
 

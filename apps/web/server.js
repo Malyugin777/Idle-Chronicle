@@ -2628,13 +2628,13 @@ app.prepare().then(async () => {
             // Progression
             totalDamage: Number(user.totalDamage),
             bossesKilled: user.bossesKilled,
-            // Consumables
-            autoEther: user.autoEther || false,
-            ether: user.ether,
-            etherDust: user.etherDust || 0,
-            potionHaste: user.potionHaste,
-            potionAcumen: user.potionAcumen,
-            potionLuck: user.potionLuck,
+            // Consumables (use in-memory values if available, fallback to DB)
+            autoEther: player.autoEther ?? user.autoEther ?? false,
+            ether: player.ether ?? user.ether,
+            etherDust: player.etherDust ?? user.etherDust ?? 0,
+            potionHaste: player.potionHaste ?? user.potionHaste,
+            potionAcumen: player.potionAcumen ?? user.potionAcumen,
+            potionLuck: player.potionLuck ?? user.potionLuck,
             // Session stats (from memory, not DB)
             sessionDamage: player.sessionDamage || 0,
           });
@@ -4541,6 +4541,7 @@ app.prepare().then(async () => {
 
         for (const reward of rewards) {
           switch (reward.type) {
+            case 'ether':
             case 'etherPack':
               updateData.ether = { increment: reward.amount };
               break;
@@ -5464,8 +5465,13 @@ app.prepare().then(async () => {
             // Legacy mana
             mana: Math.floor(player.mana),
             gold: BigInt(player.gold),
+            // Ether & consumables
             autoEther: player.autoEther,
             ether: player.ether,
+            etherDust: player.etherDust,
+            potionHaste: player.potionHaste,
+            potionAcumen: player.potionAcumen,
+            potionLuck: player.potionLuck,
             lastOnline: new Date(),
           };
 

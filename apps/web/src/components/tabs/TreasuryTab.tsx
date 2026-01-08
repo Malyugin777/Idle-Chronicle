@@ -204,6 +204,13 @@ export default function TreasuryTab() {
       }
     };
 
+    // Sync crystals when task rewards are claimed
+    const handlePlayerState = (data: { ancientCoin?: number }) => {
+      if (data.ancientCoin !== undefined) {
+        setCrystals(data.ancientCoin);
+      }
+    };
+
     // Register all listeners
     socket.on('chest:data', handleChestData);
     socket.on('loot:stats', handleLootStats);
@@ -221,6 +228,7 @@ export default function TreasuryTab() {
     socket.on('auth:success', handleAuthSuccess);
     socket.on('player:data', handlePlayerData);
     socket.on('ether:craft:success', handleEtherCraft);
+    socket.on('player:state', handlePlayerState);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -240,6 +248,7 @@ export default function TreasuryTab() {
       socket.off('auth:success', handleAuthSuccess);
       socket.off('player:data', handlePlayerData);
       socket.off('ether:craft:success', handleEtherCraft);
+      socket.off('player:state', handlePlayerState);
     };
   }, []);
 
