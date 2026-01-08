@@ -85,27 +85,20 @@ export default function Home() {
     );
   }
 
-  const renderTab = () => {
-    switch (activeTab) {
-      case 'game':
-        return <PhaserGame />;
-      case 'character':
-        return <CharacterTab />;
-      case 'shop':
-        return <ShopTab />;
-      case 'treasury':
-        return <TreasuryTab />;
-      case 'leaderboard':
-        return <LeaderboardTab />;
-      default:
-        return <PhaserGame />;
-    }
-  };
-
+  // FIX: Keep PhaserGame mounted to preserve sessionDamage state
+  // Other tabs can remount (they fetch fresh data anyway)
   return (
     <main className="h-screen w-screen overflow-hidden bg-l2-dark flex flex-col">
       <ErrorBoundary>
-        {renderTab()}
+        {/* PhaserGame stays mounted, hidden when not active */}
+        <div className={activeTab === 'game' ? 'flex-1 flex flex-col' : 'hidden'}>
+          <PhaserGame />
+        </div>
+        {/* Other tabs render conditionally */}
+        {activeTab === 'character' && <CharacterTab />}
+        {activeTab === 'shop' && <ShopTab />}
+        {activeTab === 'treasury' && <TreasuryTab />}
+        {activeTab === 'leaderboard' && <LeaderboardTab />}
       </ErrorBoundary>
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </main>

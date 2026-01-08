@@ -6235,6 +6235,9 @@ app.prepare().then(async () => {
         let crits = 0;
         let etherUsed = 0;
 
+        // FIX: Level multiplier (was missing in auto-attack!)
+        const levelMultiplier = Math.pow(1.02, (player.level || 1) - 1);
+
         // FIX: Apply buffs to auto-attack (was missing!)
         const now = Date.now();
         player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > now);
@@ -6258,8 +6261,10 @@ app.prepare().then(async () => {
         const maxHits = Math.min(baseHits, Math.floor(player.stamina / AUTO_STAMINA_COST));
 
         for (let i = 0; i < maxHits; i++) {
-          let dmg = baseDamage * (0.8 + Math.random() * 0.2);
-          dmg *= damageBonus;  // FIX: Apply acumen buff
+          // FIX: Same formula as manual tap (was 0.8-1.0, now 0.9-1.1)
+          let dmg = baseDamage * (0.9 + Math.random() * 0.2);
+          dmg *= levelMultiplier;  // FIX: Level multiplier (was missing!)
+          dmg *= damageBonus;  // Apply acumen buff
           const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
           dmg *= rageMultiplier;
 
