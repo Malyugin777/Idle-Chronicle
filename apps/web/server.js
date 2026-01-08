@@ -108,6 +108,79 @@ const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
 
 // ═══════════════════════════════════════════════════════════
+// ADMIN LOG BUFFER (for viewing logs without Railway access)
+// ═══════════════════════════════════════════════════════════
+
+const LOG_BUFFER_SIZE = 1000;
+const logBuffer = [];
+
+// Stats counters for admin dashboard
+const gameStats = {
+  // Forge stats
+  forge: {
+    totalSalvaged: 0,
+    dustGenerated: 0,
+    fusionCommon: 0,
+    fusionUncommon: 0,
+    fusionRare: 0,
+    itemsBroken: 0,
+    itemsRestored: 0,
+    itemsExpired: 0,
+  },
+  // Enchant stats
+  enchant: {
+    attempts: {},      // { '+1': { success: 0, fail: 0 }, ... }
+    protectionUsed: 0,
+    highestEnchant: 0,
+    topItems: [],      // [{ item, level, owner }]
+  },
+  // Ether stats
+  ether: {
+    totalInGame: 0,
+    usedToday: 0,
+    craftedToday: 0,
+    dustGenerated: 0,
+    lastReset: Date.now(),
+  },
+};
+
+function addLog(level, category, message, data = null) {
+  const entry = {
+    id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+    timestamp: Date.now(),
+    time: new Date().toISOString(),
+    level,      // 'info' | 'warn' | 'error' | 'debug'
+    category,   // 'auth' | 'boss' | 'reward' | 'forge' | 'enchant' | 'ether' | 'system'
+    message,
+    data
+  };
+
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_BUFFER_SIZE) {
+    logBuffer.shift();
+  }
+
+  // Also log to console with color
+  const colors = { error: '\x1b[31m', warn: '\x1b[33m', info: '\x1b[36m', debug: '\x1b[90m' };
+  const color = colors[level] || '\x1b[0m';
+  console.log(`${color}[${category.toUpperCase()}]\x1b[0m ${message}`, data ? JSON.stringify(data) : '');
+}
+
+// Reset daily stats at midnight
+function resetDailyStats() {
+  const now = Date.now();
+  const lastReset = gameStats.ether.lastReset;
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (now - lastReset > dayMs) {
+    gameStats.ether.usedToday = 0;
+    gameStats.ether.craftedToday = 0;
+    gameStats.ether.lastReset = now;
+    addLog('info', 'system', 'Daily stats reset');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // BOSS STATE PERSISTENCE
 // ═══════════════════════════════════════════════════════════
 
@@ -764,6 +837,7 @@ async function respawnBoss(prisma, forceNext = true) {
 
   sessionLeaderboard.clear();
   console.log(`[Boss] Respawned: ${bossState.name} (${bossState.bossIndex}/${bossState.totalBosses}) with ${bossState.maxHp} HP`);
+  addLog('info', 'boss', `Respawned: ${bossState.name} #${bossState.bossIndex}`, { hp: bossState.maxHp });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -773,6 +847,7 @@ async function respawnBoss(prisma, forceNext = true) {
 
 async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   console.log(`[Boss] ${bossState.name} killed by ${killerPlayer.odamageN}!`);
+  addLog('info', 'boss', `${bossState.name} killed by ${killerPlayer.odamageN}!`, { bossIndex: bossState.bossIndex });
 
   // Build leaderboard with photoUrl and activity status (from sessionLeaderboard)
   const leaderboard = Array.from(sessionLeaderboard.entries())
@@ -1054,6 +1129,7 @@ app.prepare().then(async () => {
   try {
     await prisma.$connect();
     console.log('[Prisma] Connected to database');
+    addLog('info', 'system', 'Server started, database connected');
   } catch (err) {
     console.error('[Prisma] Connection error:', err.message);
   }
@@ -2111,6 +2187,204 @@ app.prepare().then(async () => {
           });
           return;
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // ADMIN LOGS API
+        // ═══════════════════════════════════════════════════════════
+
+        // Get Logs
+        if (parsedUrl.pathname === '/api/admin/logs' && req.method === 'GET') {
+          const level = parsedUrl.searchParams.get('level');
+          const category = parsedUrl.searchParams.get('category');
+          const limit = parseInt(parsedUrl.searchParams.get('limit') || '200');
+          const search = parsedUrl.searchParams.get('search')?.toLowerCase();
+
+          let logs = [...logBuffer];
+
+          if (level && level !== 'all') {
+            logs = logs.filter(l => l.level === level);
+          }
+          if (category && category !== 'all') {
+            logs = logs.filter(l => l.category === category);
+          }
+          if (search) {
+            logs = logs.filter(l => l.message.toLowerCase().includes(search));
+          }
+
+          sendJson({
+            success: true,
+            logs: logs.slice(-limit).reverse(),
+            total: logBuffer.length,
+          });
+          return;
+        }
+
+        // Clear Logs
+        if (parsedUrl.pathname === '/api/admin/logs/clear' && req.method === 'POST') {
+          logBuffer.length = 0;
+          addLog('info', 'system', 'Logs cleared by admin');
+          sendJson({ success: true });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // FORGE STATS API
+        // ═══════════════════════════════════════════════════════════
+
+        if (parsedUrl.pathname === '/api/admin/forge-stats' && req.method === 'GET') {
+          // Get broken items count from DB
+          const brokenItems = await prisma.userEquipment.count({
+            where: { isBroken: true },
+          });
+
+          // Get salvage/fusion stats from memory + DB aggregates
+          const [totalEquipment, totalDust] = await Promise.all([
+            prisma.userEquipment.count(),
+            prisma.user.aggregate({ _sum: { enchantDust: true } }),
+          ]);
+
+          sendJson({
+            success: true,
+            forge: {
+              ...gameStats.forge,
+              brokenItemsActive: brokenItems,
+              totalEquipmentInGame: totalEquipment,
+              totalDustInGame: Number(totalDust._sum.enchantDust || 0),
+            },
+          });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ENCHANT STATS API
+        // ═══════════════════════════════════════════════════════════
+
+        if (parsedUrl.pathname === '/api/admin/enchant-stats' && req.method === 'GET') {
+          // Get top enchanted items from DB
+          const topEnchanted = await prisma.userEquipment.findMany({
+            where: { enchantLevel: { gt: 0 } },
+            orderBy: { enchantLevel: 'desc' },
+            take: 10,
+            include: {
+              user: { select: { firstName: true, username: true } },
+              equipment: { select: { name: true, rarity: true } },
+            },
+          });
+
+          // Calculate success rates from attempts
+          const successRates = {};
+          for (const [level, data] of Object.entries(gameStats.enchant.attempts)) {
+            const total = data.success + data.fail;
+            successRates[level] = {
+              ...data,
+              total,
+              rate: total > 0 ? Math.round((data.success / total) * 100) : 0,
+            };
+          }
+
+          sendJson({
+            success: true,
+            enchant: {
+              successRates,
+              protectionUsed: gameStats.enchant.protectionUsed,
+              highestEnchant: gameStats.enchant.highestEnchant,
+              topItems: topEnchanted.map(e => ({
+                name: e.equipment?.name || 'Unknown',
+                rarity: e.equipment?.rarity || 'common',
+                level: e.enchantLevel,
+                owner: e.user?.firstName || e.user?.username || 'Unknown',
+              })),
+            },
+          });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ETHER ECONOMY API
+        // ═══════════════════════════════════════════════════════════
+
+        if (parsedUrl.pathname === '/api/admin/ether-stats' && req.method === 'GET') {
+          resetDailyStats(); // Check if we need to reset daily counters
+
+          // Get totals from DB
+          const [etherTotal, dustTotal, activeUsers] = await Promise.all([
+            prisma.user.aggregate({ _sum: { ether: true } }),
+            prisma.user.aggregate({ _sum: { etherDust: true } }),
+            prisma.user.count({ where: { lastOnline: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+          ]);
+
+          sendJson({
+            success: true,
+            ether: {
+              totalEtherInGame: Number(etherTotal._sum.ether || 0),
+              totalDustInGame: Number(dustTotal._sum.etherDust || 0),
+              usedToday: gameStats.ether.usedToday,
+              craftedToday: gameStats.ether.craftedToday,
+              dustGeneratedToday: gameStats.ether.dustGenerated,
+              activeUsersLast24h: activeUsers,
+              meditatingNow: Array.from(onlineUsers.values()).filter(p => !p.odamage).length,
+            },
+          });
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // BROKEN ITEMS MANAGEMENT
+        // ═══════════════════════════════════════════════════════════
+
+        if (parsedUrl.pathname === '/api/admin/broken-items' && req.method === 'GET') {
+          const brokenItems = await prisma.userEquipment.findMany({
+            where: { isBroken: true },
+            include: {
+              user: { select: { id: true, firstName: true, username: true } },
+              equipment: { select: { name: true, rarity: true } },
+            },
+            orderBy: { brokenAt: 'desc' },
+            take: 100,
+          });
+
+          sendJson({
+            success: true,
+            items: brokenItems.map(item => ({
+              id: item.id,
+              name: item.equipment?.name || 'Unknown',
+              rarity: item.equipment?.rarity || 'common',
+              enchantLevel: item.enchantLevel,
+              owner: item.user?.firstName || item.user?.username || 'Unknown',
+              ownerId: item.user?.id,
+              brokenAt: item.brokenAt,
+              expiresAt: item.brokenAt ? new Date(item.brokenAt.getTime() + 8 * 60 * 60 * 1000) : null,
+            })),
+          });
+          return;
+        }
+
+        // Force restore broken item (admin)
+        if (parsedUrl.pathname === '/api/admin/broken-items/restore' && req.method === 'POST') {
+          const body = await parseBody();
+          const { itemId } = body;
+
+          await prisma.userEquipment.update({
+            where: { id: itemId },
+            data: { isBroken: false, brokenAt: null },
+          });
+
+          addLog('info', 'forge', `Admin restored broken item ${itemId}`);
+          sendJson({ success: true });
+          return;
+        }
+
+        // Force delete broken item (admin)
+        if (parsedUrl.pathname === '/api/admin/broken-items/delete' && req.method === 'POST') {
+          const body = await parseBody();
+          const { itemId } = body;
+
+          await prisma.userEquipment.delete({ where: { id: itemId } });
+
+          addLog('info', 'forge', `Admin deleted broken item ${itemId}`);
+          sendJson({ success: true });
+          return;
+        }
       }
 
       await handle(req, res, parsedUrl);
@@ -2645,6 +2919,7 @@ app.prepare().then(async () => {
             },
           });
           console.log(`[Auth] New user created: ${data.telegramId}, lang: ${userLang}`);
+          addLog('info', 'auth', `New user: ${data.firstName || data.username || data.telegramId}`, { telegramId: data.telegramId, lang: userLang });
 
           // ═══════════════════════════════════════════════════════════
           // STARTER PACK - Mark user as needing starter chest opening
@@ -2693,6 +2968,7 @@ app.prepare().then(async () => {
             user.language = userLang;
           }
           console.log(`[Auth] Existing user: ${data.telegramId}, lang: ${userLang}`);
+          addLog('info', 'auth', `User login: ${user.firstName || user.username || data.telegramId}`, { telegramId: data.telegramId });
         }
 
         // Update player state from DB

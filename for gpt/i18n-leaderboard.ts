@@ -1,0 +1,51 @@
+// ═══════════════════════════════════════════════════════════
+// i18n TRANSLATIONS - LEADERBOARD SECTION
+// ═══════════════════════════════════════════════════════════
+
+// English
+leaderboard: {
+  title: 'Leaderboard',
+  subtitle: 'Top damage dealers',
+  currentBoss: 'Current Boss',
+  previousBoss: 'Previous Boss',
+  allTime: 'Legend',
+  loading: 'Loading...',
+  noDamage: 'No damage dealt yet',
+  beFirst: 'Be the first to attack!',
+  damage: 'damage',
+  prizePool: 'Prize Pool',
+  ton: 'TON',
+  chests: 'Chests',
+  exp: 'EXP',
+  finalBlow: 'Final Blow',
+  topDamage: 'Top Damage',
+  participants: 'Participants',
+  yourReward: 'Your Reward',
+  noPrevious: 'No previous boss',
+  waitForKill: 'Wait for boss to be killed',
+  ofBoss: 'of boss',
+},
+
+// Russian
+leaderboard: {
+  title: 'Таблица Лидеров',
+  subtitle: 'Топ по урону',
+  currentBoss: 'Текущий',
+  previousBoss: 'Прошлый',
+  allTime: 'Легенды',
+  loading: 'Загрузка...',
+  noDamage: 'Урон ещё не нанесён',
+  beFirst: 'Стань первым!',
+  damage: 'урона',
+  prizePool: 'Призовой фонд',
+  ton: 'TON',
+  chests: 'Сундуки',
+  exp: 'Опыт',
+  finalBlow: 'Добивание',
+  topDamage: 'Топ урона',
+  participants: 'Участники',
+  yourReward: 'Твоя награда',
+  noPrevious: 'Нет данных',
+  waitForKill: 'Убейте босса',
+  ofBoss: 'босса',
+},

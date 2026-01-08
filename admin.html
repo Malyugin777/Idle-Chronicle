@@ -833,6 +833,22 @@
         </div>
 
         <div class="nav-section">
+          <div class="nav-section-title">Economy</div>
+          <button class="nav-item" onclick="showTab('forge')">
+            <span class="icon">⚒️</span>
+            <span>Forge Stats</span>
+          </button>
+          <button class="nav-item" onclick="showTab('enchant')">
+            <span class="icon">✨</span>
+            <span>Enchant Stats</span>
+          </button>
+          <button class="nav-item" onclick="showTab('ether')">
+            <span class="icon">🌫️</span>
+            <span>Ether Economy</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
           <div class="nav-section-title">Communication</div>
           <button class="nav-item" onclick="showTab('broadcast')">
             <span class="icon">&#128227;</span>
@@ -842,6 +858,10 @@
 
         <div class="nav-section">
           <div class="nav-section-title">System</div>
+          <button class="nav-item" onclick="showTab('logs')">
+            <span class="icon">📜</span>
+            <span>Server Logs</span>
+          </button>
           <button class="nav-item" onclick="showTab('danger')">
             <span class="icon">&#9888;</span>
             <span>Danger Zone</span>
@@ -1583,6 +1603,232 @@
             <button class="btn btn-danger" onclick="resetDatabase()">Reset Entire Database</button>
             <button class="btn btn-danger" onclick="resetAllUsers()">Reset All Users Progress</button>
             <button class="btn btn-danger" onclick="resetBossToFirst()">Reset Boss to #1</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- SERVER LOGS PANEL -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <div id="logsPanel" class="panel">
+        <div class="page-header">
+          <h2>📜 Server Logs</h2>
+          <p>Real-time server logs (last 1000 entries)</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Filters</h3>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm" onclick="loadLogs()" style="padding: 6px 12px;">🔄 Refresh</button>
+              <button class="btn btn-sm btn-danger" onclick="clearLogs()" style="padding: 6px 12px;">🗑️ Clear</button>
+            </div>
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+            <div class="form-group" style="flex: 1; min-width: 120px; margin: 0;">
+              <label>Level</label>
+              <select id="logLevel" onchange="loadLogs()">
+                <option value="all">All</option>
+                <option value="error">🔴 Error</option>
+                <option value="warn">🟡 Warn</option>
+                <option value="info">🔵 Info</option>
+                <option value="debug">⚪ Debug</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 120px; margin: 0;">
+              <label>Category</label>
+              <select id="logCategory" onchange="loadLogs()">
+                <option value="all">All</option>
+                <option value="auth">Auth</option>
+                <option value="boss">Boss</option>
+                <option value="reward">Reward</option>
+                <option value="forge">Forge</option>
+                <option value="enchant">Enchant</option>
+                <option value="ether">Ether</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 2; min-width: 200px; margin: 0;">
+              <label>Search</label>
+              <input type="text" id="logSearch" placeholder="Search in messages..." onkeyup="debounceSearch()">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label>Auto-refresh</label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="logAutoRefresh" onchange="toggleAutoRefresh()">
+                <span>Every 5s</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <div class="card-header">
+            <h3>Log Entries <span id="logCount" style="color: var(--text-muted); font-weight: normal;">(0)</span></h3>
+          </div>
+          <div id="logsContainer" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">Loading logs...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- FORGE STATS PANEL -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <div id="forgePanel" class="panel">
+        <div class="page-header">
+          <h2>⚒️ Forge Stats</h2>
+          <p>Salvage, Fusion, and Broken Items statistics</p>
+        </div>
+
+        <div class="stats-grid" id="forgeStats">
+          <div class="stat-card">
+            <div class="stat-value" id="forgeSalvaged">-</div>
+            <div class="stat-label">Items Salvaged</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="forgeDust">-</div>
+            <div class="stat-label">Dust Generated</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="forgeFusions">-</div>
+            <div class="stat-label">Total Fusions</div>
+          </div>
+          <div class="stat-card" style="border-color: var(--danger);">
+            <div class="stat-value" id="forgeBroken">-</div>
+            <div class="stat-label">Broken Items Active</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Fusion Stats</h3>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 24px; font-weight: bold; color: #aaa;" id="fusionCommon">0</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Common → Bronze</div>
+            </div>
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 24px; font-weight: bold; color: #4f4;" id="fusionUncommon">0</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Uncommon → Silver</div>
+            </div>
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 24px; font-weight: bold; color: #66f;" id="fusionRare">0</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Rare → Gold</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>🔧 Broken Items</h3>
+            <button class="btn btn-sm" onclick="loadBrokenItems()">🔄 Refresh</button>
+          </div>
+          <div id="brokenItemsList">
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- ENCHANT STATS PANEL -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <div id="enchantPanel" class="panel">
+        <div class="page-header">
+          <h2>✨ Enchant Stats</h2>
+          <p>Enchantment success rates and top items</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="enchantHighest">-</div>
+            <div class="stat-label">Highest Enchant</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="enchantProtection">-</div>
+            <div class="stat-label">Protection Used</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="enchantTotal">-</div>
+            <div class="stat-label">Total Attempts</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="enchantAvgRate">-</div>
+            <div class="stat-label">Avg Success Rate</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Success Rate by Level</h3>
+          </div>
+          <div id="enchantRates" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px;">
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">Loading...</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>🏆 Top Enchanted Items</h3>
+          </div>
+          <div id="topEnchantedItems">
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- ETHER ECONOMY PANEL -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <div id="etherPanel" class="panel">
+        <div class="page-header">
+          <h2>🌫️ Ether Economy</h2>
+          <p>Ether and Ether Dust statistics</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card" style="background: linear-gradient(135deg, rgba(147, 112, 219, 0.2), rgba(147, 112, 219, 0.1));">
+            <div class="stat-value" id="etherTotal">-</div>
+            <div class="stat-label">✨ Total Ether</div>
+          </div>
+          <div class="stat-card" style="background: linear-gradient(135deg, rgba(100, 149, 237, 0.2), rgba(100, 149, 237, 0.1));">
+            <div class="stat-value" id="dustTotal">-</div>
+            <div class="stat-label">🌫️ Total Dust</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="etherUsedToday">-</div>
+            <div class="stat-label">Used Today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="etherCraftedToday">-</div>
+            <div class="stat-label">Crafted Today</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Meditation Stats</h3>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 24px; font-weight: bold; color: var(--accent);" id="meditatingNow">0</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Players Meditating Now</div>
+            </div>
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 24px; font-weight: bold; color: var(--success);" id="activeUsers24h">0</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Active Users (24h)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Daily Generation</h3>
+          </div>
+          <div style="background: var(--bg-input); padding: 16px; border-radius: 8px;">
+            <div style="font-size: 18px; font-weight: bold; color: var(--gold);" id="dustGeneratedToday">0</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Ether Dust generated today via meditation</div>
           </div>
         </div>
       </div>
@@ -2332,6 +2578,265 @@
       alert(data.success ? 'Badge removed' : 'Error: ' + data.error);
       if (data.success) loadActiveBadges();
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // LOGS
+    // ═══════════════════════════════════════════════════════════
+
+    let logAutoRefreshInterval = null;
+    let logSearchTimeout = null;
+
+    async function loadLogs() {
+      const level = document.getElementById('logLevel').value;
+      const category = document.getElementById('logCategory').value;
+      const search = document.getElementById('logSearch').value;
+
+      let url = `logs?level=${level}&category=${category}&limit=200`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      const data = await api(url);
+      if (data.success) {
+        document.getElementById('logCount').textContent = `(${data.logs.length} / ${data.total})`;
+
+        if (data.logs.length === 0) {
+          document.getElementById('logsContainer').innerHTML = `
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">No logs found</div>
+          `;
+          return;
+        }
+
+        const levelColors = {
+          error: '#ef5350',
+          warn: '#ffa726',
+          info: '#42a5f5',
+          debug: '#78909c'
+        };
+
+        const levelIcons = {
+          error: '🔴',
+          warn: '🟡',
+          info: '🔵',
+          debug: '⚪'
+        };
+
+        document.getElementById('logsContainer').innerHTML = data.logs.map(log => {
+          const time = new Date(log.timestamp).toLocaleTimeString();
+          const color = levelColors[log.level] || '#fff';
+          const icon = levelIcons[log.level] || '⚪';
+          return `
+            <div style="padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start;">
+              <span style="color: var(--text-muted); min-width: 70px;">${time}</span>
+              <span>${icon}</span>
+              <span style="color: ${color}; min-width: 60px; font-weight: 600;">[${log.category.toUpperCase()}]</span>
+              <span style="flex: 1; word-break: break-word;">${escapeHtml(log.message)}</span>
+              ${log.data ? `<span style="color: var(--text-muted); font-size: 10px;">${escapeHtml(JSON.stringify(log.data))}</span>` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function debounceSearch() {
+      clearTimeout(logSearchTimeout);
+      logSearchTimeout = setTimeout(loadLogs, 300);
+    }
+
+    function toggleAutoRefresh() {
+      const enabled = document.getElementById('logAutoRefresh').checked;
+      if (enabled) {
+        loadLogs();
+        logAutoRefreshInterval = setInterval(loadLogs, 5000);
+      } else {
+        clearInterval(logAutoRefreshInterval);
+        logAutoRefreshInterval = null;
+      }
+    }
+
+    async function clearLogs() {
+      if (!confirm('Clear all logs?')) return;
+      await api('logs/clear', 'POST');
+      loadLogs();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FORGE STATS
+    // ═══════════════════════════════════════════════════════════
+
+    async function loadForgeStats() {
+      const data = await api('forge-stats');
+      if (data.success) {
+        const f = data.forge;
+        document.getElementById('forgeSalvaged').textContent = f.totalSalvaged.toLocaleString();
+        document.getElementById('forgeDust').textContent = f.dustGenerated.toLocaleString();
+        document.getElementById('forgeFusions').textContent = (f.fusionCommon + f.fusionUncommon + f.fusionRare).toLocaleString();
+        document.getElementById('forgeBroken').textContent = f.brokenItemsActive.toLocaleString();
+
+        document.getElementById('fusionCommon').textContent = f.fusionCommon;
+        document.getElementById('fusionUncommon').textContent = f.fusionUncommon;
+        document.getElementById('fusionRare').textContent = f.fusionRare;
+      }
+      loadBrokenItems();
+    }
+
+    async function loadBrokenItems() {
+      const data = await api('broken-items');
+      if (data.success) {
+        if (data.items.length === 0) {
+          document.getElementById('brokenItemsList').innerHTML = `
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">No broken items</div>
+          `;
+          return;
+        }
+
+        const rarityColors = { common: '#aaa', uncommon: '#4f4', rare: '#66f', epic: '#a6f' };
+
+        document.getElementById('brokenItemsList').innerHTML = `
+          <table class="table">
+            <thead>
+              <tr><th>Item</th><th>Owner</th><th>Enchant</th><th>Expires</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${data.items.map(item => {
+                const expiresIn = item.expiresAt ? Math.max(0, Math.round((new Date(item.expiresAt) - Date.now()) / 60000)) : 0;
+                return `
+                  <tr>
+                    <td style="color: ${rarityColors[item.rarity] || '#fff'};">${item.name}</td>
+                    <td>${item.owner}</td>
+                    <td>+${item.enchantLevel}</td>
+                    <td>${expiresIn > 0 ? expiresIn + ' min' : 'Expired'}</td>
+                    <td>
+                      <button class="btn btn-sm" onclick="restoreBrokenItem('${item.id}')" style="padding: 4px 8px;">🔧 Restore</button>
+                      <button class="btn btn-sm btn-danger" onclick="deleteBrokenItem('${item.id}')" style="padding: 4px 8px;">🗑️</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+    }
+
+    async function restoreBrokenItem(itemId) {
+      if (!confirm('Restore this item for free?')) return;
+      const data = await api('broken-items/restore', 'POST', { itemId });
+      alert(data.success ? 'Item restored!' : 'Error: ' + data.error);
+      if (data.success) loadBrokenItems();
+    }
+
+    async function deleteBrokenItem(itemId) {
+      if (!confirm('Permanently delete this item?')) return;
+      const data = await api('broken-items/delete', 'POST', { itemId });
+      alert(data.success ? 'Item deleted!' : 'Error: ' + data.error);
+      if (data.success) loadBrokenItems();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ENCHANT STATS
+    // ═══════════════════════════════════════════════════════════
+
+    async function loadEnchantStats() {
+      const data = await api('enchant-stats');
+      if (data.success) {
+        const e = data.enchant;
+
+        document.getElementById('enchantHighest').textContent = '+' + (e.highestEnchant || 0);
+        document.getElementById('enchantProtection').textContent = e.protectionUsed.toLocaleString();
+
+        // Calculate totals
+        let totalAttempts = 0, totalSuccess = 0;
+        for (const [level, stats] of Object.entries(e.successRates)) {
+          totalAttempts += stats.total;
+          totalSuccess += stats.success;
+        }
+        document.getElementById('enchantTotal').textContent = totalAttempts.toLocaleString();
+        document.getElementById('enchantAvgRate').textContent = totalAttempts > 0
+          ? Math.round((totalSuccess / totalAttempts) * 100) + '%'
+          : '-';
+
+        // Success rates grid
+        if (Object.keys(e.successRates).length === 0) {
+          document.getElementById('enchantRates').innerHTML = `
+            <div style="color: var(--text-muted); padding: 20px; text-align: center; grid-column: 1/-1;">No enchant data yet</div>
+          `;
+        } else {
+          document.getElementById('enchantRates').innerHTML = Object.entries(e.successRates)
+            .sort((a, b) => parseInt(a[0].replace('+', '')) - parseInt(b[0].replace('+', '')))
+            .map(([level, stats]) => {
+              const rateColor = stats.rate >= 70 ? 'var(--success)' : stats.rate >= 40 ? 'var(--warning)' : 'var(--danger)';
+              return `
+                <div style="background: var(--bg-input); padding: 12px; border-radius: 8px; text-align: center;">
+                  <div style="font-size: 14px; font-weight: bold; color: var(--accent);">${level}</div>
+                  <div style="font-size: 18px; font-weight: bold; color: ${rateColor};">${stats.rate}%</div>
+                  <div style="font-size: 10px; color: var(--text-muted);">${stats.success}/${stats.total}</div>
+                </div>
+              `;
+            }).join('');
+        }
+
+        // Top items
+        if (e.topItems.length === 0) {
+          document.getElementById('topEnchantedItems').innerHTML = `
+            <div style="color: var(--text-muted); padding: 20px; text-align: center;">No enchanted items yet</div>
+          `;
+        } else {
+          const rarityColors = { common: '#aaa', uncommon: '#4f4', rare: '#66f', epic: '#a6f' };
+          document.getElementById('topEnchantedItems').innerHTML = `
+            <table class="table">
+              <thead><tr><th>#</th><th>Item</th><th>Level</th><th>Owner</th></tr></thead>
+              <tbody>
+                ${e.topItems.map((item, i) => `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td style="color: ${rarityColors[item.rarity] || '#fff'};">${item.name}</td>
+                    <td style="color: var(--gold); font-weight: bold;">+${item.level}</td>
+                    <td>${item.owner}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ETHER ECONOMY
+    // ═══════════════════════════════════════════════════════════
+
+    async function loadEtherStats() {
+      const data = await api('ether-stats');
+      if (data.success) {
+        const e = data.ether;
+        document.getElementById('etherTotal').textContent = e.totalEtherInGame.toLocaleString();
+        document.getElementById('dustTotal').textContent = e.totalDustInGame.toLocaleString();
+        document.getElementById('etherUsedToday').textContent = e.usedToday.toLocaleString();
+        document.getElementById('etherCraftedToday').textContent = e.craftedToday.toLocaleString();
+        document.getElementById('meditatingNow').textContent = e.meditatingNow;
+        document.getElementById('activeUsers24h').textContent = e.activeUsersLast24h;
+        document.getElementById('dustGeneratedToday').textContent = e.dustGeneratedToday.toLocaleString();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TAB SWITCHING - Load data on tab change
+    // ═══════════════════════════════════════════════════════════
+
+    const originalShowTab = showTab;
+    showTab = function(tab) {
+      originalShowTab(tab);
+
+      // Load data for specific tabs
+      if (tab === 'logs') loadLogs();
+      if (tab === 'forge') loadForgeStats();
+      if (tab === 'enchant') loadEnchantStats();
+      if (tab === 'ether') loadEtherStats();
+    };
 
     // Init
     if (checkDomain()) {
