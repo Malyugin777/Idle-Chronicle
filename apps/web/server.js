@@ -2194,10 +2194,10 @@ app.prepare().then(async () => {
 
         // Get Logs
         if (parsedUrl.pathname === '/api/admin/logs' && req.method === 'GET') {
-          const level = parsedUrl.searchParams.get('level');
-          const category = parsedUrl.searchParams.get('category');
-          const limit = parseInt(parsedUrl.searchParams.get('limit') || '200');
-          const search = parsedUrl.searchParams.get('search')?.toLowerCase();
+          const level = parsedUrl.query.level;
+          const category = parsedUrl.query.category;
+          const limit = parseInt(parsedUrl.query.limit || '200');
+          const search = parsedUrl.query.search?.toLowerCase();
 
           let logs = [...logBuffer];
 
