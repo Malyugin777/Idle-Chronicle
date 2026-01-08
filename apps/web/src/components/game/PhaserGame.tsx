@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.82';
+const APP_VERSION = 'v1.0.83';
 
 interface BossState {
   name: string;
@@ -281,6 +281,8 @@ export default function PhaserGame() {
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [showTasks, setShowTasks] = useState(false);
   const [hasClaimable, setHasClaimable] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [serverUptime, setServerUptime] = useState<string>('');
 
   // Loading screen state (show until all data received)
   const [loadingState, setLoadingState] = useState({
@@ -987,7 +989,12 @@ export default function PhaserGame() {
               </div>
             </div>
             <div className="text-center mt-2">
-              <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+              <span
+                className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
+                onClick={() => setShowDebug(true)}
+              >
+                {APP_VERSION}
+              </span>
             </div>
           </div>
         ) : (
@@ -1056,7 +1063,12 @@ export default function PhaserGame() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[8px] text-gray-600">{APP_VERSION}</span>
+                <span
+                  className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
+                  onClick={() => setShowDebug(true)}
+                >
+                  {APP_VERSION}
+                </span>
                 {/* Drop info button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
@@ -1773,6 +1785,121 @@ export default function PhaserGame() {
               </div>
             </div>
             <div className="mt-4 text-[10px] text-gray-600">{APP_VERSION}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* DEBUG MODAL - Tap version to open */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showDebug && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setShowDebug(false)}
+        >
+          <div
+            className="bg-gray-900 rounded-xl p-4 max-w-sm w-full border border-gray-700 max-h-[80vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-white">🔧 Debug Info</h2>
+              <button onClick={() => setShowDebug(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              {/* Version */}
+              <div className="bg-black/40 rounded-lg p-3">
+                <div className="text-gray-500 text-xs mb-1">Version</div>
+                <div className="text-white font-mono">{APP_VERSION}</div>
+              </div>
+
+              {/* Boss State */}
+              <div className="bg-black/40 rounded-lg p-3">
+                <div className="text-gray-500 text-xs mb-1">Boss State</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Name:</span>
+                    <span className="text-white">{bossState.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">HP:</span>
+                    <span className="text-l2-gold font-mono">
+                      {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">HP %:</span>
+                    <span className="text-white">{((bossState.hp / bossState.maxHp) * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Index:</span>
+                    <span className="text-white">{bossState.bossIndex} / {bossState.totalBosses}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Player State */}
+              <div className="bg-black/40 rounded-lg p-3">
+                <div className="text-gray-500 text-xs mb-1">Player State</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Stamina:</span>
+                    <span className="text-green-400">{playerState.stamina} / {playerState.maxStamina}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Mana:</span>
+                    <span className="text-blue-400">{playerState.mana} / {playerState.maxMana}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Gold:</span>
+                    <span className="text-yellow-400">{playerState.gold.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Ether:</span>
+                    <span className="text-cyan-400">{playerState.ether}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection */}
+              <div className="bg-black/40 rounded-lg p-3">
+                <div className="text-gray-500 text-xs mb-1">Connection</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Status:</span>
+                    <span className={connected ? 'text-green-400' : 'text-red-400'}>
+                      {connected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Players:</span>
+                    <span className="text-white">{playersOnline}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buffs */}
+              {activeBuffs.length > 0 && (
+                <div className="bg-black/40 rounded-lg p-3">
+                  <div className="text-gray-500 text-xs mb-1">Active Buffs</div>
+                  <div className="space-y-1">
+                    {activeBuffs.map(buff => (
+                      <div key={buff.type} className="flex justify-between">
+                        <span className="text-gray-400">{buff.type}:</span>
+                        <span className="text-white">
+                          +{buff.value}% ({Math.ceil((buff.expiresAt - Date.now()) / 1000)}s)
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Timestamp */}
+              <div className="text-center text-[10px] text-gray-600">
+                {new Date().toISOString()}
+              </div>
+            </div>
           </div>
         </div>
       )}

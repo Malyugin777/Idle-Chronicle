@@ -1194,6 +1194,44 @@ app.prepare().then(async () => {
         return;
       }
 
+      // Debug endpoint - shows boss state and startup info
+      if (parsedUrl.pathname === '/api/debug') {
+        const uptime = process.uptime();
+        const uptimeStr = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          server: {
+            uptime: uptimeStr,
+            uptimeSeconds: Math.floor(uptime),
+            startedAt: new Date(Date.now() - uptime * 1000).toISOString(),
+            memoryMB: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+          },
+          boss: {
+            name: bossState.name,
+            nameRu: bossState.nameRu,
+            currentHp: bossState.currentHp,
+            maxHp: bossState.maxHp,
+            hpPercent: ((bossState.currentHp / bossState.maxHp) * 100).toFixed(1) + '%',
+            bossIndex: currentBossIndex,
+            respawnAt: bossRespawnAt ? bossRespawnAt.toISOString() : null,
+            isRespawning: bossRespawnAt && bossRespawnAt > new Date(),
+          },
+          session: {
+            playersOnline: onlineUsers.size,
+            leaderboardSize: sessionLeaderboard.size,
+            topDamage: sessionLeaderboard.size > 0
+              ? Math.max(...Array.from(sessionLeaderboard.values()).map(v => v.damage))
+              : 0,
+          },
+          debug: {
+            startupLogs: global.startupLogs || [],
+            lastSave: global.lastSaveTime ? new Date(global.lastSaveTime).toISOString() : null,
+          }
+        }, null, 2));
+        return;
+      }
+
       // ═══════════════════════════════════════════════════════════
       // ADMIN API ENDPOINTS
       // ═══════════════════════════════════════════════════════════
