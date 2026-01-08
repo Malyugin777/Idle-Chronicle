@@ -4,7 +4,7 @@
 
 export type TaskType = 'session' | 'daily';
 export type RewardType =
-  | 'ngPack'      // NG Soulshot pack (amount)
+  | 'ngPack'      // NG Charge pack (amount)
   | 'dCharge'     // D-grade charges
   | 'woodChest'   // Wooden chest
   | 'crystals'    // Premium currency (ancientCoin)

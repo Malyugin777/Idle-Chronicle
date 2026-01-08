@@ -4479,7 +4479,10 @@ app.prepare().then(async () => {
         const buff = BUFFS[buffId];
         const expiresAt = Date.now() + buff.duration;
 
-        // Add to in-memory buffs
+        // Remove existing buff of same type (prevent stacking!)
+        player.activeBuffs = player.activeBuffs.filter(b => b.type !== buffId);
+
+        // Add new buff
         player.activeBuffs.push({
           type: buffId,
           value: buff.value,
@@ -4490,6 +4493,14 @@ app.prepare().then(async () => {
         await prisma.user.update({
           where: { id: player.odamage },
           data: { [potionKey]: player[potionKey] },
+        });
+
+        // Delete old buff of same type (prevent stacking in DB!)
+        await prisma.activeBuff.deleteMany({
+          where: {
+            userId: player.odamage,
+            buffType: buffId.toUpperCase(),
+          },
         });
 
         await prisma.activeBuff.create({

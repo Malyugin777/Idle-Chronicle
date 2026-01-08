@@ -145,19 +145,19 @@ export const translations = {
     // Shop
     shop: {
       gold: 'Gold',
-      soulshots: 'Soulshots',
+      soulshots: 'Charges',
       soulshotsDesc: 'Increase damage per tap. Toggle to activate.',
       owned: 'Owned',
       buffs: 'Buffs',
       buffsDesc: 'Temporary boosts. Use wisely!',
       use: 'Use',
-      // Soulshots
-      ssNG: 'No-Grade SS',
-      ssD: 'D-Grade SS',
-      ssC: 'C-Grade SS',
-      ssB: 'B-Grade SS',
-      ssA: 'A-Grade SS',
-      ssS: 'S-Grade SS',
+      // Charges
+      ssNG: 'NG Charge',
+      ssD: 'D Charge',
+      ssC: 'C Charge',
+      ssB: 'B Charge',
+      ssA: 'A Charge',
+      ssS: 'S Charge',
       // Buffs
       haste: 'Haste',
       hasteEffect: '+30% speed',
@@ -340,13 +340,13 @@ export const translations = {
     // Shop
     shop: {
       gold: 'Золото',
-      soulshots: 'Заряды Души',
+      soulshots: 'Заряды',
       soulshotsDesc: 'Увеличивают урон за тап. Нажми чтобы активировать.',
       owned: 'Есть',
       buffs: 'Баффы',
       buffsDesc: 'Временные усиления. Используй с умом!',
       use: 'Юзать',
-      // Soulshots
+      // Заряды
       ssNG: 'NG Заряд',
       ssD: 'D Заряд',
       ssC: 'C Заряд',

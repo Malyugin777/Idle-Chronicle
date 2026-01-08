@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         `<b>How to play:</b>\n` +
         `• Tap the boss to deal damage\n` +
         `• Upgrade STR, DEX, LUCK stats\n` +
-        `• Buy soulshots for more damage\n` +
+        `• Buy charges for more damage\n` +
         `• Use buffs for temporary boosts\n` +
         `• Climb the leaderboard!\n\n` +
         `<b>Commands:</b>\n` +

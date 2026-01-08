@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.86';
+const APP_VERSION = 'v1.0.87';
 
 interface BossState {
   name: string;
@@ -234,9 +234,10 @@ export default function PhaserGame() {
   // Auto-attack toggle (Smart Auto-Hunt)
   const [autoAttack, setAutoAttack] = useState<boolean>(false);
 
-  // Meditation modal
+  // Meditation modal (only show once per session)
   const [meditationData, setMeditationData] = useState<MeditationData | null>(null);
   const [showMeditation, setShowMeditation] = useState(false);
+  const meditationShownRef = useRef(false);
 
   // Skills
   const [skills, setSkills] = useState<Skill[]>(() => {
@@ -577,8 +578,9 @@ export default function PhaserGame() {
         const now = Date.now();
         setActiveBuffs(data.activeBuffs.filter((b: ActiveBuff) => b.expiresAt > now));
       }
-      // Show meditation modal only if offline >= 5 minutes (avoid spam on reconnect)
-      if (data.offlineMinutes >= 5 && data.pendingDust > 0) {
+      // Show meditation modal only ONCE on initial login (not on reconnect)
+      if (!meditationShownRef.current && data.offlineMinutes >= 5 && data.pendingDust > 0) {
+        meditationShownRef.current = true;
         setMeditationData({
           pendingDust: data.pendingDust,
           offlineMinutes: data.offlineMinutes,
