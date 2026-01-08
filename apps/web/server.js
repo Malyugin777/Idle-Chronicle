@@ -108,6 +108,9 @@ const BOSS_RESPAWN_TIME_MS = 30 * 1000; // 30 секунд (TZ: респавн 3
 const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
 
+// FIX: Track last heartbeat by userId (not just socket) to prevent false offline
+const userLastHeartbeat = new Map(); // userId -> timestamp
+
 // ═══════════════════════════════════════════════════════════
 // ADMIN LOG BUFFER (for viewing logs without Railway access)
 // ═══════════════════════════════════════════════════════════
@@ -2912,7 +2915,10 @@ app.prepare().then(async () => {
     // ═══════════════════════════════════════════════════════════
     socket.on('session:heartbeat', () => {
       if (!player.odamage) return;
-      player.lastHeartbeat = Date.now();
+      const now = Date.now();
+      player.lastHeartbeat = now;
+      // FIX: Also track by userId for cross-socket detection
+      userLastHeartbeat.set(player.odamage, now);
     });
 
     // GET PENDING REWARDS
@@ -3322,7 +3328,17 @@ app.prepare().then(async () => {
         const now = Date.now();
         let lastActiveTime = user.lastOnline ? user.lastOnline.getTime() : now;
 
-        // Check if same user has another active session with fresh heartbeat
+        // FIX: First check global userLastHeartbeat map (persists across socket reconnects)
+        const globalLastHeartbeat = userLastHeartbeat.get(user.id);
+        if (globalLastHeartbeat) {
+          const timeSinceGlobal = now - globalLastHeartbeat;
+          if (timeSinceGlobal < 120000) { // 2 minutes
+            lastActiveTime = Math.max(lastActiveTime, globalLastHeartbeat);
+            console.log(`[Auth] Found global heartbeat for ${user.id}, ${Math.floor(timeSinceGlobal/1000)}s ago`);
+          }
+        }
+
+        // Also check if same user has another active session with fresh heartbeat
         // This handles page refresh / reconnect scenarios
         for (const [sid, p] of onlineUsers.entries()) {
           if (sid !== socket.id && p.odamage === user.id && p.lastHeartbeat) {
@@ -3385,6 +3401,9 @@ app.prepare().then(async () => {
 
         // Calculate expToNext based on level
         const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
+
+        // FIX: Mark user as active AFTER offline calc (for future reconnects)
+        userLastHeartbeat.set(user.id, Date.now());
 
         socket.emit('auth:success', {
           id: user.id,
