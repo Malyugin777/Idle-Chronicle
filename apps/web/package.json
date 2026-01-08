@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "prisma db push --accept-data-loss && prisma generate && next build",
+    "build": "prisma generate && next build",
     "start": "NODE_ENV=production node server.js",
     "lint": "next lint",
-    "db:push": "prisma db push --accept-data-loss",
+    "db:push": "prisma db push",
+    "db:push:force": "prisma db push --accept-data-loss",
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.js",
     "bot:setup": "node scripts/setup-bot.js",
