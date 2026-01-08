@@ -103,7 +103,7 @@ let previousBossSession = null;
 
 // Respawn timer (null = boss alive, Date = respawning)
 let bossRespawnAt = null;
-const BOSS_RESPAWN_TIME_MS = 5 * 60 * 60 * 1000; // 5 часов
+const BOSS_RESPAWN_TIME_MS = 30 * 1000; // 30 секунд (TZ: респавн 30 сек)
 
 const onlineUsers = new Map();
 const sessionLeaderboard = new Map();
@@ -845,8 +845,7 @@ const DEFAULT_BOSSES = new Proxy([], {
   }
 });
 
-// Respawn timer (10 minutes = 600000ms)
-// Using BOSS_RESPAWN_TIME_MS (5 min) and bossRespawnAt from line 98-99
+// Respawn timer: 30 seconds (see BOSS_RESPAWN_TIME_MS)
 
 let currentBossIndex = 0;
 
@@ -1264,7 +1263,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     }
   }
 
-  // Set respawn timer (5 hours)
+  // Set respawn timer (30 seconds)
   bossRespawnAt = new Date(Date.now() + BOSS_RESPAWN_TIME_MS);
 
   io.emit('boss:killed', {
