@@ -5860,15 +5860,10 @@ app.prepare().then(async () => {
           // Safe enchant fail (shouldn't happen with 100% chance, but just in case)
           await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
         } else if (useProtection) {
-          // Protected fail - item survives but loses level
-          newEnchantLevel = Math.max(0, currentLevel - 1);
-          await prisma.$transaction([
-            prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
-            prisma.userEquipment.update({
-              where: { id: itemId },
-              data: { enchant: newEnchantLevel },
-            }),
-          ]);
+          // Protected fail - item survives, level stays UNCHANGED
+          // Protection simply prevents item from breaking
+          newEnchantLevel = currentLevel; // Level stays the same!
+          await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
         } else {
           // v1.2: Unprotected fail - item BROKEN (not deleted!)
           itemBroken = true;

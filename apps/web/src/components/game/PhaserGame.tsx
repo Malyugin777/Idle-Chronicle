@@ -19,7 +19,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.97';
+const APP_VERSION = 'v1.0.98';
 
 interface BossState {
   name: string;

@@ -391,11 +391,12 @@ export function calculateEnchantResult(
 
   // Рискованный провал
   if (useProtection) {
-    // С Protection: -1 уровень, не ломается
+    // С Protection: уровень НЕ меняется, предмет НЕ ломается
+    // Protection просто предотвращает поломку
     return {
       success: false,
       itemBroken: false,
-      newEnchantLevel: Math.max(0, item.enchantLevel - 1),
+      newEnchantLevel: item.enchantLevel, // Уровень остаётся прежним!
       chargeConsumed: true,
       protectionConsumed: true,
     };
