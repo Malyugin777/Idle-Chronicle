@@ -67,8 +67,11 @@ export default function LeaderboardTab() {
     socket.emit('leaderboard:get');
 
     // Define all handlers as named functions for proper cleanup
-    const handleLeaderboardData = (data: CurrentBossData) => {
-      setCurrentData(data);
+    const handleLeaderboardData = (data: any) => {
+      setCurrentData({
+        ...data,
+        bossName: lang === 'ru' ? (data.bossNameRu || data.bossName) : data.bossName,
+      });
       setLoading(false);
     };
 
@@ -77,13 +80,20 @@ export default function LeaderboardTab() {
         ...prev,
         bossHp: data.hp,
         bossMaxHp: data.maxHp,
-        bossName: data.name,
+        bossName: lang === 'ru' ? (data.nameRu || data.name) : data.name,
         bossIcon: data.icon,
       } : null);
     };
 
-    const handlePreviousData = (data: PreviousBossData | null) => {
-      setPreviousData(data);
+    const handlePreviousData = (data: any | null) => {
+      if (data) {
+        setPreviousData({
+          ...data,
+          bossName: lang === 'ru' ? (data.bossNameRu || data.bossName) : data.bossName,
+        });
+      } else {
+        setPreviousData(null);
+      }
     };
 
     const handleAlltimeData = (data: LeaderboardEntry[]) => {

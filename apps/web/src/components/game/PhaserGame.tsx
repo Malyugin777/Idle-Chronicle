@@ -62,6 +62,7 @@ interface MeditationData {
 interface Skill {
   id: string;
   name: string;
+  nameRu?: string;
   icon: string;
   manaCost: number;
   cooldown: number;
@@ -131,9 +132,9 @@ const BUFF_DURATIONS: Record<string, number> = {
 };
 
 const SKILLS: Skill[] = [
-  { id: 'fireball', name: 'Fireball', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
-  { id: 'iceball', name: 'Ice Ball', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
-  { id: 'lightning', name: 'Lightning', icon: '⚡', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
+  { id: 'fireball', name: 'Fireball', nameRu: 'Огненный шар', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
+  { id: 'iceball', name: 'Ice Ball', nameRu: 'Ледяной шар', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
+  { id: 'lightning', name: 'Lightning', nameRu: 'Молния', icon: '⚡', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
 ];
 
 const COOLDOWNS_KEY = 'battle_skill_cooldowns';

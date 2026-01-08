@@ -378,7 +378,7 @@ function SalvageTab({
           </p>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-cyan-300">✨ {preview.dustAmount}</span>
-            <span className="text-gray-500">Enchant Dust</span>
+            <span className="text-gray-500">{lang === 'ru' ? 'Пыль заточки' : 'Enchant Dust'}</span>
           </div>
         </div>
       )}

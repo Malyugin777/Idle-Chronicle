@@ -217,8 +217,8 @@ export default function ChestOpenModal({ chestType, rewards, isOpening, onClose,
                         {rewards.equipment.name}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {rewards.equipment.pAtk && <span className="text-red-400">P.Atk +{rewards.equipment.pAtk}</span>}
-                        {rewards.equipment.pDef && <span className="text-blue-400">P.Def +{rewards.equipment.pDef}</span>}
+                        {rewards.equipment.pAtk && <span className="text-red-400">{lang === 'ru' ? 'Ф.Атк' : 'P.Atk'} +{rewards.equipment.pAtk}</span>}
+                        {rewards.equipment.pDef && <span className="text-blue-400 ml-2">{lang === 'ru' ? 'Ф.Защ' : 'P.Def'} +{rewards.equipment.pDef}</span>}
                       </div>
                       <div className={`text-xs ${rarityStyle?.color} opacity-80`}>
                         {lang === 'ru'

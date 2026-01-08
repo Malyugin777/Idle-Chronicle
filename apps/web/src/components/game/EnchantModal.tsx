@@ -374,7 +374,7 @@ function EnchantStep({
             <div className="mt-2 text-xs space-y-1">
               {currentStats.pAtkFlat && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">P.Atk</span>
+                  <span className="text-gray-500">{lang === 'ru' ? 'Ф.Атк' : 'P.Atk'}</span>
                   <span>
                     <span className="text-gray-400">{currentStats.pAtkFlat}</span>
                     <span className="text-green-400"> → {nextStats.pAtkFlat}</span>
@@ -383,7 +383,7 @@ function EnchantStep({
               )}
               {currentStats.pDefFlat && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">P.Def</span>
+                  <span className="text-gray-500">{lang === 'ru' ? 'Ф.Защ' : 'P.Def'}</span>
                   <span>
                     <span className="text-gray-400">{currentStats.pDefFlat}</span>
                     <span className="text-green-400"> → {nextStats.pDefFlat}</span>

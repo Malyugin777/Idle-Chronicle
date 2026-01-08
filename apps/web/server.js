@@ -1149,6 +1149,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   // Store previous boss session for leaderboard tab
   previousBossSession = {
     bossName: bossState.name,
+    bossNameRu: bossState.nameRu,
     bossIcon: bossState.icon,
     maxHp: bossState.maxHp,
     totalDamage: totalDamageDealt,
@@ -3471,6 +3472,7 @@ app.prepare().then(async () => {
       socket.emit('leaderboard:data', {
         leaderboard,
         bossName: bossState.name,
+        bossNameRu: bossState.nameRu,
         bossIcon: bossState.icon,
         bossHp: bossState.currentHp,
         bossMaxHp: bossState.maxHp,

@@ -359,7 +359,7 @@ export default function TreasuryTab() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Package className="text-l2-gold" size={20} />
-            <span className="font-bold text-white">Добыча</span>
+            <span className="font-bold text-white">{lang === 'ru' ? 'Добыча' : 'Loot'}</span>
           </div>
           <div className="flex items-center gap-2">
             {/* Forge Button */}
@@ -384,12 +384,12 @@ export default function TreasuryTab() {
           <div className="bg-black/30 rounded p-2 flex items-center gap-2">
             <Coins className="text-l2-gold" size={16} />
             <div>
-              <div className="text-gray-500">Всего золота</div>
+              <div className="text-gray-500">{lang === 'ru' ? 'Всего золота' : 'Total Gold'}</div>
               <div className="text-l2-gold font-bold">{formatNumber(lootStats.totalGoldEarned)}</div>
             </div>
           </div>
           <div className="bg-black/30 rounded p-2">
-            <div className="text-gray-500 mb-1">Сундуки открыто</div>
+            <div className="text-gray-500 mb-1">{lang === 'ru' ? 'Сундуки открыто' : 'Chests Opened'}</div>
             <div className="flex gap-1 flex-wrap text-[10px]">
               <span className="text-amber-600">{lootStats.totalChests.WOODEN}🪵</span>
               <span className="text-orange-400">{lootStats.totalChests.BRONZE}🟫</span>
@@ -406,7 +406,7 @@ export default function TreasuryTab() {
         <div className="bg-gradient-to-r from-l2-gold/20 to-orange-500/20 p-3 border-y border-l2-gold/30">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🎁</span>
-            <span className="font-bold text-l2-gold">Награды за босса</span>
+            <span className="font-bold text-l2-gold">{lang === 'ru' ? 'Награды за босса' : 'Boss Rewards'}</span>
             <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse">
               {pendingRewards.length}
             </span>
@@ -429,7 +429,7 @@ export default function TreasuryTab() {
                         <div className="text-white font-bold text-sm">{reward.bossName}</div>
                         {reward.rank && (
                           <div className="text-xs text-gray-400">
-                            Ранг: #{reward.rank}
+                            {lang === 'ru' ? 'Ранг' : 'Rank'}: #{reward.rank}
                             {reward.rank === 1 && <span className="ml-1 text-l2-gold">👑</span>}
                             {reward.rank === 2 && <span className="ml-1 text-gray-300">🥈</span>}
                             {reward.rank === 3 && <span className="ml-1 text-orange-400">🥉</span>}
@@ -446,7 +446,7 @@ export default function TreasuryTab() {
                           : 'bg-l2-gold text-black hover:brightness-110 active:scale-95'
                       }`}
                     >
-                      {isClaiming ? '...' : 'Забрать'}
+                      {isClaiming ? '...' : (lang === 'ru' ? 'Забрать' : 'Claim')}
                     </button>
                   </div>
 
@@ -474,7 +474,9 @@ export default function TreasuryTab() {
                     )}
                     {reward.badgeId && (
                       <span className="bg-purple-500/30 px-2 py-0.5 rounded text-purple-400">
-                        {reward.badgeId === 'slayer' ? '⚔️ Slayer' : '🏆 Elite'} ({reward.badgeDuration}д)
+                        {reward.badgeId === 'slayer'
+                          ? (lang === 'ru' ? '⚔️ Убийца' : '⚔️ Slayer')
+                          : (lang === 'ru' ? '🏆 Элита' : '🏆 Elite')} ({reward.badgeDuration}{lang === 'ru' ? 'д' : 'd'})
                       </span>
                     )}
                   </div>
@@ -488,8 +490,8 @@ export default function TreasuryTab() {
       {/* Chest Slots Grid */}
       <div className="p-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-400">Ячейки сундуков</span>
-          <span className="text-xs text-gray-500">{chests.length}/{unlockedSlots} занято</span>
+          <span className="text-xs text-gray-400">{lang === 'ru' ? 'Ячейки сундуков' : 'Chest Slots'}</span>
+          <span className="text-xs text-gray-500">{chests.length}/{unlockedSlots} {lang === 'ru' ? 'занято' : 'filled'}</span>
         </div>
 
         <div className="grid grid-cols-5 gap-2">
@@ -564,13 +566,13 @@ export default function TreasuryTab() {
         {/* Info text */}
         {openingChest && (
           <div className="mt-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 text-xs text-yellow-400 text-center">
-            ⏳ Открывается сундук... Другие открыть нельзя
+            {lang === 'ru' ? '⏳ Открывается сундук... Другие открыть нельзя' : '⏳ Opening a chest... Others cannot be opened'}
           </div>
         )}
 
         {chests.length >= unlockedSlots && (
           <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-xs text-red-400 text-center">
-            ⚠️ Все ячейки заняты! Откройте или удалите сундук, чтобы получить новый
+            {lang === 'ru' ? '⚠️ Все ячейки заняты! Откройте или удалите сундук, чтобы получить новый' : '⚠️ All slots are full! Open or delete a chest to receive a new one'}
           </div>
         )}
       </div>
@@ -613,39 +615,39 @@ export default function TreasuryTab() {
 
             {/* Drop rates info (matching TZ exactly) */}
             <div className="bg-black/30 rounded-lg p-2 mb-3 text-xs">
-              <div className="text-gray-500 mb-1">Возможный дроп:</div>
+              <div className="text-gray-500 mb-1">{lang === 'ru' ? 'Возможный дроп:' : 'Possible drop:'}</div>
               {selectedChest.chestType === 'WOODEN' && (
                 <div className="text-gray-400 space-y-0.5">
-                  <div>💰 1,000 золота</div>
-                  <div><span className="text-gray-300">50%</span> Обычная экипировка</div>
-                  <div><span className="text-green-400">7%</span> Необычная экипировка</div>
-                  <div><span className="text-blue-400">3%</span> Свиток заточки +1</div>
+                  <div>💰 1,000 {lang === 'ru' ? 'золота' : 'gold'}</div>
+                  <div><span className="text-gray-300">50%</span> {lang === 'ru' ? 'Обычная экипировка' : 'Common equipment'}</div>
+                  <div><span className="text-green-400">7%</span> {lang === 'ru' ? 'Необычная экипировка' : 'Uncommon equipment'}</div>
+                  <div><span className="text-blue-400">3%</span> {lang === 'ru' ? 'Свиток заточки +1' : 'Enchant Scroll +1'}</div>
                 </div>
               )}
               {selectedChest.chestType === 'BRONZE' && (
                 <div className="text-gray-400 space-y-0.5">
-                  <div>💰 3,000 золота</div>
-                  <div><span className="text-gray-300">60%</span> Обычная экипировка</div>
-                  <div><span className="text-green-400">20%</span> Необычная экипировка</div>
-                  <div><span className="text-purple-400">3%</span> Редкая экипировка</div>
-                  <div><span className="text-blue-400">15%</span> Свиток заточки +1</div>
+                  <div>💰 3,000 {lang === 'ru' ? 'золота' : 'gold'}</div>
+                  <div><span className="text-gray-300">60%</span> {lang === 'ru' ? 'Обычная экипировка' : 'Common equipment'}</div>
+                  <div><span className="text-green-400">20%</span> {lang === 'ru' ? 'Необычная экипировка' : 'Uncommon equipment'}</div>
+                  <div><span className="text-purple-400">3%</span> {lang === 'ru' ? 'Редкая экипировка' : 'Rare equipment'}</div>
+                  <div><span className="text-blue-400">15%</span> {lang === 'ru' ? 'Свиток заточки +1' : 'Enchant Scroll +1'}</div>
                 </div>
               )}
               {selectedChest.chestType === 'SILVER' && (
                 <div className="text-gray-400 space-y-0.5">
-                  <div>💰 8,000 золота</div>
-                  <div><span className="text-green-400">40%</span> Необычная экипировка</div>
-                  <div><span className="text-purple-400">10%</span> Редкая экипировка</div>
-                  <div><span className="text-orange-400">1%</span> Эпическая экипировка</div>
-                  <div><span className="text-blue-400">25%</span> Свитки заточки +1-5</div>
+                  <div>💰 8,000 {lang === 'ru' ? 'золота' : 'gold'}</div>
+                  <div><span className="text-green-400">40%</span> {lang === 'ru' ? 'Необычная экипировка' : 'Uncommon equipment'}</div>
+                  <div><span className="text-purple-400">10%</span> {lang === 'ru' ? 'Редкая экипировка' : 'Rare equipment'}</div>
+                  <div><span className="text-orange-400">1%</span> {lang === 'ru' ? 'Эпическая экипировка' : 'Epic equipment'}</div>
+                  <div><span className="text-blue-400">25%</span> {lang === 'ru' ? 'Свитки заточки +1-5' : 'Enchant Scrolls +1-5'}</div>
                 </div>
               )}
               {selectedChest.chestType === 'GOLD' && (
                 <div className="text-gray-400 space-y-0.5">
-                  <div>💰 20,000 золота</div>
-                  <div><span className="text-purple-400">15%</span> Редкая экипировка</div>
-                  <div><span className="text-orange-400">3%</span> Эпическая экипировка</div>
-                  <div><span className="text-blue-400">45%</span> Свитки заточки +1-5</div>
+                  <div>💰 20,000 {lang === 'ru' ? 'золота' : 'gold'}</div>
+                  <div><span className="text-purple-400">15%</span> {lang === 'ru' ? 'Редкая экипировка' : 'Rare equipment'}</div>
+                  <div><span className="text-orange-400">3%</span> {lang === 'ru' ? 'Эпическая экипировка' : 'Epic equipment'}</div>
+                  <div><span className="text-blue-400">45%</span> {lang === 'ru' ? 'Свитки заточки +1-5' : 'Enchant Scrolls +1-5'}</div>
                 </div>
               )}
             </div>
@@ -719,7 +721,9 @@ export default function TreasuryTab() {
                           : 'bg-black/30 text-gray-600 cursor-not-allowed'
                       }`}
                     >
-                      {canOpen ? '🔓 Начать открытие' : '⏳ Другой сундук открывается'}
+                      {canOpen
+                        ? (lang === 'ru' ? '🔓 Начать открытие' : '🔓 Start Opening')
+                        : (lang === 'ru' ? '⏳ Другой сундук открывается' : '⏳ Another chest is opening')}
                     </button>
                   );
                 }
@@ -729,14 +733,14 @@ export default function TreasuryTab() {
                 onClick={() => deleteChest(selectedChest.id)}
                 className="w-full py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30"
               >
-                🗑️ Удалить сундук
+                {lang === 'ru' ? '🗑️ Удалить сундук' : '🗑️ Delete Chest'}
               </button>
 
               <button
                 onClick={() => setSelectedChest(null)}
                 className="w-full py-2 bg-black/30 text-gray-400 rounded-lg text-sm hover:bg-black/40"
               >
-                Закрыть
+                {lang === 'ru' ? 'Закрыть' : 'Close'}
               </button>
             </div>
           </div>
@@ -751,7 +755,7 @@ export default function TreasuryTab() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-white">Ячейка заблокирована</h3>
+              <h3 className="text-lg font-bold text-white">{lang === 'ru' ? 'Ячейка заблокирована' : 'Slot Locked'}</h3>
               <button onClick={() => setSelectedLockedSlot(null)} className="text-gray-400">
                 <X size={20} />
               </button>
@@ -760,7 +764,7 @@ export default function TreasuryTab() {
             <div className="text-center mb-4">
               <Lock className="mx-auto text-purple-400 mb-2" size={40} />
               <p className="text-gray-400 text-sm">
-                Разблокируйте дополнительную ячейку для хранения сундуков
+                {lang === 'ru' ? 'Разблокируйте дополнительную ячейку для хранения сундуков' : 'Unlock an additional slot for storing chests'}
               </p>
             </div>
 
@@ -768,10 +772,10 @@ export default function TreasuryTab() {
               <div className="flex items-center justify-center gap-2">
                 <Gem className="text-purple-400" size={20} />
                 <span className="text-xl font-bold text-purple-400">{SLOT_UNLOCK_COST}</span>
-                <span className="text-gray-400">кристаллов</span>
+                <span className="text-gray-400">{lang === 'ru' ? 'кристаллов' : 'crystals'}</span>
               </div>
               <div className="text-center text-xs text-gray-500 mt-1">
-                У вас: {crystals} кристаллов
+                {lang === 'ru' ? `У вас: ${crystals} кристаллов` : `You have: ${crystals} crystals`}
               </div>
             </div>
 
@@ -784,7 +788,9 @@ export default function TreasuryTab() {
                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'
               }`}
             >
-              {crystals >= SLOT_UNLOCK_COST ? '🔓 Разблокировать' : '❌ Недостаточно кристаллов'}
+              {crystals >= SLOT_UNLOCK_COST
+                ? (lang === 'ru' ? '🔓 Разблокировать' : '🔓 Unlock')
+                : (lang === 'ru' ? '❌ Недостаточно кристаллов' : '❌ Not enough crystals')}
             </button>
           </div>
         </div>
