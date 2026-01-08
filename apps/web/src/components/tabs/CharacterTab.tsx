@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
-import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 // ═══════════════════════════════════════════════════════════
@@ -72,6 +72,17 @@ const STAT_TOOLTIPS: Record<string, { ru: string; en: string }> = {
   agility: { ru: 'Ловкость — увеличивает скорость атаки', en: 'Agility — increases attack speed' },
   intellect: { ru: 'Интеллект — увеличивает маг. урон', en: 'Intellect — increases M.Atk' },
   spirit: { ru: 'Дух — увеличивает макс. ману (+10 за единицу)', en: 'Spirit — increases max mana (+10 per point)' },
+};
+
+// ═══════════════════════════════════════════════════════════
+// CONSUMABLE TOOLTIPS
+// ═══════════════════════════════════════════════════════════
+
+const CONSUMABLE_TOOLTIPS: Record<string, { ru: string; en: string }> = {
+  ether: { ru: 'Эфир — x2 урона на 1 тап', en: 'Ether — x2 damage per tap' },
+  scrollHaste: { ru: 'Свиток скорости — +30% скорость атаки на 30 сек', en: 'Haste Scroll — +30% attack speed for 30s' },
+  scrollAcumen: { ru: 'Свиток силы магии — +50% урона на 30 сек', en: 'Acumen Scroll — +50% damage for 30s' },
+  scrollLuck: { ru: 'Свиток удачи — +10% шанс крита на 60 сек', en: 'Luck Scroll — +10% crit chance for 60s' },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -156,10 +167,9 @@ interface PlayerStats {
   gold: number;
   ancientCoin?: number;
   ether?: number;
-  stamina?: number;
-  maxStamina?: number;
-  mana?: number;
-  maxMana?: number;
+  scrollHaste?: number;
+  scrollAcumen?: number;
+  scrollLuck?: number;
 }
 
 interface HeroState {
@@ -249,6 +259,19 @@ function getActiveSetBonuses(setId: string, count: number): SetBonus[] {
   const set = SETS[setId];
   if (!set) return [];
   return set.bonuses.filter(b => count >= b.pieces);
+}
+
+function calculateEquipmentBonuses(heroState: HeroState): { pAtk: number; pDef: number; mAtk: number; mDef: number } {
+  let pAtk = 0, pDef = 0, mAtk = 0, mDef = 0;
+  Object.values(heroState.equipment).forEach(item => {
+    if (item?.stats) {
+      pAtk += item.stats.pAtkFlat || 0;
+      pDef += item.stats.pDefFlat || 0;
+      mAtk += item.stats.mAtkFlat || 0;
+      mDef += item.stats.mDefFlat || 0;
+    }
+  });
+  return { pAtk, pDef, mAtk, mDef };
 }
 
 function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'] {
@@ -440,7 +463,185 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 }
 
 // ═══════════════════════════════════════════════════════════
-// MAIN COMPONENT - Ultimate Premium Design
+// STATS POPUP - Premium Modal
+// ═══════════════════════════════════════════════════════════
+
+interface StatsPopupProps {
+  stats: PlayerStats;
+  derived: HeroState['derivedStats'];
+  equipBonus: { pAtk: number; pDef: number; mAtk: number; mDef: number };
+  onClose: () => void;
+  lang: Language;
+}
+
+function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupProps) {
+  const [selectedStat, setSelectedStat] = useState<string | null>(null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-gradient-to-b from-gray-800 to-gray-950 rounded-2xl w-full max-w-sm border-2 border-amber-500/50 shadow-[0_0_20px_rgba(251,191,36,0.2)] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-amber-900/60 to-amber-800/40 p-4 border-b border-amber-500/30">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-amber-400 flex items-center gap-2 text-lg">
+              <span>📊</span> {lang === 'ru' ? 'Статистика' : 'Statistics'}
+            </span>
+            <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
+              <X size={22} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4">
+          {/* Combat Stats Grid */}
+          <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
+            <span>⚔️</span> {lang === 'ru' ? 'Боевые характеристики' : 'Combat Stats'}
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {[
+              { label: lang === 'ru' ? 'АТК' : 'ATK', value: derived.pAtk, bonus: equipBonus.pAtk, icon: '⚔️', color: 'from-red-900/50 to-red-950/70', border: 'border-red-500/30', text: 'text-red-400' },
+              { label: lang === 'ru' ? 'ЗАЩ' : 'DEF', value: derived.pDef, bonus: equipBonus.pDef, icon: '🛡️', color: 'from-blue-900/50 to-blue-950/70', border: 'border-blue-500/30', text: 'text-blue-400' },
+              { label: lang === 'ru' ? 'КРИТ' : 'CRIT', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', color: 'from-yellow-900/50 to-yellow-950/70', border: 'border-yellow-500/30', text: 'text-yellow-400' },
+              { label: lang === 'ru' ? 'М.АТК' : 'M.ATK', value: derived.mAtk, bonus: equipBonus.mAtk, icon: '✨', color: 'from-purple-900/50 to-purple-950/70', border: 'border-purple-500/30', text: 'text-purple-400' },
+              { label: lang === 'ru' ? 'М.ЗАЩ' : 'M.DEF', value: derived.mDef, bonus: equipBonus.mDef, icon: '🔮', color: 'from-cyan-900/50 to-cyan-950/70', border: 'border-cyan-500/30', text: 'text-cyan-400' },
+              { label: lang === 'ru' ? 'СКР' : 'SPD', value: derived.attackSpeed, icon: '⚡', color: 'from-green-900/50 to-green-950/70', border: 'border-green-500/30', text: 'text-green-400' },
+            ].map((stat, idx) => (
+              <div key={idx} className={`bg-gradient-to-b ${stat.color} rounded-xl p-2.5 text-center border ${stat.border} shadow-md`}>
+                <div className="text-[10px] text-gray-400 mb-0.5 flex items-center justify-center gap-1">
+                  <span>{stat.icon}</span> {stat.label}
+                </div>
+                <div className={`text-lg font-bold ${stat.text} drop-shadow-md`}>
+                  {stat.value}
+                  {stat.bonus && stat.bonus > 0 && (
+                    <span className="text-[10px] text-green-400 ml-1">(+{stat.bonus})</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Base Attributes */}
+          <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
+            <span>💪</span> {lang === 'ru' ? 'Атрибуты (тап = инфо)' : 'Attributes (tap = info)'}
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {[
+              { key: 'power', icon: '💪', color: 'text-red-400', bg: 'from-red-900/40', border: 'border-red-500/30', label: lang === 'ru' ? 'СИЛ' : 'STR' },
+              { key: 'agility', icon: '🏃', color: 'text-green-400', bg: 'from-green-900/40', border: 'border-green-500/30', label: lang === 'ru' ? 'ЛОВ' : 'AGI' },
+              { key: 'vitality', icon: '❤️', color: 'text-pink-400', bg: 'from-pink-900/40', border: 'border-pink-500/30', label: lang === 'ru' ? 'СТОЙ' : 'VIT' },
+              { key: 'intellect', icon: '🧠', color: 'text-blue-400', bg: 'from-blue-900/40', border: 'border-blue-500/30', label: lang === 'ru' ? 'ИНТ' : 'INT' },
+              { key: 'spirit', icon: '✨', color: 'text-purple-400', bg: 'from-purple-900/40', border: 'border-purple-500/30', label: lang === 'ru' ? 'ДУХ' : 'SPI' },
+            ].map(attr => (
+              <button
+                key={attr.key}
+                onClick={() => setSelectedStat(selectedStat === attr.key ? null : attr.key)}
+                className={`bg-gradient-to-b ${attr.bg} to-gray-900/60 rounded-lg p-2 text-center transition-all border ${
+                  selectedStat === attr.key ? 'ring-2 ring-amber-400 border-amber-500/50' : attr.border
+                }`}
+              >
+                <div className="text-base mb-0.5">{attr.icon}</div>
+                <div className={`text-sm font-bold ${attr.color}`}>{(stats as any)[attr.key] || 10}</div>
+                <div className="text-[8px] text-gray-500">{attr.label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Stat Tooltip */}
+          {selectedStat && STAT_TOOLTIPS[selectedStat] && (
+            <div className="mt-3 bg-gradient-to-r from-amber-900/30 to-amber-950/40 border border-amber-500/30 rounded-xl p-3">
+              <div className="text-[11px] text-amber-300 leading-relaxed">
+                {lang === 'ru' ? STAT_TOOLTIPS[selectedStat].ru : STAT_TOOLTIPS[selectedStat].en}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SKILLS POPUP - Premium Modal
+// ═══════════════════════════════════════════════════════════
+
+interface SkillsPopupProps {
+  level: number;
+  onClose: () => void;
+  lang: Language;
+}
+
+function SkillsPopup({ level, onClose, lang }: SkillsPopupProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-gradient-to-b from-gray-800 to-gray-950 rounded-2xl w-full max-w-sm border-2 border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.2)] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-900/60 to-purple-800/40 p-4 border-b border-purple-500/30">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-purple-400 flex items-center gap-2 text-lg">
+              <span>⚡</span> {lang === 'ru' ? 'Навыки' : 'Skills'}
+            </span>
+            <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
+              <X size={22} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          {SKILLS_DATA.map((skill) => {
+            const isLocked = level < skill.unlockLevel;
+
+            return (
+              <div
+                key={skill.id}
+                className={`bg-gradient-to-r ${isLocked ? 'from-gray-800/40 to-gray-900/60 opacity-60' : `${skill.gradient}`}
+                  rounded-xl p-3 border ${isLocked ? 'border-gray-700/40' : 'border-white/10'} ${!isLocked ? skill.glow : ''} shadow-lg overflow-hidden relative`}
+              >
+                {!isLocked && <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />}
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className={`w-14 h-14 rounded-xl bg-black/40 flex items-center justify-center border-2 ${isLocked ? 'border-gray-600/50' : 'border-white/20'}`}>
+                    <span className="text-3xl drop-shadow-lg">{skill.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'} drop-shadow-md`}>
+                        {lang === 'ru' ? skill.nameRu : skill.nameEn}
+                      </span>
+                      {isLocked && (
+                        <span className="text-[9px] text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded-md border border-red-500/30">
+                          Lv.{skill.unlockLevel}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-gray-300 mb-1.5 drop-shadow-sm">
+                      {lang === 'ru' ? skill.descRu : skill.descEn}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px]">
+                      <span className="text-blue-300 flex items-center gap-1 bg-blue-900/30 px-1.5 py-0.5 rounded">
+                        💧 {skill.manaCost}
+                      </span>
+                      <span className="text-yellow-300 flex items-center gap-1 bg-yellow-900/30 px-1.5 py-0.5 rounded">
+                        ⏱️ {skill.cooldown / 1000}s
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════
 
 export default function CharacterTab() {
@@ -452,9 +653,10 @@ export default function CharacterTab() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; isEquipped: boolean; slotType?: SlotType } | null>(null);
-  const [statsExpanded, setStatsExpanded] = useState(false);
-  const [skillsExpanded, setSkillsExpanded] = useState(false);
-  const [selectedStat, setSelectedStat] = useState<string | null>(null);
+  const [showStatsPopup, setShowStatsPopup] = useState(false);
+  const [showSkillsPopup, setShowSkillsPopup] = useState(false);
+  const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null);
+  const [consumables, setConsumables] = useState({ ether: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0 });
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
@@ -468,6 +670,12 @@ export default function CharacterTab() {
         const newState = { ...prev, baseStats: data };
         newState.derivedStats = recalculateDerivedStats(newState);
         return newState;
+      });
+      setConsumables({
+        ether: data.ether || 0,
+        scrollHaste: data.scrollHaste || 0,
+        scrollAcumen: data.scrollAcumen || 0,
+        scrollLuck: data.scrollLuck || 0,
       });
       setIsLoading(false);
     };
@@ -500,14 +708,27 @@ export default function CharacterTab() {
       });
     };
 
+    const handleBuffSuccess = (data: { buffId: string; duration: number; stats: any }) => {
+      if (data.stats) {
+        setConsumables(prev => ({
+          ether: data.stats.ether ?? prev.ether,
+          scrollHaste: data.stats.scrollHaste ?? prev.scrollHaste,
+          scrollAcumen: data.stats.scrollAcumen ?? prev.scrollAcumen,
+          scrollLuck: data.stats.scrollLuck ?? prev.scrollLuck,
+        }));
+      }
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
+    socket.on('buff:success', handleBuffSuccess);
 
     return () => {
       socket.off('player:data');
       socket.off('auth:success');
       socket.off('equipment:data');
+      socket.off('buff:success');
     };
   }, []);
 
@@ -543,76 +764,67 @@ export default function CharacterTab() {
 
   const stats = heroState.baseStats;
   const derived = heroState.derivedStats;
+  const equipBonus = calculateEquipmentBonuses(heroState);
   const expPercent = Math.min(100, (stats.exp / stats.expToNext) * 100);
   const setCounts = countSetPieces(heroState.equipment);
+
+  // Build consumables for inventory
+  const consumableSlots: { id: string; dbField: string; icon: string; count: number; color: string }[] = [];
+  if (consumables.ether > 0) {
+    consumableSlots.push({ id: 'ether', dbField: 'ether', icon: '💎', count: consumables.ether, color: 'text-cyan-400' });
+  }
+  if (consumables.scrollHaste > 0) {
+    consumableSlots.push({ id: 'scrollHaste', dbField: 'scrollHaste', icon: '⚡', count: consumables.scrollHaste, color: 'text-yellow-400' });
+  }
+  if (consumables.scrollAcumen > 0) {
+    consumableSlots.push({ id: 'scrollAcumen', dbField: 'scrollAcumen', icon: '🔥', count: consumables.scrollAcumen, color: 'text-orange-400' });
+  }
+  if (consumables.scrollLuck > 0) {
+    consumableSlots.push({ id: 'scrollLuck', dbField: 'scrollLuck', icon: '🍀', count: consumables.scrollLuck, color: 'text-green-400' });
+  }
+
+  const totalSlots = heroState.inventory.length + consumableSlots.length;
 
   return (
     <div className="flex-1 overflow-auto bg-gradient-to-b from-[#0d1117] to-[#161b22]">
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* TOP HUD - Hero Info (Match Battle Screen Style) */}
+      {/* COMPACT HEADER - Premium Style */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-b from-black/95 via-black/80 to-transparent px-3 pt-3 pb-5">
-        {/* Row 1: Avatar + Name + Resources */}
-        <div className="flex items-center justify-between mb-3">
-          {/* Left: Avatar + Level + Name */}
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              {stats.photoUrl ? (
-                <img
-                  src={stats.photoUrl}
-                  alt=""
-                  className="w-12 h-12 rounded-xl border-2 border-amber-500/70 shadow-lg shadow-amber-500/25"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-xl border-2 border-amber-500/70 bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg shadow-amber-500/25">
-                  <span className="text-2xl">👤</span>
-                </div>
-              )}
-              {/* Level badge */}
-              <div className="absolute -bottom-1.5 -right-1.5 bg-gradient-to-r from-amber-600 to-amber-500 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-lg border border-amber-400/50">
-                {stats.level}
+      <div className="bg-gradient-to-b from-black/90 to-black/60 p-3 border-b border-gray-700/50">
+        <div className="flex items-center gap-3">
+          {/* Level Badge */}
+          <div className="relative">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-600/80 to-amber-800/90 flex items-center justify-center border-2 border-amber-500/60 shadow-lg shadow-amber-900/30">
+              <span className="text-lg font-bold text-white drop-shadow-md">{stats.level}</span>
+            </div>
+          </div>
+
+          {/* Name + EXP */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-bold text-white truncate drop-shadow-md">
+                {stats.firstName || stats.username || 'Hero'}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-amber-400 font-bold flex items-center gap-1">
+                  <span>🪙</span> {formatCompact(stats.gold || 0)}
+                </span>
+                <span className="text-sm text-purple-400 font-bold flex items-center gap-1">
+                  <Gem size={14} /> {stats.ancientCoin || 0}
+                </span>
               </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-white truncate max-w-[100px] drop-shadow-md">
-                {stats.firstName || stats.username || 'Герой'}
+            {/* EXP Bar */}
+            <div className="h-3 bg-gray-900/90 rounded-md overflow-hidden relative border border-purple-500/30 shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 transition-all duration-300"
+                style={{ width: `${expPercent}%` }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold drop-shadow-lg">
+                {stats.exp}/{stats.expToNext} ({expPercent.toFixed(0)}%)
               </span>
-              <span className="text-[10px] text-gray-400">
-                {lang === 'ru' ? 'Уровень' : 'Level'} {stats.level}
-              </span>
             </div>
-          </div>
-
-          {/* Right: Gold + Crystals */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2.5 py-1.5 rounded-lg border border-amber-600/40 shadow-md">
-              <span className="text-sm">🪙</span>
-              <span className="text-sm font-bold text-amber-300 drop-shadow-sm">{formatCompact(stats.gold || 0)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2.5 py-1.5 rounded-lg border border-purple-500/40 shadow-md">
-              <Gem className="text-purple-400" size={14} />
-              <span className="text-sm font-bold text-purple-300 drop-shadow-sm">{stats.ancientCoin || 0}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: EXP Bar */}
-        <div className="mb-1">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-gray-400 flex items-center gap-1">
-              <span>✨</span> EXP
-            </span>
-            <span className="text-[10px] text-purple-300 font-medium">{stats.exp}/{stats.expToNext}</span>
-          </div>
-          <div className="h-3 bg-gray-900/90 rounded-md overflow-hidden relative border border-purple-500/30 shadow-inner">
-            <div
-              className="h-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 transition-all duration-300"
-              style={{ width: `${expPercent}%` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold drop-shadow-lg">
-              {expPercent.toFixed(0)}%
-            </span>
           </div>
         </div>
       </div>
@@ -620,7 +832,7 @@ export default function CharacterTab() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* EQUIPMENT PAPERDOLL - Premium Card */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="px-3 -mt-2 mb-3">
+      <div className="p-3">
         <div className="bg-gradient-to-b from-gray-800/50 to-gray-900/70 rounded-2xl p-4 border border-gray-700/40 shadow-xl">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -634,7 +846,7 @@ export default function CharacterTab() {
             </div>
           </div>
 
-          {/* Paperdoll Grid - Centered Premium */}
+          {/* Paperdoll Grid */}
           <div className="flex flex-col items-center gap-2">
             {/* Row 1: Helmet */}
             <Slot slotType="helmet" item={heroState.equipment.helmet || null} onClick={() => handleEquippedSlotClick('helmet')} />
@@ -695,165 +907,29 @@ export default function CharacterTab() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* ACCORDION: STATS - Premium Style */}
+      {/* STATS & SKILLS BUTTONS - Premium Style */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="px-3 mb-2">
+      <div className="px-3 mb-3 flex gap-2">
         <button
-          onClick={() => { setStatsExpanded(!statsExpanded); setSelectedStat(null); }}
-          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-            statsExpanded
-              ? 'bg-gradient-to-r from-amber-700/40 to-amber-900/50 border-2 border-amber-500/60 shadow-lg shadow-amber-900/20'
-              : 'bg-gradient-to-r from-gray-800/50 to-gray-900/60 border border-gray-700/40 hover:border-gray-600/60'
-          }`}
+          onClick={() => setShowStatsPopup(true)}
+          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-900/50 to-amber-800/40
+            text-amber-400 border border-amber-500/40 hover:from-amber-800/60 hover:border-amber-500/60
+            active:scale-[0.98] transition-all shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2"
         >
-          <span className={`font-bold flex items-center gap-2 ${statsExpanded ? 'text-amber-400' : 'text-gray-400'}`}>
-            <span className="text-lg">📊</span>
-            {lang === 'ru' ? 'Статы' : 'Stats'}
-          </span>
-          {statsExpanded ? (
-            <ChevronUp size={20} className="text-amber-400" />
-          ) : (
-            <ChevronDown size={20} className="text-gray-500" />
-          )}
+          <span>📊</span> {lang === 'ru' ? 'Статы' : 'Stats'}
         </button>
-
-        {statsExpanded && (
-          <div className="mt-2 bg-gradient-to-b from-gray-800/50 to-gray-900/70 rounded-xl p-4 border border-gray-700/40 shadow-lg">
-            {/* Combat Stats Grid - Premium Cards */}
-            <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
-              <span>⚔️</span> {lang === 'ru' ? 'Боевые характеристики' : 'Combat Stats'}
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {[
-                { label: 'АТК', value: derived.pAtk, icon: '⚔️', color: 'from-red-900/50 to-red-950/70', border: 'border-red-500/30', text: 'text-red-400' },
-                { label: 'ЗАЩ', value: derived.pDef, icon: '🛡️', color: 'from-blue-900/50 to-blue-950/70', border: 'border-blue-500/30', text: 'text-blue-400' },
-                { label: 'КРИТ', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', color: 'from-yellow-900/50 to-yellow-950/70', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-                { label: 'М.АТК', value: derived.mAtk, icon: '✨', color: 'from-purple-900/50 to-purple-950/70', border: 'border-purple-500/30', text: 'text-purple-400' },
-                { label: 'М.ЗАЩ', value: derived.mDef, icon: '🔮', color: 'from-cyan-900/50 to-cyan-950/70', border: 'border-cyan-500/30', text: 'text-cyan-400' },
-                { label: 'СКР', value: derived.attackSpeed, icon: '⚡', color: 'from-green-900/50 to-green-950/70', border: 'border-green-500/30', text: 'text-green-400' },
-              ].map((stat, idx) => (
-                <div key={idx} className={`bg-gradient-to-b ${stat.color} rounded-xl p-2.5 text-center border ${stat.border} shadow-md`}>
-                  <div className="text-[10px] text-gray-400 mb-0.5 flex items-center justify-center gap-1">
-                    <span>{stat.icon}</span> {stat.label}
-                  </div>
-                  <div className={`text-lg font-bold ${stat.text} drop-shadow-md`}>{stat.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Base Attributes - Clickable */}
-            <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
-              <span>💪</span> {lang === 'ru' ? 'Атрибуты (тап = инфо)' : 'Attributes (tap = info)'}
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {[
-                { key: 'power', icon: '💪', color: 'text-red-400', bg: 'from-red-900/40', border: 'border-red-500/30', label: lang === 'ru' ? 'СИЛ' : 'STR' },
-                { key: 'agility', icon: '🏃', color: 'text-green-400', bg: 'from-green-900/40', border: 'border-green-500/30', label: lang === 'ru' ? 'ЛОВ' : 'AGI' },
-                { key: 'vitality', icon: '❤️', color: 'text-pink-400', bg: 'from-pink-900/40', border: 'border-pink-500/30', label: lang === 'ru' ? 'СТОЙ' : 'VIT' },
-                { key: 'intellect', icon: '🧠', color: 'text-blue-400', bg: 'from-blue-900/40', border: 'border-blue-500/30', label: lang === 'ru' ? 'ИНТ' : 'INT' },
-                { key: 'spirit', icon: '✨', color: 'text-purple-400', bg: 'from-purple-900/40', border: 'border-purple-500/30', label: lang === 'ru' ? 'ДУХ' : 'SPI' },
-              ].map(attr => (
-                <button
-                  key={attr.key}
-                  onClick={() => setSelectedStat(selectedStat === attr.key ? null : attr.key)}
-                  className={`bg-gradient-to-b ${attr.bg} to-gray-900/60 rounded-lg p-2 text-center transition-all border ${
-                    selectedStat === attr.key ? 'ring-2 ring-amber-400 border-amber-500/50' : attr.border
-                  }`}
-                >
-                  <div className="text-base mb-0.5">{attr.icon}</div>
-                  <div className={`text-sm font-bold ${attr.color}`}>{(stats as any)[attr.key] || 10}</div>
-                  <div className="text-[8px] text-gray-500">{attr.label}</div>
-                </button>
-              ))}
-            </div>
-
-            {/* Stat Tooltip */}
-            {selectedStat && STAT_TOOLTIPS[selectedStat] && (
-              <div className="mt-3 bg-gradient-to-r from-amber-900/30 to-amber-950/40 border border-amber-500/30 rounded-xl p-3">
-                <div className="text-[11px] text-amber-300 leading-relaxed">
-                  {lang === 'ru' ? STAT_TOOLTIPS[selectedStat].ru : STAT_TOOLTIPS[selectedStat].en}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={() => setShowSkillsPopup(true)}
+          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-900/50 to-purple-800/40
+            text-purple-400 border border-purple-500/40 hover:from-purple-800/60 hover:border-purple-500/60
+            active:scale-[0.98] transition-all shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2"
+        >
+          <span>⚡</span> {lang === 'ru' ? 'Скиллы' : 'Skills'}
+        </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* ACCORDION: SKILLS - Premium Style */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="px-3 mb-2">
-        <button
-          onClick={() => setSkillsExpanded(!skillsExpanded)}
-          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-            skillsExpanded
-              ? 'bg-gradient-to-r from-purple-700/40 to-purple-900/50 border-2 border-purple-500/60 shadow-lg shadow-purple-900/20'
-              : 'bg-gradient-to-r from-gray-800/50 to-gray-900/60 border border-gray-700/40 hover:border-gray-600/60'
-          }`}
-        >
-          <span className={`font-bold flex items-center gap-2 ${skillsExpanded ? 'text-purple-400' : 'text-gray-400'}`}>
-            <span className="text-lg">⚡</span>
-            {lang === 'ru' ? 'Скиллы' : 'Skills'}
-          </span>
-          {skillsExpanded ? (
-            <ChevronUp size={20} className="text-purple-400" />
-          ) : (
-            <ChevronDown size={20} className="text-gray-500" />
-          )}
-        </button>
-
-        {skillsExpanded && (
-          <div className="mt-2 space-y-2">
-            {SKILLS_DATA.map((skill) => {
-              const isLocked = stats.level < skill.unlockLevel;
-
-              return (
-                <div
-                  key={skill.id}
-                  className={`bg-gradient-to-r ${isLocked ? 'from-gray-800/40 to-gray-900/60 opacity-60' : `${skill.gradient}`}
-                    rounded-xl p-3 border ${isLocked ? 'border-gray-700/40' : 'border-white/10'} ${!isLocked ? skill.glow : ''} shadow-lg overflow-hidden relative`}
-                >
-                  {!isLocked && <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />}
-                  <div className="flex items-center gap-3 relative z-10">
-                    {/* Skill Icon */}
-                    <div className={`w-14 h-14 rounded-xl bg-black/40 flex items-center justify-center border-2 ${isLocked ? 'border-gray-600/50' : 'border-white/20'}`}>
-                      <span className="text-3xl drop-shadow-lg">{skill.icon}</span>
-                    </div>
-
-                    {/* Skill Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'} drop-shadow-md`}>
-                          {lang === 'ru' ? skill.nameRu : skill.nameEn}
-                        </span>
-                        {isLocked && (
-                          <span className="text-[9px] text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded-md border border-red-500/30">
-                            🔒 Lv.{skill.unlockLevel}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-gray-300 mb-1.5 drop-shadow-sm">
-                        {lang === 'ru' ? skill.descRu : skill.descEn}
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px]">
-                        <span className="text-blue-300 flex items-center gap-1 bg-blue-900/30 px-1.5 py-0.5 rounded">
-                          💧 {skill.manaCost}
-                        </span>
-                        <span className="text-yellow-300 flex items-center gap-1 bg-yellow-900/30 px-1.5 py-0.5 rounded">
-                          ⏱️ {skill.cooldown / 1000}s
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* INVENTORY - Premium Grid */}
+      {/* INVENTORY - Premium Grid with Consumables */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="px-3 pb-4">
         <div className="bg-gradient-to-b from-gray-800/50 to-gray-900/70 rounded-2xl p-4 border border-gray-700/40 shadow-xl">
@@ -865,11 +941,50 @@ export default function CharacterTab() {
               </span>
             </div>
             <div className="text-[10px] text-gray-500 bg-gray-800/50 px-2 py-0.5 rounded-md">
-              {heroState.inventory.length}/20
+              {totalSlots}/20
             </div>
           </div>
 
+          {/* Consumable Tooltip */}
+          {selectedConsumable && CONSUMABLE_TOOLTIPS[selectedConsumable] && (
+            <div className="mb-3 bg-gradient-to-r from-cyan-900/30 to-cyan-950/40 border border-cyan-500/30 rounded-xl p-3">
+              <div className="text-[11px] text-cyan-300 mb-2">
+                {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
+              </div>
+              {selectedConsumable.startsWith('scroll') && (
+                <button
+                  onClick={() => {
+                    const buffId = selectedConsumable.replace('scroll', '').toLowerCase();
+                    getSocket().emit('buff:use', { buffId });
+                    setSelectedConsumable(null);
+                  }}
+                  className="w-full py-2 bg-gradient-to-r from-cyan-600/50 to-cyan-700/60 hover:from-cyan-500/60
+                    border border-cyan-500/50 rounded-lg text-xs text-white font-bold active:scale-[0.98] transition-all"
+                >
+                  {lang === 'ru' ? '⚡ Использовать' : '⚡ Use'}
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-5 gap-2">
+            {/* Consumable slots */}
+            {consumableSlots.map((cons) => (
+              <button
+                key={cons.id}
+                onClick={() => setSelectedConsumable(selectedConsumable === cons.dbField ? null : cons.dbField)}
+                className={`aspect-square bg-gradient-to-b from-gray-700/50 to-gray-900/70 rounded-xl
+                  border-2 ${selectedConsumable === cons.dbField ? 'border-cyan-500 ring-2 ring-cyan-500/50' : 'border-gray-600/50'}
+                  flex items-center justify-center relative hover:brightness-110 active:scale-95 transition-all shadow-lg`}
+              >
+                <span className="text-xl drop-shadow-lg">{cons.icon}</span>
+                <span className={`absolute top-0.5 right-1 text-[10px] font-bold ${cons.color} drop-shadow-md`}>
+                  {cons.count > 999 ? `${Math.floor(cons.count / 1000)}k` : cons.count}
+                </span>
+              </button>
+            ))}
+
+            {/* Equipment items */}
             {heroState.inventory.map((item) => {
               const style = RARITY_STYLES[item.rarity];
               return (
@@ -885,8 +1000,9 @@ export default function CharacterTab() {
                 </button>
               );
             })}
+
             {/* Empty slots */}
-            {Array.from({ length: Math.max(0, 10 - heroState.inventory.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 10 - totalSlots) }).map((_, i) => (
               <div
                 key={`empty-${i}`}
                 className="aspect-square bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl border border-gray-700/30
@@ -899,6 +1015,10 @@ export default function CharacterTab() {
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* MODALS */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+
       {/* Item Tooltip Modal */}
       {selectedItem && (
         <ItemTooltip
@@ -908,6 +1028,26 @@ export default function CharacterTab() {
           onEquip={() => handleEquip(selectedItem.item.id)}
           onUnequip={() => selectedItem.slotType && handleUnequip(selectedItem.slotType)}
           onClose={() => setSelectedItem(null)}
+          lang={lang}
+        />
+      )}
+
+      {/* Stats Popup */}
+      {showStatsPopup && (
+        <StatsPopup
+          stats={stats}
+          derived={derived}
+          equipBonus={equipBonus}
+          onClose={() => setShowStatsPopup(false)}
+          lang={lang}
+        />
+      )}
+
+      {/* Skills Popup */}
+      {showSkillsPopup && (
+        <SkillsPopup
+          level={stats.level}
+          onClose={() => setShowSkillsPopup(false)}
           lang={lang}
         />
       )}
