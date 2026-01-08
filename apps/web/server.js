@@ -2757,11 +2757,30 @@ app.prepare().then(async () => {
         player.pendingDust = pendingDust;
         player.offlineMinutes = offlineMinutes;
 
-        // Update lastOnline immediately to prevent duplicate dust on reconnect
-        if (offlineMinutes >= 5) {
+        // Calculate offline stamina/mana regen (same rates as online)
+        const offlineSeconds = Math.floor((now - lastOnlineTime) / 1000);
+        if (offlineSeconds > 0) {
+          // Stamina regen: +1 per second (StatsService.STAMINA_REGEN_PER_SEC)
+          const offlineStaminaRegen = offlineSeconds * StatsService.STAMINA_REGEN_PER_SEC;
+          player.stamina = Math.min(player.maxStamina, player.stamina + offlineStaminaRegen);
+
+          // Mana regen: manaRegen per second (default BASE_MANA_REGEN = 5)
+          const manaRegenRate = Math.max(player.manaRegen || BASE_MANA_REGEN, BASE_MANA_REGEN);
+          const offlineManaRegen = offlineSeconds * manaRegenRate;
+          player.mana = Math.min(player.maxMana, player.mana + offlineManaRegen);
+
+          console.log(`[Auth] Offline regen: ${offlineSeconds}s => +${offlineStaminaRegen} stamina, +${offlineManaRegen} mana`);
+        }
+
+        // Update lastOnline and save offline-regenerated stamina/mana
+        if (offlineMinutes >= 1) {
           await prisma.user.update({
             where: { id: user.id },
-            data: { lastOnline: new Date() },
+            data: {
+              lastOnline: new Date(),
+              stamina: Math.floor(player.stamina),
+              mana: Math.floor(player.mana),
+            },
           });
         }
 
