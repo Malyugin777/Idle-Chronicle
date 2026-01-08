@@ -1861,7 +1861,12 @@ app.prepare().then(async () => {
             return;
           }
 
-          // Delete everything
+          // Delete everything in correct order (foreign keys)
+          await prisma.damageLog.deleteMany({});
+          await prisma.pendingReward.deleteMany({});
+          await prisma.userBadge.deleteMany({});
+          await prisma.userEquipment.deleteMany({});
+          await prisma.userTask.deleteMany({});
           await prisma.activeBuff.deleteMany({});
           await prisma.chest.deleteMany({});
           await prisma.inventoryItem.deleteMany({});
@@ -1869,11 +1874,18 @@ app.prepare().then(async () => {
           await prisma.user.deleteMany({});
           await prisma.gameState.deleteMany({});
 
+          // Clear in-memory state
+          onlineUsers.clear();
+          sessionLeaderboard.clear();
+          previousBossSession = null;
+
           // Reset boss
           currentBossIndex = 0;
+          bossRespawnAt = null;
           await respawnBoss(prisma, false);
           await saveBossState(prisma);
 
+          addLog('warn', 'system', 'DATABASE RESET by admin');
           sendJson({ success: true });
           return;
         }
