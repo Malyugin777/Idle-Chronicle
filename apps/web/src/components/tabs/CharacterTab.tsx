@@ -727,15 +727,14 @@ export default function CharacterTab() {
       });
     };
 
-    const handleBuffSuccess = (data: { buffId: string; duration: number; stats: any }) => {
-      if (data.stats) {
-        setConsumables(prev => ({
-          ether: data.stats.ether ?? prev.ether,
-          scrollHaste: data.stats.scrollHaste ?? prev.scrollHaste,
-          scrollAcumen: data.stats.scrollAcumen ?? prev.scrollAcumen,
-          scrollLuck: data.stats.scrollLuck ?? prev.scrollLuck,
-        }));
-      }
+    // FIX: Server sends potionHaste/potionAcumen/potionLuck directly, not in stats object
+    const handleBuffSuccess = (data: { buffId: string; expiresAt: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+      setConsumables(prev => ({
+        ether: prev.ether,
+        scrollHaste: data.potionHaste ?? prev.scrollHaste,
+        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
+        scrollLuck: data.potionLuck ?? prev.scrollLuck,
+      }));
     };
 
     // Sync ether when used in combat (from PhaserGame taps)

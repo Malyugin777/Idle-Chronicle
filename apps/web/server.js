@@ -2623,14 +2623,14 @@ app.prepare().then(async () => {
       maxHealth: initialDerived.maxHealth,
       physicalDefense: initialDerived.physicalDefense,
       attackSpeed: initialDerived.attackSpeed,
-      // Stamina System (from StatsService)
-      stamina: initialDerived.maxStamina,
+      // Stamina System - use undefined so DB values are loaded on auth
+      stamina: undefined,           // FIX: was initialDerived.maxStamina
       maxStamina: initialDerived.maxStamina,
       exhaustedUntil: null,  // timestamp when exhaustion ends
-      // Mana system (from StatsService)
-      mana: initialDerived.maxMana,
+      // Mana system - use undefined so DB values are loaded on auth
+      mana: undefined,              // FIX: was initialDerived.maxMana
       maxMana: initialDerived.maxMana,
-      manaRegen: BASE_MANA_REGEN,
+      manaRegen: undefined,         // FIX: was BASE_MANA_REGEN
       // Tap & Auto-attack
       tapsPerSecond: BASE_TAPS_PER_SECOND,
       autoAttackSpeed: 0,
@@ -2643,13 +2643,14 @@ app.prepare().then(async () => {
       sessionDamage: 0,
       sessionClicks: 0,
       sessionCrits: 0,
-      // Ether
+      // Ether - use undefined so DB values are loaded on auth
       autoEther: false,
-      ether: 100,
-      // Potions
-      potionHaste: 0,
-      potionAcumen: 0,
-      potionLuck: 0,
+      ether: undefined,      // FIX: was 100, caused DB value to be ignored
+      etherDust: undefined,  // FIX: explicitly undefined
+      // Potions - use undefined so DB values are loaded on auth
+      potionHaste: undefined,   // FIX: was 0, caused DB value to be ignored
+      potionAcumen: undefined,  // FIX: was 0, caused DB value to be ignored
+      potionLuck: undefined,    // FIX: was 0, caused DB value to be ignored
       // Active buffs (in-memory)
       activeBuffs: [],
       // Activity tracking for boss rewards (TZ Этап 2)
@@ -2682,27 +2683,9 @@ app.prepare().then(async () => {
       respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
     });
 
-    socket.emit('player:state', {
-      // L2 Stamina (NEW)
-      stamina: player.stamina,
-      maxStamina: player.maxStamina,
-      exhaustedUntil: player.exhaustedUntil,
-      // L2 Attributes (NEW)
-      power: player.power,
-      agility: player.agility,
-      vitality: player.vitality,
-      physicalPower: player.physicalPower,
-      physicalDefense: player.physicalDefense,
-      // Legacy mana
-      mana: player.mana,
-      maxMana: player.maxMana,
-      manaRegen: player.manaRegen,
-      // Other
-      tapsPerSecond: player.tapsPerSecond,
-      autoAttackSpeed: player.autoAttackSpeed,
-      sessionDamage: player.sessionDamage,
-      isFirstLogin: player.isFirstLogin,
-    });
+    // FIX: Don't emit player:state here - it uses default values before auth!
+    // player:state will be sent as part of periodic updates AFTER auth loads correct values
+    // Removed early player:state emission to prevent stamina/mana reset bug
 
     // GET PLAYER DATA (for tabs that mount after auth)
     socket.on('player:get', async () => {
@@ -3198,7 +3181,7 @@ app.prepare().then(async () => {
         player.maxMana = derivedStats.maxMana;
         // FIX: Use ?? instead of || to preserve mana=0
         player.mana = Math.min(user.mana ?? player.maxMana, player.maxMana);
-        player.manaRegen = user.manaRegen;
+        player.manaRegen = user.manaRegen ?? BASE_MANA_REGEN; // FIX: fallback if DB null
         player.tapsPerSecond = user.tapsPerSecond;
         player.autoAttackSpeed = user.autoAttackSpeed;
         player.isFirstLogin = user.isFirstLogin;
@@ -3370,6 +3353,12 @@ app.prepare().then(async () => {
         return;
       }
 
+      // FIX: Check if player is authed (stamina is set from DB)
+      if (player.stamina === undefined) {
+        socket.emit('tap:error', { message: 'Please wait for authentication...' });
+        return;
+      }
+
       // Stamina cost: always 1 per tap
       const staminaCostPerTap = 1;
 
@@ -3488,6 +3477,12 @@ app.prepare().then(async () => {
       // Check boss alive
       if (bossState.currentHp <= 0) {
         socket.emit('skill:error', { message: 'Boss is dead' });
+        return;
+      }
+
+      // FIX: Check if player is authed (mana is set from DB)
+      if (player.mana === undefined) {
+        socket.emit('skill:error', { message: 'Please wait for authentication...' });
         return;
       }
 
@@ -5066,29 +5061,48 @@ app.prepare().then(async () => {
           data: { [potionKey]: player[potionKey] },
         });
 
-        // Update or create buff in DB
-        await prisma.activeBuff.upsert({
-          where: {
-            // Use unique constraint on (userId, buffType)
-            userId_buffType: {
+        // Update or create buff in DB (use deleteMany + create as fallback for missing unique constraint)
+        try {
+          await prisma.activeBuff.upsert({
+            where: {
+              userId_buffType: {
+                userId: player.odamage,
+                buffType: buffId.toUpperCase(),
+              },
+            },
+            update: {
+              expiresAt: new Date(expiresAt),
+            },
+            create: {
+              userId: player.odamage,
+              buffType: buffId.toUpperCase(),
+              value: buff.value,
+              expiresAt: new Date(expiresAt),
+            },
+          });
+        } catch (upsertErr) {
+          // Fallback if unique constraint not yet applied
+          console.log('[Buff] Upsert failed, using deleteMany+create fallback');
+          await prisma.activeBuff.deleteMany({
+            where: {
               userId: player.odamage,
               buffType: buffId.toUpperCase(),
             },
-          },
-          update: {
-            expiresAt: new Date(expiresAt),
-          },
-          create: {
-            userId: player.odamage,
-            buffType: buffId.toUpperCase(),
-            value: buff.value,
-            expiresAt: new Date(expiresAt),
-          },
-        });
+          });
+          await prisma.activeBuff.create({
+            data: {
+              userId: player.odamage,
+              buffType: buffId.toUpperCase(),
+              value: buff.value,
+              expiresAt: new Date(expiresAt),
+            },
+          });
+        }
 
         socket.emit('buff:success', {
           buffId,
           expiresAt,
+          duration: buff.duration, // FIX: Send duration for client to know
           [potionKey]: player[potionKey],
         });
       } catch (err) {
@@ -5810,16 +5824,16 @@ app.prepare().then(async () => {
         changed = true;
       }
 
-      // Regen stamina only if not exhausted
-      if (!StatsService.isExhausted(player.exhaustedUntil)) {
+      // Regen stamina only if not exhausted AND player is authed (stamina !== undefined)
+      if (!StatsService.isExhausted(player.exhaustedUntil) && player.stamina !== undefined) {
         if (player.stamina < player.maxStamina) {
           player.stamina = Math.min(player.maxStamina, player.stamina + StatsService.STAMINA_REGEN_PER_SEC);
           changed = true;
         }
       }
 
-      // Also regen mana (for future skills)
-      if (player.mana < player.maxMana) {
+      // Also regen mana (for future skills) - only if authed (mana !== undefined)
+      if (player.mana !== undefined && player.mana < player.maxMana) {
         // Минимум BASE_MANA_REGEN (5), даже если в БД меньше
         const regenAmount = Math.max(player.manaRegen || 0, BASE_MANA_REGEN);
         player.mana = Math.min(player.maxMana, player.mana + regenAmount);
@@ -5851,7 +5865,8 @@ app.prepare().then(async () => {
 
     for (const [socketId, player] of onlineUsers.entries()) {
       // NEW: Check autoAttack toggle instead of autoAttackSpeed
-      if (player.autoAttack && player.odamage && bossState.currentHp > 0) {
+      // Also check that player is authed (stamina !== undefined)
+      if (player.autoAttack && player.odamage && bossState.currentHp > 0 && player.stamina !== undefined) {
         // Check stamina - need stamina to auto-attack
         const staminaNeeded = AUTO_STAMINA_COST * AUTO_ATTACKS_PER_SECOND;
         if (player.stamina < AUTO_STAMINA_COST) {

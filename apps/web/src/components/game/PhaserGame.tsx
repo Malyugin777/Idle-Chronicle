@@ -192,6 +192,8 @@ export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<BattleScene | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // FIX: Store pending boss image for when scene becomes ready
+  const pendingBossImageRef = useRef<string | null>(null);
 
   // Language
   const [lang, setLang] = useState<Language>('en');
@@ -425,6 +427,14 @@ export default function PhaserGame() {
             if (scene) {
               sceneRef.current = scene;
               scene.scene.restart({ socket });
+              // FIX: After scene restart, apply any pending boss image
+              // Delay to ensure scene.create() has completed
+              setTimeout(() => {
+                if (pendingBossImageRef.current && sceneRef.current) {
+                  sceneRef.current.updateBossImage(pendingBossImageRef.current);
+                  pendingBossImageRef.current = null;
+                }
+              }, 300);
             }
           },
         },
@@ -465,8 +475,13 @@ export default function PhaserGame() {
       const newImage = data.image || '/assets/bosses/boss_single.png';
       setBossState(prev => {
         // If boss image changed, update Phaser
-        if (prev.image !== newImage && sceneRef.current) {
-          sceneRef.current.updateBossImage(newImage);
+        if (prev.image !== newImage) {
+          if (sceneRef.current) {
+            sceneRef.current.updateBossImage(newImage);
+          } else {
+            // FIX: Scene not ready yet, store for later
+            pendingBossImageRef.current = newImage;
+          }
         }
         return {
           name: data.name || 'Boss',
@@ -718,8 +733,13 @@ export default function PhaserGame() {
       if (data) {
         const newImage = data.image || '/assets/bosses/boss_single.png';
         setBossState(prev => {
-          if (prev.image !== newImage && sceneRef.current) {
-            sceneRef.current.updateBossImage(newImage);
+          if (prev.image !== newImage) {
+            if (sceneRef.current) {
+              sceneRef.current.updateBossImage(newImage);
+            } else {
+              // FIX: Scene not ready, store for later
+              pendingBossImageRef.current = newImage;
+            }
           }
           return {
             name: data.name || prev.name,
