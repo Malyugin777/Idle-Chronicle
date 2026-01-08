@@ -354,10 +354,8 @@ function Slot({ slotType, item, size = 'normal', onClick }: SlotProps) {
     return (
       <button
         onClick={onClick}
-        className={`${sizeClasses} bg-gradient-to-b from-gray-800/60 to-gray-900/90 rounded-lg
-          border-2 border-gray-700/50 flex items-center justify-center
-          hover:border-gray-500/70 hover:from-gray-700/60 active:scale-95 transition-all
-          shadow-inner`}
+        className={`${sizeClasses} bg-black/30 rounded-lg border border-gray-700/50 flex items-center justify-center
+          hover:border-gray-500/70 active:scale-95 transition-all`}
       >
         {SLOT_ICONS[slotType]}
       </button>
@@ -369,18 +367,16 @@ function Slot({ slotType, item, size = 'normal', onClick }: SlotProps) {
   return (
     <button
       onClick={onClick}
-      className={`${sizeClasses} bg-gradient-to-b ${style.bg} rounded-lg border-2 ${style.border} ${style.glow}
-        flex items-center justify-center hover:brightness-125 active:scale-95 transition-all relative overflow-hidden`}
+      className={`${sizeClasses} bg-black/30 rounded-lg border ${style.border} ${style.glow}
+        flex items-center justify-center hover:brightness-125 active:scale-95 transition-all`}
     >
-      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/10 pointer-events-none" />
-      <span className={`${iconSize} relative z-10 drop-shadow-lg`}>{item.icon}</span>
+      <span className={iconSize}>{item.icon}</span>
     </button>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEM TOOLTIP - Premium Modal
+// ITEM TOOLTIP
 // ═══════════════════════════════════════════════════════════
 
 interface ItemTooltipProps {
@@ -397,24 +393,23 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
   const style = RARITY_STYLES[item.rarity];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div
-        className={`bg-gradient-to-b from-gray-800 to-gray-950 rounded-2xl w-full max-w-xs border-2 ${style.border} ${style.glow} overflow-hidden`}
+        className={`bg-l2-panel rounded-lg w-full max-w-xs border ${style.border} overflow-hidden`}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`bg-gradient-to-r ${style.bg} p-4 border-b border-white/10 relative`}>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-          <div className="flex items-center gap-3 relative z-10">
-            <div className={`w-14 h-14 bg-black/50 rounded-xl flex items-center justify-center border-2 ${style.border}`}>
-              <span className="text-3xl drop-shadow-lg">{item.icon}</span>
+        <div className="p-4 border-b border-gray-700/30">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-black/30 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">{item.icon}</span>
             </div>
             <div className="flex-1">
-              <div className={`font-bold text-lg ${style.text} drop-shadow-md`}>{item.name}</div>
-              <div className="text-xs text-gray-300 capitalize mt-0.5">{item.rarity}</div>
+              <div className={`font-bold ${style.text}`}>{item.name}</div>
+              <div className="text-xs text-gray-400 capitalize">{item.rarity}</div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
-              <X size={22} />
+            <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+              <X size={20} />
             </button>
           </div>
         </div>
@@ -422,19 +417,15 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
         {/* Stats */}
         <div className="p-4 space-y-2">
           {(item.stats.pAtkFlat ?? 0) > 0 && (
-            <div className="flex justify-between items-center bg-gradient-to-r from-red-900/30 to-transparent rounded-lg px-3 py-2 border border-red-500/20">
-              <span className="text-gray-300 text-sm flex items-center gap-2">
-                <span className="text-base">⚔️</span> П. Атака
-              </span>
-              <span className="text-red-400 font-bold text-lg">+{item.stats.pAtkFlat}</span>
+            <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
+              <span className="text-gray-300 text-sm">⚔️ П. Атака</span>
+              <span className="text-red-400 font-bold">+{item.stats.pAtkFlat}</span>
             </div>
           )}
           {(item.stats.pDefFlat ?? 0) > 0 && (
-            <div className="flex justify-between items-center bg-gradient-to-r from-blue-900/30 to-transparent rounded-lg px-3 py-2 border border-blue-500/20">
-              <span className="text-gray-300 text-sm flex items-center gap-2">
-                <span className="text-base">🛡️</span> П. Защита
-              </span>
-              <span className="text-blue-400 font-bold text-lg">+{item.stats.pDefFlat}</span>
+            <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
+              <span className="text-gray-300 text-sm">🛡️ П. Защита</span>
+              <span className="text-blue-400 font-bold">+{item.stats.pDefFlat}</span>
             </div>
           )}
         </div>
@@ -444,18 +435,14 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
           {isEquipped ? (
             <button
               onClick={onUnequip}
-              className="w-full py-3 bg-gradient-to-r from-red-700/80 to-red-900/90 text-white rounded-xl font-bold
-                border-2 border-red-500/50 hover:from-red-600/80 active:scale-[0.98] transition-all
-                shadow-lg shadow-red-900/30"
+              className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold active:scale-[0.98] transition-all"
             >
               {lang === 'ru' ? 'Снять' : 'Unequip'}
             </button>
           ) : (
             <button
               onClick={onEquip}
-              className="w-full py-3 bg-gradient-to-r from-amber-600/80 to-amber-800/90 text-white rounded-xl font-bold
-                border-2 border-amber-500/50 hover:from-amber-500/80 active:scale-[0.98] transition-all
-                shadow-lg shadow-amber-900/30"
+              className="w-full py-3 bg-l2-gold hover:bg-l2-gold/80 text-black rounded-lg font-bold active:scale-[0.98] transition-all"
             >
               {slotHasItem ? (lang === 'ru' ? 'Заменить' : 'Replace') : (lang === 'ru' ? 'Надеть' : 'Equip')}
             </button>
@@ -467,7 +454,7 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 }
 
 // ═══════════════════════════════════════════════════════════
-// STATS POPUP - Premium Modal
+// STATS POPUP
 // ═══════════════════════════════════════════════════════════
 
 interface StatsPopupProps {
@@ -482,42 +469,34 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
   const [selectedStat, setSelectedStat] = useState<string | null>(null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div
-        className="bg-gradient-to-b from-gray-800 to-gray-950 rounded-2xl w-full max-w-sm border-2 border-amber-500/50 shadow-[0_0_20px_rgba(251,191,36,0.2)] overflow-hidden"
+        className="bg-l2-panel rounded-lg w-full max-w-sm overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-900/60 to-amber-800/40 p-4 border-b border-amber-500/30">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-amber-400 flex items-center gap-2 text-lg">
-              <span>📊</span> {lang === 'ru' ? 'Статистика' : 'Statistics'}
-            </span>
-            <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
-              <X size={22} />
-            </button>
-          </div>
+        <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
+          <h3 className="text-sm text-gray-400">📊 {lang === 'ru' ? 'Статистика' : 'Statistics'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <X size={20} />
+          </button>
         </div>
 
         <div className="p-4">
           {/* Combat Stats Grid */}
-          <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
-            <span>⚔️</span> {lang === 'ru' ? 'Боевые характеристики' : 'Combat Stats'}
-          </div>
+          <p className="text-xs text-gray-500 mb-2">{lang === 'ru' ? 'Боевые характеристики' : 'Combat Stats'}</p>
           <div className="grid grid-cols-3 gap-2 mb-4">
             {[
-              { label: lang === 'ru' ? 'АТК' : 'ATK', value: derived.pAtk, bonus: equipBonus.pAtk, icon: '⚔️', color: 'from-red-900/50 to-red-950/70', border: 'border-red-500/30', text: 'text-red-400' },
-              { label: lang === 'ru' ? 'ЗАЩ' : 'DEF', value: derived.pDef, bonus: equipBonus.pDef, icon: '🛡️', color: 'from-blue-900/50 to-blue-950/70', border: 'border-blue-500/30', text: 'text-blue-400' },
-              { label: lang === 'ru' ? 'КРИТ' : 'CRIT', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', color: 'from-yellow-900/50 to-yellow-950/70', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-              { label: lang === 'ru' ? 'М.АТК' : 'M.ATK', value: derived.mAtk, bonus: equipBonus.mAtk, icon: '✨', color: 'from-purple-900/50 to-purple-950/70', border: 'border-purple-500/30', text: 'text-purple-400' },
-              { label: lang === 'ru' ? 'М.ЗАЩ' : 'M.DEF', value: derived.mDef, bonus: equipBonus.mDef, icon: '🔮', color: 'from-cyan-900/50 to-cyan-950/70', border: 'border-cyan-500/30', text: 'text-cyan-400' },
-              { label: lang === 'ru' ? 'СКР' : 'SPD', value: derived.attackSpeed, icon: '⚡', color: 'from-green-900/50 to-green-950/70', border: 'border-green-500/30', text: 'text-green-400' },
+              { label: lang === 'ru' ? 'АТК' : 'ATK', value: derived.pAtk, bonus: equipBonus.pAtk, icon: '⚔️', text: 'text-red-400' },
+              { label: lang === 'ru' ? 'ЗАЩ' : 'DEF', value: derived.pDef, bonus: equipBonus.pDef, icon: '🛡️', text: 'text-blue-400' },
+              { label: lang === 'ru' ? 'КРИТ' : 'CRIT', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', text: 'text-yellow-400' },
+              { label: lang === 'ru' ? 'М.АТК' : 'M.ATK', value: derived.mAtk, bonus: equipBonus.mAtk, icon: '✨', text: 'text-purple-400' },
+              { label: lang === 'ru' ? 'М.ЗАЩ' : 'M.DEF', value: derived.mDef, bonus: equipBonus.mDef, icon: '🔮', text: 'text-cyan-400' },
+              { label: lang === 'ru' ? 'СКР' : 'SPD', value: derived.attackSpeed, icon: '⚡', text: 'text-green-400' },
             ].map((stat, idx) => (
-              <div key={idx} className={`bg-gradient-to-b ${stat.color} rounded-xl p-2.5 text-center border ${stat.border} shadow-md`}>
-                <div className="text-[10px] text-gray-400 mb-0.5 flex items-center justify-center gap-1">
-                  <span>{stat.icon}</span> {stat.label}
-                </div>
-                <div className={`text-lg font-bold ${stat.text} drop-shadow-md`}>
+              <div key={idx} className="bg-black/30 rounded-lg p-2 text-center">
+                <div className="text-[10px] text-gray-500 mb-0.5">{stat.icon} {stat.label}</div>
+                <div className={`text-lg font-bold ${stat.text}`}>
                   {stat.value}
                   {stat.bonus && stat.bonus > 0 && (
                     <span className="text-[10px] text-green-400 ml-1">(+{stat.bonus})</span>
@@ -528,22 +507,20 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
           </div>
 
           {/* Base Attributes */}
-          <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1">
-            <span>💪</span> {lang === 'ru' ? 'Атрибуты (тап = инфо)' : 'Attributes (tap = info)'}
-          </div>
+          <p className="text-xs text-gray-500 mb-2">{lang === 'ru' ? 'Атрибуты (тап = инфо)' : 'Attributes (tap = info)'}</p>
           <div className="grid grid-cols-5 gap-1.5">
             {[
-              { key: 'power', icon: '💪', color: 'text-red-400', bg: 'from-red-900/40', border: 'border-red-500/30', label: lang === 'ru' ? 'СИЛ' : 'STR' },
-              { key: 'agility', icon: '🏃', color: 'text-green-400', bg: 'from-green-900/40', border: 'border-green-500/30', label: lang === 'ru' ? 'ЛОВ' : 'AGI' },
-              { key: 'vitality', icon: '❤️', color: 'text-pink-400', bg: 'from-pink-900/40', border: 'border-pink-500/30', label: lang === 'ru' ? 'СТОЙ' : 'VIT' },
-              { key: 'intellect', icon: '🧠', color: 'text-blue-400', bg: 'from-blue-900/40', border: 'border-blue-500/30', label: lang === 'ru' ? 'ИНТ' : 'INT' },
-              { key: 'spirit', icon: '✨', color: 'text-purple-400', bg: 'from-purple-900/40', border: 'border-purple-500/30', label: lang === 'ru' ? 'ДУХ' : 'SPI' },
+              { key: 'power', icon: '💪', color: 'text-red-400', label: lang === 'ru' ? 'СИЛ' : 'STR' },
+              { key: 'agility', icon: '🏃', color: 'text-green-400', label: lang === 'ru' ? 'ЛОВ' : 'AGI' },
+              { key: 'vitality', icon: '❤️', color: 'text-pink-400', label: lang === 'ru' ? 'СТОЙ' : 'VIT' },
+              { key: 'intellect', icon: '🧠', color: 'text-blue-400', label: lang === 'ru' ? 'ИНТ' : 'INT' },
+              { key: 'spirit', icon: '✨', color: 'text-purple-400', label: lang === 'ru' ? 'ДУХ' : 'SPI' },
             ].map(attr => (
               <button
                 key={attr.key}
                 onClick={() => setSelectedStat(selectedStat === attr.key ? null : attr.key)}
-                className={`bg-gradient-to-b ${attr.bg} to-gray-900/60 rounded-lg p-2 text-center transition-all border ${
-                  selectedStat === attr.key ? 'ring-2 ring-amber-400 border-amber-500/50' : attr.border
+                className={`bg-black/30 rounded-lg p-2 text-center transition-all ${
+                  selectedStat === attr.key ? 'ring-1 ring-l2-gold' : ''
                 }`}
               >
                 <div className="text-base mb-0.5">{attr.icon}</div>
@@ -555,10 +532,10 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
 
           {/* Stat Tooltip */}
           {selectedStat && STAT_TOOLTIPS[selectedStat] && (
-            <div className="mt-3 bg-gradient-to-r from-amber-900/30 to-amber-950/40 border border-amber-500/30 rounded-xl p-3">
-              <div className="text-[11px] text-amber-300 leading-relaxed">
+            <div className="mt-3 p-3 bg-black/30 rounded-lg">
+              <p className="text-xs text-gray-300">
                 {lang === 'ru' ? STAT_TOOLTIPS[selectedStat].ru : STAT_TOOLTIPS[selectedStat].en}
-              </div>
+              </p>
             </div>
           )}
         </div>
@@ -568,7 +545,7 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
 }
 
 // ═══════════════════════════════════════════════════════════
-// SKILLS POPUP - Premium Modal
+// SKILLS POPUP
 // ═══════════════════════════════════════════════════════════
 
 interface SkillsPopupProps {
@@ -587,24 +564,20 @@ function SkillsPopup({ level, skillLevels, onClose, lang }: SkillsPopupProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div
-        className="bg-gradient-to-b from-gray-800 to-gray-950 rounded-2xl w-full max-w-sm border-2 border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.2)] overflow-hidden"
+        className="bg-l2-panel rounded-lg w-full max-w-sm overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-900/60 to-purple-800/40 p-4 border-b border-purple-500/30">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-purple-400 flex items-center gap-2 text-lg">
-              <span>⚡</span> {lang === 'ru' ? 'Навыки' : 'Skills'}
-            </span>
-            <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
-              <X size={22} />
-            </button>
-          </div>
+        <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
+          <h3 className="text-sm text-gray-400">⚡ {lang === 'ru' ? 'Навыки' : 'Skills'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+        <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
           {SKILLS_DATA.map((skill) => {
             const isLocked = level < skill.unlockLevel;
             const skillLevel = getSkillLevel(skill.id);
@@ -612,42 +585,31 @@ function SkillsPopup({ level, skillLevels, onClose, lang }: SkillsPopupProps) {
             return (
               <div
                 key={skill.id}
-                className={`bg-gradient-to-r ${isLocked ? 'from-gray-800/40 to-gray-900/60 opacity-60' : `${skill.gradient}`}
-                  rounded-xl p-3 border ${isLocked ? 'border-gray-700/40' : 'border-white/10'} ${!isLocked ? skill.glow : ''} shadow-lg overflow-hidden relative`}
+                className={`flex items-center gap-3 p-3 bg-black/30 rounded-lg ${isLocked ? 'opacity-50' : ''}`}
               >
-                {!isLocked && <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />}
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className={`w-14 h-14 rounded-xl bg-black/40 flex items-center justify-center border-2 ${isLocked ? 'border-gray-600/50' : 'border-white/20'} relative`}>
-                    <span className="text-3xl drop-shadow-lg">{skill.icon}</span>
-                    {/* Skill level badge */}
-                    {!isLocked && skillLevel > 0 && (
-                      <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-b from-blue-600 to-blue-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-white border border-blue-400/50 shadow-md">
-                        {skillLevel}
-                      </div>
+                <div className="w-10 h-10 rounded-lg bg-black/30 flex items-center justify-center relative">
+                  <span className="text-xl">{skill.icon}</span>
+                  {!isLocked && skillLevel > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-600 px-1 py-0.5 rounded text-[8px] font-bold text-white">
+                      {skillLevel}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'}`}>
+                      {lang === 'ru' ? skill.nameRu : skill.nameEn}
+                    </span>
+                    {isLocked && (
+                      <span className="text-[9px] text-red-400">Lv.{skill.unlockLevel}</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'} drop-shadow-md`}>
-                        {lang === 'ru' ? skill.nameRu : skill.nameEn}
-                      </span>
-                      {isLocked && (
-                        <span className="text-[9px] text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded-md border border-red-500/30">
-                          Lv.{skill.unlockLevel}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-gray-300 mb-1.5 drop-shadow-sm">
-                      {lang === 'ru' ? skill.descRu : skill.descEn}
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px]">
-                      <span className="text-blue-300 flex items-center gap-1 bg-blue-900/30 px-1.5 py-0.5 rounded">
-                        💧 {skill.manaCost}
-                      </span>
-                      <span className="text-yellow-300 flex items-center gap-1 bg-yellow-900/30 px-1.5 py-0.5 rounded">
-                        ⏱️ {skill.cooldown / 1000}s
-                      </span>
-                    </div>
+                  <p className="text-xs text-gray-500">
+                    {lang === 'ru' ? skill.descRu : skill.descEn}
+                  </p>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                    <span>💧 {skill.manaCost}</span>
+                    <span>⏱️ {skill.cooldown / 1000}s</span>
                   </div>
                 </div>
               </div>
@@ -819,9 +781,9 @@ export default function CharacterTab() {
 
   if (isLoading || !heroState.baseStats) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-[#0d1117] to-[#161b22]">
+      <div className="flex-1 flex items-center justify-center bg-l2-dark">
         <div className="text-center">
-          <div className="text-5xl mb-4 animate-bounce">⚔️</div>
+          <div className="text-4xl mb-4 animate-bounce">⚔️</div>
           <p className="text-gray-400 text-sm">{t.game.loading}</p>
         </div>
       </div>
@@ -852,27 +814,25 @@ export default function CharacterTab() {
   const totalSlots = heroState.inventory.length + consumableSlots.length;
 
   return (
-    <div className="flex-1 overflow-auto bg-gradient-to-b from-[#0d1117] to-[#161b22]">
+    <div className="flex-1 overflow-auto bg-l2-dark p-4">
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* COMPACT HEADER - Premium Style */}
+      {/* COMPACT HEADER */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-b from-black/90 to-black/60 p-3 border-b border-gray-700/50">
+      <div className="bg-l2-panel rounded-lg p-4 mb-4">
         <div className="flex items-center gap-3">
           {/* Level Badge */}
-          <div className="relative">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-600/80 to-amber-800/90 flex items-center justify-center border-2 border-amber-500/60 shadow-lg shadow-amber-900/30">
-              <span className="text-lg font-bold text-white drop-shadow-md">{stats.level}</span>
-            </div>
+          <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center">
+            <span className="text-lg font-bold text-amber-400">{stats.level}</span>
           </div>
 
           {/* Name + EXP */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-bold text-white truncate drop-shadow-md">
+              <span className="text-sm font-bold text-white truncate">
                 {stats.firstName || stats.username || 'Hero'}
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-amber-400 font-bold flex items-center gap-1">
+                <span className="text-sm text-l2-gold font-bold flex items-center gap-1">
                   <span>🪙</span> {formatCompact(stats.gold || 0)}
                 </span>
                 <span className="text-sm text-purple-400 font-bold flex items-center gap-1">
@@ -881,13 +841,12 @@ export default function CharacterTab() {
               </div>
             </div>
             {/* EXP Bar */}
-            <div className="h-3 bg-gray-900/90 rounded-md overflow-hidden relative border border-purple-500/30 shadow-inner">
+            <div className="h-3 bg-black/30 rounded-md overflow-hidden relative">
               <div
-                className="h-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-400 transition-all duration-300"
+                className="h-full bg-purple-600 transition-all duration-300"
                 style={{ width: `${expPercent}%` }}
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
-              <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold drop-shadow-lg">
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold">
                 {stats.exp}/{stats.expToNext} ({expPercent.toFixed(0)}%)
               </span>
             </div>
@@ -896,188 +855,163 @@ export default function CharacterTab() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* EQUIPMENT PAPERDOLL - Premium Card */}
+      {/* EQUIPMENT PAPERDOLL */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="p-3">
-        <div className="bg-gradient-to-b from-gray-800/50 to-gray-900/70 rounded-2xl p-4 border border-gray-700/40 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🛡️</span>
-              <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
-                {lang === 'ru' ? 'Снаряжение' : 'Equipment'}
-              </span>
-            </div>
-            <div className="text-[10px] text-gray-500">
-              {Object.values(heroState.equipment).filter(Boolean).length}/10
-            </div>
-          </div>
-
-          {/* Paperdoll Grid */}
-          <div className="flex flex-col items-center gap-2">
-            {/* Row 1: Helmet */}
-            <Slot slotType="helmet" item={heroState.equipment.helmet || null} onClick={() => handleEquippedSlotClick('helmet')} />
-
-            {/* Row 2: Weapon - Armor - Shield */}
-            <div className="flex items-center gap-3">
-              <Slot slotType="weapon" item={heroState.equipment.weapon || null} onClick={() => handleEquippedSlotClick('weapon')} />
-              <Slot slotType="armor" item={heroState.equipment.armor || null} onClick={() => handleEquippedSlotClick('armor')} />
-              <Slot slotType="shield" item={heroState.equipment.shield || null} onClick={() => handleEquippedSlotClick('shield')} />
-            </div>
-
-            {/* Row 3: Gloves - Legs - Boots */}
-            <div className="flex items-center gap-3">
-              <Slot slotType="gloves" item={heroState.equipment.gloves || null} onClick={() => handleEquippedSlotClick('gloves')} />
-              <Slot slotType="legs" item={heroState.equipment.legs || null} onClick={() => handleEquippedSlotClick('legs')} />
-              <Slot slotType="boots" item={heroState.equipment.boots || null} onClick={() => handleEquippedSlotClick('boots')} />
-            </div>
-
-            {/* Row 4: Accessories */}
-            <div className="flex items-center gap-3">
-              <Slot slotType="ring1" item={heroState.equipment.ring1 || null} size="small" onClick={() => handleEquippedSlotClick('ring1')} />
-              <Slot slotType="necklace" item={heroState.equipment.necklace || null} size="small" onClick={() => handleEquippedSlotClick('necklace')} />
-              <Slot slotType="ring2" item={heroState.equipment.ring2 || null} size="small" onClick={() => handleEquippedSlotClick('ring2')} />
-            </div>
-          </div>
-
-          {/* Set Bonuses */}
-          {Object.entries(setCounts).filter(([_, c]) => c > 0).map(([setId, count]) => {
-            const set = SETS[setId];
-            if (!set) return null;
-            const activeBonuses = getActiveSetBonuses(setId, count);
-            const nextBonus = set.bonuses.find(b => b.pieces > count);
-
-            return (
-              <div key={setId} className="mt-3 pt-3 border-t border-gray-700/50">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-xs font-bold ${activeBonuses.length > 0 ? 'text-amber-400' : 'text-gray-400'}`}>
-                    {lang === 'ru' ? set.nameRu : set.nameEn}
-                  </span>
-                  <span className={`text-xs font-bold ${activeBonuses.length > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
-                    {count}/{set.totalPieces}
-                  </span>
-                </div>
-                {activeBonuses.map((bonus, idx) => (
-                  <div key={idx} className="text-[10px] text-green-400 bg-green-500/15 rounded-lg px-2 py-1 mb-1 border border-green-500/20">
-                    ✓ {bonus.pieces} шт: {lang === 'ru' ? bonus.description.ru : bonus.description.en}
-                  </div>
-                ))}
-                {nextBonus && (
-                  <div className="text-[10px] text-gray-500 pl-1">
-                    ○ {nextBonus.pieces} шт: {lang === 'ru' ? nextBonus.description.ru : nextBonus.description.en}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      <div className="bg-l2-panel rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm text-gray-400">{lang === 'ru' ? 'Снаряжение' : 'Equipment'}</h3>
+          <span className="text-xs text-gray-500">
+            {Object.values(heroState.equipment).filter(Boolean).length}/10
+          </span>
         </div>
+
+        {/* Paperdoll Grid */}
+        <div className="flex flex-col items-center gap-2">
+          {/* Row 1: Helmet */}
+          <Slot slotType="helmet" item={heroState.equipment.helmet || null} onClick={() => handleEquippedSlotClick('helmet')} />
+
+          {/* Row 2: Weapon - Armor - Shield */}
+          <div className="flex items-center gap-3">
+            <Slot slotType="weapon" item={heroState.equipment.weapon || null} onClick={() => handleEquippedSlotClick('weapon')} />
+            <Slot slotType="armor" item={heroState.equipment.armor || null} onClick={() => handleEquippedSlotClick('armor')} />
+            <Slot slotType="shield" item={heroState.equipment.shield || null} onClick={() => handleEquippedSlotClick('shield')} />
+          </div>
+
+          {/* Row 3: Gloves - Legs - Boots */}
+          <div className="flex items-center gap-3">
+            <Slot slotType="gloves" item={heroState.equipment.gloves || null} onClick={() => handleEquippedSlotClick('gloves')} />
+            <Slot slotType="legs" item={heroState.equipment.legs || null} onClick={() => handleEquippedSlotClick('legs')} />
+            <Slot slotType="boots" item={heroState.equipment.boots || null} onClick={() => handleEquippedSlotClick('boots')} />
+          </div>
+
+          {/* Row 4: Accessories */}
+          <div className="flex items-center gap-3">
+            <Slot slotType="ring1" item={heroState.equipment.ring1 || null} size="small" onClick={() => handleEquippedSlotClick('ring1')} />
+            <Slot slotType="necklace" item={heroState.equipment.necklace || null} size="small" onClick={() => handleEquippedSlotClick('necklace')} />
+            <Slot slotType="ring2" item={heroState.equipment.ring2 || null} size="small" onClick={() => handleEquippedSlotClick('ring2')} />
+          </div>
+        </div>
+
+        {/* Set Bonuses */}
+        {Object.entries(setCounts).filter(([_, c]) => c > 0).map(([setId, count]) => {
+          const set = SETS[setId];
+          if (!set) return null;
+          const activeBonuses = getActiveSetBonuses(setId, count);
+          const nextBonus = set.bonuses.find(b => b.pieces > count);
+
+          return (
+            <div key={setId} className="mt-3 pt-3 border-t border-gray-700/30">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className={`text-xs font-bold ${activeBonuses.length > 0 ? 'text-l2-gold' : 'text-gray-400'}`}>
+                  {lang === 'ru' ? set.nameRu : set.nameEn}
+                </span>
+                <span className={`text-xs ${activeBonuses.length > 0 ? 'text-l2-gold' : 'text-gray-500'}`}>
+                  {count}/{set.totalPieces}
+                </span>
+              </div>
+              {activeBonuses.map((bonus, idx) => (
+                <div key={idx} className="text-[10px] text-green-400 bg-black/30 rounded-lg px-2 py-1 mb-1">
+                  ✓ {bonus.pieces} шт: {lang === 'ru' ? bonus.description.ru : bonus.description.en}
+                </div>
+              ))}
+              {nextBonus && (
+                <div className="text-[10px] text-gray-500 pl-1">
+                  ○ {nextBonus.pieces} шт: {lang === 'ru' ? nextBonus.description.ru : nextBonus.description.en}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* STATS & SKILLS BUTTONS - Premium Style */}
+      {/* STATS & SKILLS BUTTONS */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="px-3 mb-3 flex gap-2">
+      <div className="flex gap-2 mb-4">
         <button
           onClick={() => setShowStatsPopup(true)}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-900/50 to-amber-800/40
-            text-amber-400 border border-amber-500/40 hover:from-amber-800/60 hover:border-amber-500/60
-            active:scale-[0.98] transition-all shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2"
+          className="flex-1 py-3 px-4 rounded-lg font-bold text-xs bg-l2-gold text-black hover:bg-l2-gold/80 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          <span>📊</span> {lang === 'ru' ? 'Статы' : 'Stats'}
+          📊 {lang === 'ru' ? 'Статы' : 'Stats'}
         </button>
         <button
           onClick={() => setShowSkillsPopup(true)}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-900/50 to-purple-800/40
-            text-purple-400 border border-purple-500/40 hover:from-purple-800/60 hover:border-purple-500/60
-            active:scale-[0.98] transition-all shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2"
+          className="flex-1 py-3 px-4 rounded-lg font-bold text-xs bg-purple-600 text-white hover:bg-purple-500 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          <span>⚡</span> {lang === 'ru' ? 'Скиллы' : 'Skills'}
+          ⚡ {lang === 'ru' ? 'Скиллы' : 'Skills'}
         </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* INVENTORY - Premium Grid with Consumables */}
+      {/* INVENTORY */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="px-3 pb-4">
-        <div className="bg-gradient-to-b from-gray-800/50 to-gray-900/70 rounded-2xl p-4 border border-gray-700/40 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🎒</span>
-              <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
-                {lang === 'ru' ? 'Инвентарь' : 'Inventory'}
-              </span>
-            </div>
-            <div className="text-[10px] text-gray-500 bg-gray-800/50 px-2 py-0.5 rounded-md">
-              {totalSlots}/20
-            </div>
-          </div>
+      <div className="bg-l2-panel rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm text-gray-400">{lang === 'ru' ? 'Инвентарь' : 'Inventory'}</h3>
+          <span className="text-xs text-gray-500">{totalSlots}/20</span>
+        </div>
 
-          {/* Consumable Tooltip */}
-          {selectedConsumable && CONSUMABLE_TOOLTIPS[selectedConsumable] && (
-            <div className="mb-3 bg-gradient-to-r from-cyan-900/30 to-cyan-950/40 border border-cyan-500/30 rounded-xl p-3">
-              <div className="text-[11px] text-cyan-300 mb-2">
-                {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
-              </div>
-              {selectedConsumable.startsWith('scroll') && (
-                <button
-                  onClick={() => {
-                    const buffId = selectedConsumable.replace('scroll', '').toLowerCase();
-                    getSocket().emit('buff:use', { buffId });
-                    setSelectedConsumable(null);
-                  }}
-                  className="w-full py-2 bg-gradient-to-r from-cyan-600/50 to-cyan-700/60 hover:from-cyan-500/60
-                    border border-cyan-500/50 rounded-lg text-xs text-white font-bold active:scale-[0.98] transition-all"
-                >
-                  {lang === 'ru' ? '⚡ Использовать' : '⚡ Use'}
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-5 gap-2">
-            {/* Consumable slots */}
-            {consumableSlots.map((cons) => (
+        {/* Consumable Tooltip */}
+        {selectedConsumable && CONSUMABLE_TOOLTIPS[selectedConsumable] && (
+          <div className="mb-3 p-3 bg-black/30 rounded-lg border border-cyan-500/20">
+            <p className="text-xs text-cyan-300 mb-2">
+              {lang === 'ru' ? CONSUMABLE_TOOLTIPS[selectedConsumable].ru : CONSUMABLE_TOOLTIPS[selectedConsumable].en}
+            </p>
+            {selectedConsumable.startsWith('scroll') && (
               <button
-                key={cons.id}
-                onClick={() => setSelectedConsumable(selectedConsumable === cons.dbField ? null : cons.dbField)}
-                className={`aspect-square bg-gradient-to-b from-gray-700/50 to-gray-900/70 rounded-xl
-                  border-2 ${selectedConsumable === cons.dbField ? 'border-cyan-500 ring-2 ring-cyan-500/50' : 'border-gray-600/50'}
-                  flex items-center justify-center relative hover:brightness-110 active:scale-95 transition-all shadow-lg`}
+                onClick={() => {
+                  const buffId = selectedConsumable.replace('scroll', '').toLowerCase();
+                  getSocket().emit('buff:use', { buffId });
+                  setSelectedConsumable(null);
+                }}
+                className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-xs text-white font-bold active:scale-[0.98] transition-all"
               >
-                <span className="text-xl drop-shadow-lg">{cons.icon}</span>
-                <span className={`absolute top-0.5 right-1 text-[10px] font-bold ${cons.color} drop-shadow-md`}>
-                  {cons.count > 999 ? `${Math.floor(cons.count / 1000)}k` : cons.count}
-                </span>
+                {lang === 'ru' ? '⚡ Использовать' : '⚡ Use'}
               </button>
-            ))}
-
-            {/* Equipment items */}
-            {heroState.inventory.map((item) => {
-              const style = RARITY_STYLES[item.rarity];
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedItem({ item, isEquipped: false })}
-                  className={`aspect-square bg-gradient-to-b ${style.bg} rounded-xl border-2 ${style.border} ${style.glow}
-                    flex items-center justify-center hover:brightness-125 active:scale-95 transition-all relative overflow-hidden`}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/10 pointer-events-none" />
-                  <span className="text-xl relative z-10 drop-shadow-lg">{item.icon}</span>
-                </button>
-              );
-            })}
-
-            {/* Empty slots */}
-            {Array.from({ length: Math.max(0, 10 - totalSlots) }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="aspect-square bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl border border-gray-700/30
-                  flex items-center justify-center shadow-inner"
-              >
-                <span className="text-gray-700 text-sm">•</span>
-              </div>
-            ))}
+            )}
           </div>
+        )}
+
+        <div className="grid grid-cols-5 gap-2">
+          {/* Consumable slots */}
+          {consumableSlots.map((cons) => (
+            <button
+              key={cons.id}
+              onClick={() => setSelectedConsumable(selectedConsumable === cons.dbField ? null : cons.dbField)}
+              className={`aspect-square bg-black/30 rounded-lg border ${selectedConsumable === cons.dbField ? 'border-cyan-500' : 'border-gray-600/50'}
+                flex items-center justify-center relative hover:brightness-110 active:scale-95 transition-all`}
+            >
+              <span className="text-xl">{cons.icon}</span>
+              <span className={`absolute top-0.5 right-1 text-[10px] font-bold ${cons.color}`}>
+                {cons.count > 999 ? `${Math.floor(cons.count / 1000)}k` : cons.count}
+              </span>
+            </button>
+          ))}
+
+          {/* Equipment items */}
+          {heroState.inventory.map((item) => {
+            const style = RARITY_STYLES[item.rarity];
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSelectedItem({ item, isEquipped: false })}
+                className={`aspect-square bg-black/30 rounded-lg border ${style.border} ${style.glow}
+                  flex items-center justify-center hover:brightness-125 active:scale-95 transition-all`}
+              >
+                <span className="text-xl">{item.icon}</span>
+              </button>
+            );
+          })}
+
+          {/* Empty slots */}
+          {Array.from({ length: Math.max(0, 10 - totalSlots) }).map((_, i) => (
+            <div
+              key={`empty-${i}`}
+              className="aspect-square bg-black/30 rounded-lg border border-gray-700/30 flex items-center justify-center"
+            >
+              <span className="text-gray-700 text-sm">•</span>
+            </div>
+          ))}
         </div>
       </div>
 
