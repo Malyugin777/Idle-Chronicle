@@ -112,124 +112,134 @@ export default function TreasuryTab() {
     socket.emit('rewards:get'); // TZ Этап 2: Request pending rewards
     socket.emit('player:get'); // Для получения gold
 
-    // Listen for chest data
-    socket.on('chest:data', (data: { chests: Chest[] }) => {
+    // Define all handlers as named functions for proper cleanup
+    const handleChestData = (data: { chests: Chest[] }) => {
       setChests(data.chests);
-    });
+    };
 
-    // Listen for loot stats
-    socket.on('loot:stats', (data: LootStats) => {
+    const handleLootStats = (data: LootStats) => {
       setLootStats(data);
-    });
+    };
 
-    // Chest opened (timer started)
-    socket.on('chest:opened', (chest: Chest) => {
+    const handleChestOpened = (chest: Chest) => {
       setChests(prev => prev.map(c =>
         c.id === chest.id ? { ...c, openingStarted: chest.openingStarted } : c
       ));
-      // Update selected chest too so popup reflects the change
       setSelectedChest(prev => prev?.id === chest.id ? { ...prev, openingStarted: chest.openingStarted } : prev);
-    });
+    };
 
-    // Chest claimed (rewards received)
-    socket.on('chest:claimed', (data: ClaimedReward) => {
+    const handleChestClaimed = (data: ClaimedReward) => {
       setChests(prev => prev.filter(c => c.id !== data.chestId));
       setClaimedReward(data);
       setIsOpeningAnimation(true);
       setSelectedChest(null);
-      // Track for tasks
       getTaskManager().recordChestOpened();
-      // Refresh stats
       socket.emit('loot:stats:get');
-    });
+    };
 
-    // Chest boosted (30 min acceleration)
-    socket.on('chest:boosted', (data: { chestId: string; newDuration: number; crystals?: number }) => {
+    const handleChestBoosted = (data: { chestId: string; newDuration: number; crystals?: number }) => {
       setChests(prev => prev.map(c =>
         c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
       ));
-      // Update crystals after boost
       if (data.crystals !== undefined) {
         setCrystals(data.crystals);
       }
-      // Update selected chest if it's the one being boosted
       setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
-    });
+    };
 
-    // Chest deleted
-    socket.on('chest:deleted', (data: { chestId: string }) => {
+    const handleChestDeleted = (data: { chestId: string }) => {
       setChests(prev => prev.filter(c => c.id !== data.chestId));
-    });
+    };
 
-    // Slot unlocked
-    socket.on('slot:unlocked', (data: { chestSlots: number; crystals: number }) => {
+    const handleSlotUnlocked = (data: { chestSlots: number; crystals: number }) => {
       setLootStats(prev => ({ ...prev, chestSlots: data.chestSlots }));
       setCrystals(data.crystals);
       setSelectedLockedSlot(null);
-    });
+    };
 
-    // Error handling
-    socket.on('chest:error', (data: { message: string }) => {
+    const handleChestError = (data: { message: string }) => {
       console.error('[Chest] Error:', data.message);
-    });
+    };
 
-    socket.on('slot:error', (data: { message: string }) => {
+    const handleSlotError = (data: { message: string }) => {
       console.error('[Slot] Error:', data.message);
       alert(data.message);
-    });
+    };
 
-    // TZ Этап 2: Pending rewards listeners
-    socket.on('rewards:data', (data: { rewards: PendingReward[] }) => {
+    const handleRewardsData = (data: { rewards: PendingReward[] }) => {
       setPendingRewards(data.rewards);
-    });
+    };
 
-    socket.on('rewards:available', () => {
-      // New rewards available - refresh
+    const handleRewardsAvailable = () => {
       socket.emit('rewards:get');
-    });
+    };
 
-    socket.on('rewards:claimed', (data: { rewardId: string; chestsCreated: number; badgeAwarded: string | null }) => {
+    const handleRewardsClaimed = (data: { rewardId: string; chestsCreated: number; badgeAwarded: string | null }) => {
       setPendingRewards(prev => prev.filter(r => r.id !== data.rewardId));
       setClaimingRewardId(null);
-      // Refresh chest data
       socket.emit('chest:get');
       socket.emit('loot:stats:get');
-    });
+    };
 
-    socket.on('rewards:error', (data: { message: string }) => {
+    const handleRewardsError = (data: { message: string }) => {
       console.error('[Rewards] Error:', data.message);
       setClaimingRewardId(null);
-    });
+    };
 
-    // Get player data for crystals and gold
-    socket.on('auth:success', (data: any) => {
+    const handleAuthSuccess = (data: any) => {
       setCrystals(data.ancientCoin || 0);
       setGold(data.gold || 0);
-    });
+    };
 
-    socket.on('player:data', (data: any) => {
+    const handlePlayerData = (data: any) => {
       if (data) {
         setCrystals(data.ancientCoin || 0);
         setGold(data.gold || 0);
       }
-    });
+    };
+
+    const handleEtherCraft = (data: { gold?: number }) => {
+      if (data.gold !== undefined) {
+        setGold(data.gold);
+      }
+    };
+
+    // Register all listeners
+    socket.on('chest:data', handleChestData);
+    socket.on('loot:stats', handleLootStats);
+    socket.on('chest:opened', handleChestOpened);
+    socket.on('chest:claimed', handleChestClaimed);
+    socket.on('chest:boosted', handleChestBoosted);
+    socket.on('chest:deleted', handleChestDeleted);
+    socket.on('slot:unlocked', handleSlotUnlocked);
+    socket.on('chest:error', handleChestError);
+    socket.on('slot:error', handleSlotError);
+    socket.on('rewards:data', handleRewardsData);
+    socket.on('rewards:available', handleRewardsAvailable);
+    socket.on('rewards:claimed', handleRewardsClaimed);
+    socket.on('rewards:error', handleRewardsError);
+    socket.on('auth:success', handleAuthSuccess);
+    socket.on('player:data', handlePlayerData);
+    socket.on('ether:craft:success', handleEtherCraft);
 
     return () => {
-      socket.off('chest:data');
-      socket.off('loot:stats');
-      socket.off('chest:opened');
-      socket.off('chest:claimed');
-      socket.off('chest:boosted');
-      socket.off('chest:deleted');
-      socket.off('slot:unlocked');
-      socket.off('chest:error');
-      socket.off('slot:error');
-      socket.off('auth:success');
-      socket.off('player:data');
-      socket.off('rewards:data');
-      socket.off('rewards:available');
-      socket.off('rewards:claimed');
-      socket.off('rewards:error');
+      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
+      socket.off('chest:data', handleChestData);
+      socket.off('loot:stats', handleLootStats);
+      socket.off('chest:opened', handleChestOpened);
+      socket.off('chest:claimed', handleChestClaimed);
+      socket.off('chest:boosted', handleChestBoosted);
+      socket.off('chest:deleted', handleChestDeleted);
+      socket.off('slot:unlocked', handleSlotUnlocked);
+      socket.off('chest:error', handleChestError);
+      socket.off('slot:error', handleSlotError);
+      socket.off('rewards:data', handleRewardsData);
+      socket.off('rewards:available', handleRewardsAvailable);
+      socket.off('rewards:claimed', handleRewardsClaimed);
+      socket.off('rewards:error', handleRewardsError);
+      socket.off('auth:success', handleAuthSuccess);
+      socket.off('player:data', handlePlayerData);
+      socket.off('ether:craft:success', handleEtherCraft);
     };
   }, []);
 

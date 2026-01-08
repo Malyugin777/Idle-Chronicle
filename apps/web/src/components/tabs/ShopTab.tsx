@@ -52,19 +52,16 @@ export default function ShopTab() {
       });
     };
 
-    socket.on('player:data', updateShopState);
-    socket.on('auth:success', updateShopState);
-
-    socket.on('shop:success', (data: any) => {
+    const handleShopSuccess = (data: any) => {
       setShopState(prev => ({ ...prev, ...data }));
       setBuying(null);
-    });
+    };
 
-    socket.on('shop:error', () => {
+    const handleShopError = () => {
       setBuying(null);
-    });
+    };
 
-    socket.on('ether:craft:success', (data: { ether: number; etherDust: number; gold: number }) => {
+    const handleEtherCraft = (data: { ether: number; etherDust: number; gold: number }) => {
       setShopState(prev => ({
         ...prev,
         ether: data.ether,
@@ -72,14 +69,30 @@ export default function ShopTab() {
         gold: data.gold,
       }));
       setBuying(null);
-    });
+    };
+
+    // Sync ether when used in combat (from PhaserGame taps)
+    const handleTapResult = (data: { ether?: number }) => {
+      if (data.ether !== undefined) {
+        setShopState(prev => ({ ...prev, ether: data.ether! }));
+      }
+    };
+
+    socket.on('player:data', updateShopState);
+    socket.on('auth:success', updateShopState);
+    socket.on('shop:success', handleShopSuccess);
+    socket.on('shop:error', handleShopError);
+    socket.on('ether:craft:success', handleEtherCraft);
+    socket.on('tap:result', handleTapResult);
 
     return () => {
-      socket.off('player:data');
-      socket.off('auth:success');
-      socket.off('shop:success');
-      socket.off('shop:error');
-      socket.off('ether:craft:success');
+      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
+      socket.off('player:data', updateShopState);
+      socket.off('auth:success', updateShopState);
+      socket.off('shop:success', handleShopSuccess);
+      socket.off('shop:error', handleShopError);
+      socket.off('ether:craft:success', handleEtherCraft);
+      socket.off('tap:result', handleTapResult);
     };
   }, []);
 

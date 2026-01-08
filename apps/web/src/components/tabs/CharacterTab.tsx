@@ -719,16 +719,33 @@ export default function CharacterTab() {
       }
     };
 
+    // Sync ether when used in combat (from PhaserGame taps)
+    const handleTapResult = (data: { ether?: number }) => {
+      if (data.ether !== undefined) {
+        setConsumables(prev => ({ ...prev, ether: data.ether! }));
+      }
+    };
+
+    // Sync ether when crafted
+    const handleEtherCraft = (data: { ether: number }) => {
+      setConsumables(prev => ({ ...prev, ether: data.ether }));
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
     socket.on('buff:success', handleBuffSuccess);
+    socket.on('tap:result', handleTapResult);
+    socket.on('ether:craft:success', handleEtherCraft);
 
     return () => {
-      socket.off('player:data');
-      socket.off('auth:success');
-      socket.off('equipment:data');
-      socket.off('buff:success');
+      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
+      socket.off('player:data', handlePlayerData);
+      socket.off('auth:success', handlePlayerData);
+      socket.off('equipment:data', handleEquipmentData);
+      socket.off('buff:success', handleBuffSuccess);
+      socket.off('tap:result', handleTapResult);
+      socket.off('ether:craft:success', handleEtherCraft);
     };
   }, []);
 

@@ -66,40 +66,41 @@ export default function LeaderboardTab() {
     // Request current leaderboard
     socket.emit('leaderboard:get');
 
-    // Current boss leaderboard (real-time from leaderboard:get)
-    socket.on('leaderboard:data', (data: CurrentBossData) => {
+    // Define all handlers as named functions for proper cleanup
+    const handleLeaderboardData = (data: CurrentBossData) => {
       setCurrentData(data);
       setLoading(false);
-    });
+    };
 
-    // Also update from boss:state for real-time HP updates
-    socket.on('boss:state', (data: any) => {
+    const handleBossState = (data: any) => {
       setCurrentData(prev => prev ? {
         ...prev,
         bossHp: data.hp,
         bossMaxHp: data.maxHp,
         bossName: data.name,
         bossIcon: data.icon,
-        // Keep existing prizePool - boss:state doesn't include it
       } : null);
-    });
+    };
 
-    // Previous boss
-    socket.on('leaderboard:previous', (data: PreviousBossData | null) => {
+    const handlePreviousData = (data: PreviousBossData | null) => {
       setPreviousData(data);
-    });
+    };
 
-    // Legend (all-time)
-    socket.on('leaderboard:alltime', (data: LeaderboardEntry[]) => {
+    const handleAlltimeData = (data: LeaderboardEntry[]) => {
       setLegendBoard(data);
-    });
+    };
 
-    // Update on boss kill
-    socket.on('boss:killed', (data: any) => {
-      // Refresh all data
+    const handleBossKilled = () => {
       socket.emit('leaderboard:get');
       socket.emit('leaderboard:previous:get');
-    });
+    };
+
+    // Register listeners
+    socket.on('leaderboard:data', handleLeaderboardData);
+    socket.on('boss:state', handleBossState);
+    socket.on('leaderboard:previous', handlePreviousData);
+    socket.on('leaderboard:alltime', handleAlltimeData);
+    socket.on('boss:killed', handleBossKilled);
 
     // Refresh current leaderboard periodically for real-time updates
     const interval = setInterval(() => {
@@ -109,11 +110,12 @@ export default function LeaderboardTab() {
     }, 2000);
 
     return () => {
-      socket.off('leaderboard:data');
-      socket.off('boss:state');
-      socket.off('leaderboard:previous');
-      socket.off('leaderboard:alltime');
-      socket.off('boss:killed');
+      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
+      socket.off('leaderboard:data', handleLeaderboardData);
+      socket.off('boss:state', handleBossState);
+      socket.off('leaderboard:previous', handlePreviousData);
+      socket.off('leaderboard:alltime', handleAlltimeData);
+      socket.off('boss:killed', handleBossKilled);
       clearInterval(interval);
     };
   }, [activeTab]);
