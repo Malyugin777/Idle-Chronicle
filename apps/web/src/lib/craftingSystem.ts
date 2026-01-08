@@ -160,6 +160,38 @@ export const FUSION_REQUIREMENTS: Record<Rarity, { count: number; resultChest: C
 };
 
 // ═══════════════════════════════════════════════════════════
+// CONSTANTS - MERGE (Probability-based fusion)
+// ═══════════════════════════════════════════════════════════
+
+// Какой сундук получаем при успешном merge для целевой редкости
+export const MERGE_TARGET_TO_CHEST: Record<string, ChestType> = {
+  COMMON: 'bronze',    // Common target -> Bronze chest (Uncommon loot)
+  UNCOMMON: 'silver',  // Uncommon target -> Silver chest (Rare loot)
+  RARE: 'gold',        // Rare target -> Gold chest (Epic loot)
+  // EPIC: cannot merge - no chest above Gold
+};
+
+// Бонус к шансу в зависимости от разницы тиров (item tier - target tier)
+// tierDiff 0 = same tier, 1 = +1 tier above, 2 = +2 tiers above
+export const MERGE_CHANCE_BONUS: Record<number, number> = {
+  0: 25,   // Same tier: +25%
+  1: 50,   // +1 tier above: +50%
+  2: 100,  // +2 tiers above: +100%
+};
+
+// Порядок редкостей для расчёта разницы тиров
+export const MERGE_RARITY_ORDER: Record<string, number> = {
+  COMMON: 0,
+  UNCOMMON: 1,
+  RARE: 2,
+  EPIC: 3,
+};
+
+// Merge ограничения
+export const MERGE_MIN_ITEMS = 1;
+export const MERGE_MAX_ITEMS = 5;
+
+// ═══════════════════════════════════════════════════════════
 // PURE FUNCTIONS - SALVAGE v1.2
 // ═══════════════════════════════════════════════════════════
 
@@ -441,6 +473,94 @@ export function getMaxFusions(inventory: InventoryItem[], rarity: Rarity): numbe
 
   const items = getItemsForFusion(inventory, rarity);
   return Math.floor(items.length / req.count);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PURE FUNCTIONS - MERGE (Probability-based fusion)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Рассчитать шанс успеха merge
+ * @param items Предметы для merge (с rarity в uppercase: COMMON, UNCOMMON, etc.)
+ * @param targetRarity Целевая редкость (uppercase: COMMON, UNCOMMON, RARE)
+ * @returns Шанс успеха 0-100%
+ */
+export function calculateMergeChance(
+  items: Array<{ rarity: string } | { equipment: { rarity: string } }>,
+  targetRarity: string
+): number {
+  const targetOrder = MERGE_RARITY_ORDER[targetRarity];
+  if (targetOrder === undefined) return 0;
+
+  let totalChance = 0;
+
+  for (const item of items) {
+    // Поддержка обеих структур: { rarity } и { equipment: { rarity } }
+    const itemRarity = 'equipment' in item && item.equipment
+      ? item.equipment.rarity
+      : (item as { rarity: string }).rarity;
+
+    const itemOrder = MERGE_RARITY_ORDER[itemRarity.toUpperCase()];
+    if (itemOrder === undefined) continue;
+
+    // Предмет должен быть >= target tier
+    if (itemOrder < targetOrder) continue;
+
+    const tierDiff = itemOrder - targetOrder;
+    const bonus = MERGE_CHANCE_BONUS[tierDiff] || 0;
+    totalChance += bonus;
+  }
+
+  return Math.min(100, totalChance);
+}
+
+/**
+ * Проверить, можно ли использовать предмет для merge
+ * Условия: не экипирован, не сломан
+ */
+export function canItemBeUsedForMerge(item: InventoryItem & { isEquipped?: boolean }): boolean {
+  if (item.isEquipped) return false;
+  if (item.isBroken) return false;
+  return true;
+}
+
+/**
+ * Получить предметы, подходящие для merge с определённой целью
+ * @param inventory Инвентарь
+ * @param targetRarity Целевая редкость (uppercase)
+ * @returns Предметы с rarity >= target
+ */
+export function getItemsEligibleForMerge(
+  inventory: Array<InventoryItem & { isEquipped?: boolean }>,
+  targetRarity: string
+): InventoryItem[] {
+  const targetOrder = MERGE_RARITY_ORDER[targetRarity];
+  if (targetOrder === undefined) return [];
+
+  return inventory.filter(item => {
+    if (!canItemBeUsedForMerge(item)) return false;
+
+    const itemOrder = MERGE_RARITY_ORDER[item.rarity.toUpperCase()];
+    if (itemOrder === undefined) return false;
+
+    // Предмет должен быть >= target tier
+    return itemOrder >= targetOrder;
+  });
+}
+
+/**
+ * Получить сундук, который выпадет при успешном merge
+ */
+export function getMergeResultChest(targetRarity: string): ChestType | null {
+  return MERGE_TARGET_TO_CHEST[targetRarity] || null;
+}
+
+/**
+ * Проверить, можно ли выбрать эту редкость как цель merge
+ * EPIC нельзя - нет сундука выше Gold
+ */
+export function canTargetRarityForMerge(targetRarity: string): boolean {
+  return targetRarity in MERGE_TARGET_TO_CHEST;
 }
 
 // ═══════════════════════════════════════════════════════════

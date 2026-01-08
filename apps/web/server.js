@@ -5164,6 +5164,67 @@ app.prepare().then(async () => {
       RARE:     { count: 4, resultChest: 'GOLD' },
     };
 
+    // ═══════════════════════════════════════════════════════════
+    // MERGE SYSTEM CONSTANTS
+    // ═══════════════════════════════════════════════════════════
+
+    // Target rarity -> Result chest mapping
+    // Common items -> Bronze (Uncommon) chest
+    // Uncommon items -> Silver (Rare) chest
+    // Rare items -> Gold (Epic) chest
+    // Epic cannot be merged
+    const MERGE_TARGET_TO_CHEST = {
+      COMMON: 'BRONZE',
+      UNCOMMON: 'SILVER',
+      RARE: 'GOLD',
+    };
+
+    // Chance bonus per item based on tier difference from target
+    // 0 = same tier as target: +25%
+    // 1 = one tier above target: +50%
+    // 2 = two tiers above target: +100%
+    const MERGE_CHANCE_BONUS = {
+      0: 25,
+      1: 50,
+      2: 100,
+    };
+
+    // Rarity order for tier calculations
+    const MERGE_RARITY_ORDER = {
+      COMMON: 0,
+      UNCOMMON: 1,
+      RARE: 2,
+      EPIC: 3,
+    };
+
+    /**
+     * Calculate merge success chance
+     * @param items - Array of items with equipment relation
+     * @param targetRarity - The TARGET rarity (e.g., 'COMMON' -> creates BRONZE chest)
+     * @returns chance 0-100 (capped at 100)
+     */
+    function calculateMergeChance(items, targetRarity) {
+      const targetOrder = MERGE_RARITY_ORDER[targetRarity];
+      if (targetOrder === undefined) return 0;
+
+      let totalChance = 0;
+
+      for (const item of items) {
+        const itemRarity = item.equipment?.rarity || item.rarity;
+        const itemOrder = MERGE_RARITY_ORDER[itemRarity];
+        if (itemOrder === undefined) continue;
+
+        // Item must be at least target rarity
+        if (itemOrder < targetOrder) continue;
+
+        const tierDiff = itemOrder - targetOrder;
+        const bonus = MERGE_CHANCE_BONUS[tierDiff] || 0;
+        totalChance += bonus;
+      }
+
+      return Math.min(100, totalChance);
+    }
+
     // FORGE:GET - Get forge data (inventory, resources) v1.2
     socket.on('forge:get', async () => {
       if (!player.odamage) return;
@@ -5530,6 +5591,168 @@ app.prepare().then(async () => {
       } catch (err) {
         console.error('[Forge] Fusion error:', err.message);
         socket.emit('forge:error', { message: 'Failed to fuse items' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // MERGE SYSTEM
+    // ═══════════════════════════════════════════════════════════
+
+    // MERGE:PREVIEW - Calculate chance without executing (for live UI updates)
+    socket.on('merge:preview', async (data) => {
+      if (!player.odamage) return;
+      const { itemIds, targetRarity } = data;
+
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        socket.emit('merge:preview', { chance: 0, valid: false, resultChest: null });
+        return;
+      }
+
+      const targetUpper = targetRarity?.toUpperCase();
+      if (!MERGE_TARGET_TO_CHEST[targetUpper]) {
+        socket.emit('merge:preview', { chance: 0, valid: false, resultChest: null });
+        return;
+      }
+
+      try {
+        const items = await prisma.userEquipment.findMany({
+          where: {
+            id: { in: itemIds },
+            userId: player.odamage,
+            isEquipped: false,
+            isBroken: false,
+          },
+          include: { equipment: true },
+        });
+
+        const chance = calculateMergeChance(items, targetUpper);
+        const resultChest = MERGE_TARGET_TO_CHEST[targetUpper];
+
+        socket.emit('merge:preview', {
+          chance,
+          valid: chance > 0,
+          resultChest,
+          itemCount: items.length,
+        });
+      } catch (err) {
+        socket.emit('merge:preview', { chance: 0, valid: false, resultChest: null });
+      }
+    });
+
+    // MERGE:ATTEMPT - Execute merge (consume items, roll for chest)
+    socket.on('merge:attempt', async (data) => {
+      if (!player.odamage) return;
+      const { itemIds, targetRarity } = data;
+
+      // Validate input
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0 || itemIds.length > 5) {
+        socket.emit('merge:error', { message: 'Invalid item count (1-5 required)' });
+        return;
+      }
+
+      const targetUpper = targetRarity?.toUpperCase();
+      if (!MERGE_TARGET_TO_CHEST[targetUpper]) {
+        socket.emit('merge:error', { message: 'Invalid target rarity (Common/Uncommon/Rare only)' });
+        return;
+      }
+
+      try {
+        // Get items with validation
+        const items = await prisma.userEquipment.findMany({
+          where: {
+            id: { in: itemIds },
+            userId: player.odamage,
+            isEquipped: false,
+            isBroken: false,
+          },
+          include: { equipment: true },
+        });
+
+        // Check all items found
+        if (items.length !== itemIds.length) {
+          socket.emit('merge:error', { message: 'Some items not found or unavailable' });
+          return;
+        }
+
+        // Calculate chance
+        const chance = calculateMergeChance(items, targetUpper);
+        if (chance === 0) {
+          socket.emit('merge:error', { message: 'No valid items for this target rarity' });
+          return;
+        }
+
+        // Check chest slot availability
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { chestSlots: true },
+        });
+        const chestCount = await prisma.chest.count({
+          where: { userId: player.odamage },
+        });
+        const hasSlot = chestCount < (user?.chestSlots || 5);
+
+        // Roll for success
+        const roll = Math.random() * 100;
+        const success = roll < chance;
+
+        const resultChest = MERGE_TARGET_TO_CHEST[targetUpper];
+        const chestDurations = {
+          WOODEN: 5 * 60 * 1000,
+          BRONZE: 30 * 60 * 1000,
+          SILVER: 4 * 60 * 60 * 1000,
+          GOLD: 8 * 60 * 60 * 1000,
+        };
+
+        // Always delete items
+        const deleteOp = prisma.userEquipment.deleteMany({
+          where: { id: { in: items.map(i => i.id) } },
+        });
+
+        if (success && hasSlot) {
+          // Success: delete items + create chest
+          await prisma.$transaction([
+            deleteOp,
+            prisma.chest.create({
+              data: {
+                userId: player.odamage,
+                chestType: resultChest,
+                openingDuration: chestDurations[resultChest],
+              },
+            }),
+          ]);
+
+          console.log(`[Merge] ${player.odamage} merged ${items.length} items -> ${resultChest} chest (chance: ${chance}%, roll: ${roll.toFixed(1)}%)`);
+
+          socket.emit('merge:result', {
+            success: true,
+            chestType: resultChest,
+            chance,
+            roll: Math.floor(roll),
+            itemsConsumed: items.length,
+          });
+        } else {
+          // Fail or no slot: just delete items
+          await deleteOp;
+
+          const reason = !hasSlot && success ? 'no_slot' : 'roll_failed';
+          console.log(`[Merge] ${player.odamage} FAILED merge: ${items.length} items lost (chance: ${chance}%, roll: ${roll.toFixed(1)}%, reason: ${reason})`);
+
+          socket.emit('merge:result', {
+            success: false,
+            reason,
+            chestType: null,
+            chance,
+            roll: Math.floor(roll),
+            itemsConsumed: items.length,
+          });
+        }
+
+        // Refresh forge data
+        socket.emit('forge:get');
+
+      } catch (err) {
+        console.error('[Merge] Error:', err.message);
+        socket.emit('merge:error', { message: 'Merge failed' });
       }
     });
 
