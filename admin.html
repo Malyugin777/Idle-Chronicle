@@ -1588,6 +1588,33 @@
           <p>Irreversible actions - use with extreme caution</p>
         </div>
 
+        <!-- DB Push Section -->
+        <div class="card" style="border-color: var(--warning);">
+          <div class="card-header">
+            <h3 style="color: var(--warning);">🗄️ Database Schema</h3>
+          </div>
+          <div class="alert" style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); color: var(--warning);">
+            Sync database schema with prisma/schema.prisma. Use after schema changes.
+          </div>
+          <div class="form-group">
+            <label>Password (1993)</label>
+            <input type="password" id="dbPushPassword" placeholder="Enter 1993 to enable">
+          </div>
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="dbPushForce">
+              <span style="color: var(--danger);">Force (--accept-data-loss) - MAY DELETE DATA!</span>
+            </label>
+          </div>
+          <div class="btn-group">
+            <button class="btn" style="background: var(--warning); color: #000;" onclick="dbPush()">
+              📤 DB Push (Safe)
+            </button>
+          </div>
+          <div id="dbPushResult" style="margin-top: 12px;"></div>
+        </div>
+
+        <!-- Destructive Actions -->
         <div class="card" style="border-color: var(--danger);">
           <div class="card-header">
             <h3 style="color: var(--danger);">&#9888; Destructive Actions</h3>
@@ -2398,6 +2425,45 @@
       const data = await api('danger/reset-boss', 'POST', { confirmPassword: '1993' });
       alert(data.success ? 'Boss reset' : 'Error: ' + data.error);
       if (data.success) loadBossInfo();
+    }
+
+    // DB Push - sync schema
+    async function dbPush() {
+      const password = document.getElementById('dbPushPassword').value;
+      if (password !== '1993') {
+        alert('Invalid password');
+        return;
+      }
+
+      const force = document.getElementById('dbPushForce').checked;
+      const resultDiv = document.getElementById('dbPushResult');
+
+      if (force && !confirm('⚠️ FORCE mode can DELETE DATA! Continue?')) {
+        return;
+      }
+
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div class="alert" style="background: rgba(33, 150, 243, 0.1); border: 1px solid var(--primary); color: var(--primary);">Running prisma db push...</div>';
+
+      try {
+        const data = await api('danger/db-push', 'POST', {
+          confirmPassword: password,
+          force: force
+        });
+
+        if (data.success) {
+          resultDiv.innerHTML = `
+            <div class="alert alert-success">
+              ✅ ${data.message}<br>
+              <code style="font-size: 11px;">${data.command}</code>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+        }
+      } catch (e) {
+        resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${e.message}</div>`;
+      }
     }
 
     // ═══════════════════════════════════════════════════════════

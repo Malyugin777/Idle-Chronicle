@@ -192,8 +192,8 @@ export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<BattleScene | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // FIX: Store pending boss image for when scene becomes ready
-  const pendingBossImageRef = useRef<string | null>(null);
+  // FIX: Store current boss image to apply when scene becomes ready
+  const currentBossImageRef = useRef<string>('/assets/bosses/boss_single.png');
 
   // Language
   const [lang, setLang] = useState<Language>('en');
@@ -427,14 +427,13 @@ export default function PhaserGame() {
             if (scene) {
               sceneRef.current = scene;
               scene.scene.restart({ socket });
-              // FIX: After scene restart, apply any pending boss image
-              // Delay to ensure scene.create() has completed
+              // FIX: After scene restart, apply current boss image from ref
+              // Delay to ensure scene.create() has completed and bossSprite exists
               setTimeout(() => {
-                if (pendingBossImageRef.current && sceneRef.current) {
-                  sceneRef.current.updateBossImage(pendingBossImageRef.current);
-                  pendingBossImageRef.current = null;
+                if (sceneRef.current && currentBossImageRef.current) {
+                  sceneRef.current.updateBossImage(currentBossImageRef.current);
                 }
-              }, 300);
+              }, 500);
             }
           },
         },
@@ -473,15 +472,12 @@ export default function PhaserGame() {
     socket.on('boss:state', (data: any) => {
       setPlayersOnline(data.playersOnline);
       const newImage = data.image || '/assets/bosses/boss_single.png';
+      // FIX: Always store current image in ref for scene ready callback
+      currentBossImageRef.current = newImage;
       setBossState(prev => {
         // If boss image changed, update Phaser
-        if (prev.image !== newImage) {
-          if (sceneRef.current) {
-            sceneRef.current.updateBossImage(newImage);
-          } else {
-            // FIX: Scene not ready yet, store for later
-            pendingBossImageRef.current = newImage;
-          }
+        if (prev.image !== newImage && sceneRef.current) {
+          sceneRef.current.updateBossImage(newImage);
         }
         return {
           name: data.name || 'Boss',
@@ -732,14 +728,11 @@ export default function PhaserGame() {
       // Обновить состояние босса с новыми данными
       if (data) {
         const newImage = data.image || '/assets/bosses/boss_single.png';
+        // FIX: Always store current image in ref
+        currentBossImageRef.current = newImage;
         setBossState(prev => {
-          if (prev.image !== newImage) {
-            if (sceneRef.current) {
-              sceneRef.current.updateBossImage(newImage);
-            } else {
-              // FIX: Scene not ready, store for later
-              pendingBossImageRef.current = newImage;
-            }
+          if (prev.image !== newImage && sceneRef.current) {
+            sceneRef.current.updateBossImage(newImage);
           }
           return {
             name: data.name || prev.name,

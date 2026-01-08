@@ -4,6 +4,7 @@ const next = require('next');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
+const { exec } = require('child_process');
 
 // L2 Stats Service
 const StatsService = require('./services/StatsService');
@@ -2102,6 +2103,42 @@ app.prepare().then(async () => {
           sessionLeaderboard.clear();
 
           sendJson({ success: true });
+          return;
+        }
+
+        // Danger zone: Prisma DB Push (sync schema)
+        if (parsedUrl.pathname === '/api/admin/danger/db-push' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.confirmPassword !== RESET_PASSWORD) {
+            sendJson({ success: false, error: 'Invalid reset password' }, 403);
+            return;
+          }
+
+          const forceAcceptDataLoss = body.force === true;
+          const command = forceAcceptDataLoss
+            ? 'npx prisma db push --accept-data-loss'
+            : 'npx prisma db push';
+
+          console.log(`[Admin] Running: ${command}`);
+          addLog('warn', 'system', `DB Push initiated by admin (force=${forceAcceptDataLoss})`);
+
+          exec(command, { cwd: process.cwd(), timeout: 60000 }, (error, stdout, stderr) => {
+            if (error) {
+              console.error('[Admin] DB Push error:', error.message);
+              console.error('[Admin] stderr:', stderr);
+              addLog('error', 'system', 'DB Push failed', { error: error.message, stderr });
+            } else {
+              console.log('[Admin] DB Push success:', stdout);
+              addLog('info', 'system', 'DB Push completed successfully', { stdout });
+            }
+          });
+
+          // Return immediately, command runs async
+          sendJson({
+            success: true,
+            message: `DB Push started (force=${forceAcceptDataLoss}). Check logs for result.`,
+            command
+          });
           return;
         }
 
