@@ -32,7 +32,9 @@
       "Bash(railway:*)",
       "Bash(npm run dev:*)",
       "Bash(npx @railway/cli run:*)",
-      "Bash(npx @railway/cli:*)"
+      "Bash(npx @railway/cli:*)",
+      "Bash(du:*)",
+      "Bash(powershell:*)"
     ]
   }
 }

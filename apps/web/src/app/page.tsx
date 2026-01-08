@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import BottomNav, { TabType } from '@/components/ui/BottomNav';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+import { getSocket } from '@/lib/socket';
 
 // Dynamic imports for tabs (no SSR)
 // L2: Switched to PhaserGame for better battle scene rendering
@@ -59,6 +60,19 @@ export default function Home() {
       window.Telegram.WebApp.expand();
       window.Telegram.WebApp.ready();
     }
+
+    // Global heartbeat every 30 sec - keeps lastOnline fresh while app is open
+    // This prevents false "offline" rewards when user just switches tabs
+    const heartbeatInterval = setInterval(() => {
+      const socket = getSocket();
+      if (socket.connected) {
+        socket.emit('session:heartbeat');
+      }
+    }, 30000);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
   }, []);
 
   if (!isClient) {

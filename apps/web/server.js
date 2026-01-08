@@ -2658,6 +2658,8 @@ app.prepare().then(async () => {
       lastActivityPing: 0,       // Last activity ping timestamp
       activityBossSession: null, // Which boss session this activity is for
       isEligible: false,         // 30+ seconds activity = eligible for rewards
+      // Session heartbeat - prevents false offline rewards
+      lastHeartbeat: Date.now(), // Updated every 30 sec while app is open
     };
 
     onlineUsers.set(socket.id, player);
@@ -2800,6 +2802,15 @@ app.prepare().then(async () => {
         activityTime: player.activityTime,
         isEligible: player.isEligible,
       });
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // SESSION HEARTBEAT - keeps lastHeartbeat fresh while app is open
+    // This prevents false "offline" rewards when user just switches tabs
+    // ═══════════════════════════════════════════════════════════
+    socket.on('session:heartbeat', () => {
+      if (!player.odamage) return;
+      player.lastHeartbeat = Date.now();
     });
 
     // GET PENDING REWARDS
@@ -3203,18 +3214,33 @@ app.prepare().then(async () => {
         player.skillLightning = user.skillLightning ?? 0;
 
         // Calculate offline meditation dust
+        // Check if user was recently online (heartbeat within last 2 minutes)
         const now = Date.now();
-        const lastOnlineTime = user.lastOnline ? user.lastOnline.getTime() : now;
+        let lastActiveTime = user.lastOnline ? user.lastOnline.getTime() : now;
+
+        // Check if same user has another active session with fresh heartbeat
+        // This handles page refresh / reconnect scenarios
+        for (const [sid, p] of onlineUsers.entries()) {
+          if (sid !== socket.id && p.odamage === user.id && p.lastHeartbeat) {
+            const timeSinceHeartbeat = now - p.lastHeartbeat;
+            if (timeSinceHeartbeat < 120000) { // 2 minutes
+              // User was active recently, use heartbeat time instead of DB lastOnline
+              lastActiveTime = Math.max(lastActiveTime, p.lastHeartbeat);
+              console.log(`[Auth] Found active session for ${user.id}, lastHeartbeat ${Math.floor(timeSinceHeartbeat/1000)}s ago`);
+            }
+          }
+        }
+
         const offlineMinutes = Math.min(
           MEDITATION.maxOfflineMinutes,
-          Math.floor((now - lastOnlineTime) / 60000)
+          Math.floor((now - lastActiveTime) / 60000)
         );
         const pendingDust = offlineMinutes >= 5 ? offlineMinutes * MEDITATION.dustPerMinute : 0;
         player.pendingDust = pendingDust;
         player.offlineMinutes = offlineMinutes;
 
         // Calculate offline stamina/mana regen (same rates as online)
-        const offlineSeconds = Math.floor((now - lastOnlineTime) / 1000);
+        const offlineSeconds = Math.floor((now - lastActiveTime) / 1000);
         if (offlineSeconds > 0) {
           // Stamina regen: +1 per second (StatsService.STAMINA_REGEN_PER_SEC)
           const offlineStaminaRegen = offlineSeconds * StatsService.STAMINA_REGEN_PER_SEC;
