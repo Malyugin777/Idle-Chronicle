@@ -74,18 +74,31 @@ export const ITEMS: Record<string, ItemDefinition> = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // SCROLLS (Свитки)
+  // ENCHANT SYSTEM (Система заточки)
   // ─────────────────────────────────────────────────────────
-  'enchant-scroll': {
-    id: 'enchant-scroll',
-    code: 'enchant-scroll',
-    nameRu: 'Свиток заточки',
-    nameEn: 'Enchant Scroll',
-    icon: '📜',
+  'enchant-charge': {
+    id: 'enchant-charge',
+    code: 'enchant-charge',
+    nameRu: 'Заряд заточки',
+    nameEn: 'Enchant Charge',
+    icon: '⚗️',
     type: 'consumable',
-    rarity: 'uncommon',
+    rarity: 'common',
     stackable: true,
-    dbField: 'enchantScrolls',
+    dbField: 'enchantCharges',
+    description: 'Используется для заточки экипировки. 1 заряд = 1 попытка.',
+  },
+  'protection-scroll': {
+    id: 'protection-scroll',
+    code: 'protection-scroll',
+    nameRu: 'Безопасная заточка',
+    nameEn: 'Protection Scroll',
+    icon: '🛡️',
+    type: 'consumable',
+    rarity: 'rare',
+    stackable: true,
+    dbField: 'protectionCharges',
+    description: 'Защищает предмет от поломки при неудачной заточке.',
   },
 
   // ─────────────────────────────────────────────────────────

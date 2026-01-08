@@ -34,7 +34,9 @@
       "Bash(npx @railway/cli run:*)",
       "Bash(npx @railway/cli:*)",
       "Bash(du:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(find:*)",
+      "Bash(git rebase:*)"
     ]
   }
 }

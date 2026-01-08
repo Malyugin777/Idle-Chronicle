@@ -83,9 +83,12 @@ const STAT_TOOLTIPS: Record<string, { ru: string; en: string }> = {
 
 const CONSUMABLE_TOOLTIPS: Record<string, { ru: string; en: string }> = {
   ether: { ru: 'Эфир — x2 урона на 1 тап', en: 'Ether — x2 damage per tap' },
+  etherDust: { ru: 'Эфирная пыль — крафтится в Эфир (10:1)', en: 'Ether Dust — crafts into Ether (10:1)' },
   scrollHaste: { ru: 'Свиток скорости — +30% скорость атаки на 30 сек', en: 'Haste Scroll — +30% attack speed for 30s' },
   scrollAcumen: { ru: 'Свиток силы магии — +50% урона на 30 сек', en: 'Acumen Scroll — +50% damage for 30s' },
   scrollLuck: { ru: 'Свиток удачи — +10% шанс крита на 60 сек', en: 'Luck Scroll — +10% crit chance for 60s' },
+  enchantCharges: { ru: 'Заряд заточки — 1 заряд = 1 попытка улучшения', en: 'Enchant Charge — 1 charge = 1 upgrade attempt' },
+  protectionCharges: { ru: 'Безопасная заточка — защищает от поломки', en: 'Protection — prevents item from breaking' },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -169,10 +172,14 @@ interface PlayerStats {
   attackSpeed: number;
   gold: number;
   ancientCoin?: number;
+  // Consumables
   ether?: number;
-  scrollHaste?: number;
-  scrollAcumen?: number;
-  scrollLuck?: number;
+  etherDust?: number;
+  potionHaste?: number;   // Server sends potion*, mapped to scroll* in UI
+  potionAcumen?: number;
+  potionLuck?: number;
+  enchantCharges?: number;
+  protectionCharges?: number;
   // Skill levels (0 = locked, 1+ = level)
   skillFireball?: number;
   skillIceball?: number;
@@ -655,7 +662,7 @@ export default function CharacterTab() {
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
   const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null);
-  const [consumables, setConsumables] = useState({ ether: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0 });
+  const [consumables, setConsumables] = useState({ ether: 0, etherDust: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0, enchantCharges: 0, protectionCharges: 0 });
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
@@ -672,9 +679,12 @@ export default function CharacterTab() {
       });
       setConsumables({
         ether: data.ether || 0,
-        scrollHaste: data.scrollHaste || 0,
-        scrollAcumen: data.scrollAcumen || 0,
-        scrollLuck: data.scrollLuck || 0,
+        etherDust: data.etherDust || 0,
+        scrollHaste: data.potionHaste || 0,  // Server sends potionHaste
+        scrollAcumen: data.potionAcumen || 0, // Server sends potionAcumen
+        scrollLuck: data.potionLuck || 0,     // Server sends potionLuck
+        enchantCharges: data.enchantCharges || 0,
+        protectionCharges: data.protectionCharges || 0,
       });
       setIsLoading(false);
     };
@@ -710,7 +720,7 @@ export default function CharacterTab() {
     // FIX: Server sends potionHaste/potionAcumen/potionLuck directly, not in stats object
     const handleBuffSuccess = (data: { buffId: string; expiresAt: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
       setConsumables(prev => ({
-        ether: prev.ether,
+        ...prev,
         scrollHaste: data.potionHaste ?? prev.scrollHaste,
         scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
         scrollLuck: data.potionLuck ?? prev.scrollLuck,
@@ -729,13 +739,16 @@ export default function CharacterTab() {
       setConsumables(prev => ({ ...prev, ether: data.ether }));
     };
 
-    // Sync consumables when task rewards are claimed
-    const handlePlayerState = (data: { ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+    // Sync consumables when task rewards are claimed or enchant/forge used
+    const handlePlayerState = (data: { ether?: number; etherDust?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number; enchantCharges?: number; protectionCharges?: number }) => {
       setConsumables(prev => ({
         ether: data.ether ?? prev.ether,
+        etherDust: data.etherDust ?? prev.etherDust,
         scrollHaste: data.potionHaste ?? prev.scrollHaste,
         scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
         scrollLuck: data.potionLuck ?? prev.scrollLuck,
+        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
+        protectionCharges: data.protectionCharges ?? prev.protectionCharges,
       }));
     };
 
@@ -816,8 +829,17 @@ export default function CharacterTab() {
 
   // Build consumables for inventory
   const consumableSlots: { id: string; dbField: string; icon: string; count: number; color: string }[] = [];
+  if (consumables.enchantCharges > 0) {
+    consumableSlots.push({ id: 'enchantCharges', dbField: 'enchantCharges', icon: '⚗️', count: consumables.enchantCharges, color: 'text-amber-400' });
+  }
+  if (consumables.protectionCharges > 0) {
+    consumableSlots.push({ id: 'protectionCharges', dbField: 'protectionCharges', icon: '🛡️', count: consumables.protectionCharges, color: 'text-blue-400' });
+  }
   if (consumables.ether > 0) {
-    consumableSlots.push({ id: 'ether', dbField: 'ether', icon: '💎', count: consumables.ether, color: 'text-cyan-400' });
+    consumableSlots.push({ id: 'ether', dbField: 'ether', icon: '✨', count: consumables.ether, color: 'text-cyan-400' });
+  }
+  if (consumables.etherDust > 0) {
+    consumableSlots.push({ id: 'etherDust', dbField: 'etherDust', icon: '🌫️', count: consumables.etherDust, color: 'text-purple-400' });
   }
   if (consumables.scrollHaste > 0) {
     consumableSlots.push({ id: 'scrollHaste', dbField: 'scrollHaste', icon: '⚡', count: consumables.scrollHaste, color: 'text-yellow-400' });

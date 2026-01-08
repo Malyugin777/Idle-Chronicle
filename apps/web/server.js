@@ -2792,6 +2792,9 @@ app.prepare().then(async () => {
             potionHaste: player.potionHaste ?? user.potionHaste,
             potionAcumen: player.potionAcumen ?? user.potionAcumen,
             potionLuck: player.potionLuck ?? user.potionLuck,
+            // Enchant System consumables
+            enchantCharges: user.enchantCharges ?? 0,
+            protectionCharges: user.protectionCharges ?? 0,
             // Session stats (from memory, not DB)
             sessionDamage: player.sessionDamage || 0,
           });
