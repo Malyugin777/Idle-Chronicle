@@ -209,12 +209,20 @@ async function loadBossState(prisma) {
     const respawnAtDate = state.respawnAt ? new Date(state.respawnAt) : null;
     const isRespawnInFuture = respawnAtDate && respawnAtDate > now;
 
-    console.log(`[Boss] Respawn check: respawnAt=${respawnAtDate?.toISOString()}, now=${now.toISOString()}, inFuture=${isRespawnInFuture}`);
+    // FIX: Ignore old respawn timers > 5 minutes (leftover from old 5-hour code)
+    const MAX_VALID_RESPAWN_MS = 5 * 60 * 1000; // 5 minutes max
+    const respawnTooFar = respawnAtDate && (respawnAtDate.getTime() - now.getTime()) > MAX_VALID_RESPAWN_MS;
 
-    if (isRespawnInFuture) {
+    console.log(`[Boss] Respawn check: respawnAt=${respawnAtDate?.toISOString()}, now=${now.toISOString()}, inFuture=${isRespawnInFuture}, tooFar=${respawnTooFar}`);
+
+    if (isRespawnInFuture && !respawnTooFar) {
       bossRespawnAt = respawnAtDate;
       console.log(`[Boss] ⏰ Boss is in respawn phase until ${bossRespawnAt.toISOString()}`);
       addLog('info', 'boss', 'Loaded respawn timer', { respawnAt: bossRespawnAt.toISOString() });
+    } else if (respawnTooFar) {
+      console.log(`[Boss] ⚠️ Ignoring old respawn timer (${Math.round((respawnAtDate.getTime() - now.getTime()) / 60000)} min in future) - forcing immediate respawn`);
+      addLog('warn', 'boss', 'Cleared old respawn timer', { was: respawnAtDate.toISOString() });
+      return 'respawn'; // Force respawn to clear old state
     }
 
     // Load boss state
