@@ -742,6 +742,7 @@ function calculateDamage(player, tapCount) {
     // Consume ether (1 per tap)
     const consumed = Math.min(player.ether, tapCount);
     player.ether -= consumed;
+    player.dirty = true;  // SSOT: mark for flush
     etherUsed = consumed;
     // Auto-deactivate if ran out
     if (player.ether <= 0) {
@@ -2626,6 +2627,48 @@ app.prepare().then(async () => {
   });
 
   // ─────────────────────────────────────────────────────────
+  // SSOT: Resource flush to DB
+  // ─────────────────────────────────────────────────────────
+  async function savePlayerResources(player) {
+    if (!player.odamage || !player.resourcesLoaded || !player.dirty) return;
+
+    try {
+      await prisma.user.update({
+        where: { id: player.odamage },
+        data: {
+          ether: player.ether ?? 0,
+          etherDust: player.etherDust ?? 0,
+          mana: player.mana ?? 0,
+          stamina: player.stamina ?? 0,
+          gold: BigInt(player.gold || 0),
+          potionHaste: player.potionHaste ?? 0,
+          potionAcumen: player.potionAcumen ?? 0,
+          potionLuck: player.potionLuck ?? 0,
+          autoEther: player.autoEther ?? false,
+          autoAttack: player.autoAttack ?? false,
+        },
+      });
+      player.dirty = false;
+      // Debug log (throttled)
+      if (!savePlayerResources.lastLog || Date.now() - savePlayerResources.lastLog > 60000) {
+        console.log(`[SSOT] Flushed resources for ${player.odamageN}`);
+        savePlayerResources.lastLog = Date.now();
+      }
+    } catch (err) {
+      console.error(`[SSOT] Flush error for ${player.odamage}:`, err.message);
+    }
+  }
+
+  // Periodic flush every 10 seconds for all dirty players
+  setInterval(async () => {
+    for (const [, player] of onlineUsers.entries()) {
+      if (player.dirty) {
+        await savePlayerResources(player);
+      }
+    }
+  }, 10000);
+
+  // ─────────────────────────────────────────────────────────
   // SOCKET HANDLERS
   // ─────────────────────────────────────────────────────────
   io.on('connection', async (socket) => {
@@ -2643,6 +2686,9 @@ app.prepare().then(async () => {
       odamageN: 'Guest',
       username: null, // Telegram username для debug-проверок
       photoUrl: null,
+      // SSOT flags
+      resourcesLoaded: false,  // True after auth loads DB values
+      dirty: false,            // True if resources changed since last flush
       // Legacy stats
       str: 1,
       dex: 1,
@@ -2733,6 +2779,13 @@ app.prepare().then(async () => {
         return;
       }
 
+      // SSOT guard: resources must be loaded before serving data
+      if (!player.resourcesLoaded) {
+        console.warn(`[SSOT] player:get called before auth for socket ${socket.id}`);
+        socket.emit('player:data', null);
+        return;
+      }
+
       try {
         const user = await prisma.user.findUnique({
           where: { id: player.odamage },
@@ -2760,24 +2813,24 @@ app.prepare().then(async () => {
             agility: user.agility,
             intellect: user.intellect,
             spirit: user.spirit,
-            // Combat stats (use in-memory values which include equipment bonuses)
-            pAtk: player.pAtk ?? user.pAtk,
-            basePAtk: player.basePAtk ?? user.pAtk,
+            // Combat stats (SSOT: from memory only)
+            pAtk: player.pAtk,
+            basePAtk: player.basePAtk,
             equipmentPAtk: player.equipmentPAtk ?? 0,
-            pDef: player.pDef ?? user.physicalDefense,
+            pDef: player.pDef,
             mAtk: user.intellect * 2, // Magic attack based on intellect
             mDef: user.spirit * 2, // Magic defense based on spirit
             critChance: user.critChance,
             attackSpeed: user.attackSpeed,
-            // Currency
+            // Currency (gold from DB as it's updated there directly)
             gold: Number(user.gold),
             ancientCoin: user.ancientCoin,
-            // Mana & Stamina (from memory - current values)
-            mana: player.mana ?? user.mana,
-            maxMana: player.maxMana ?? user.maxMana,
+            // Mana & Stamina (SSOT: from memory only)
+            mana: player.mana,
+            maxMana: player.maxMana,
             manaRegen: user.manaRegen,
-            stamina: player.stamina ?? user.stamina,
-            maxStamina: player.maxStamina ?? user.maxStamina,
+            stamina: player.stamina,
+            maxStamina: player.maxStamina,
             // Skills
             tapsPerSecond: user.tapsPerSecond,
             autoAttackSpeed: user.autoAttackSpeed,
@@ -2785,14 +2838,14 @@ app.prepare().then(async () => {
             // Progression
             totalDamage: Number(user.totalDamage),
             bossesKilled: user.bossesKilled,
-            // Consumables (use in-memory values if available, fallback to DB)
-            autoEther: player.autoEther ?? user.autoEther ?? false,
-            ether: player.ether ?? user.ether,
-            etherDust: player.etherDust ?? user.etherDust ?? 0,
-            potionHaste: player.potionHaste ?? user.potionHaste,
-            potionAcumen: player.potionAcumen ?? user.potionAcumen,
-            potionLuck: player.potionLuck ?? user.potionLuck,
-            // Enchant System consumables
+            // Consumables (SSOT: from memory only, NO DB FALLBACK)
+            autoEther: player.autoEther,
+            ether: player.ether,
+            etherDust: player.etherDust,
+            potionHaste: player.potionHaste,
+            potionAcumen: player.potionAcumen,
+            potionLuck: player.potionLuck,
+            // Enchant System consumables (from DB - not frequently changed)
             enchantCharges: user.enchantCharges ?? 0,
             protectionCharges: user.protectionCharges ?? 0,
             // Session stats (from memory, not DB)
@@ -3239,13 +3292,15 @@ app.prepare().then(async () => {
         player.gold = Number(user.gold);
         player.autoEther = user.autoEther || false;
         player.autoAttack = user.autoAttack || false;
-        // Preserve in-memory values if already set (re-auth on tab switch)
-        // Only use DB values on first auth in this session
-        player.ether = player.ether ?? user.ether;
-        player.etherDust = player.etherDust ?? user.etherDust ?? 0;
-        player.potionHaste = player.potionHaste ?? user.potionHaste;
-        player.potionAcumen = player.potionAcumen ?? user.potionAcumen;
-        player.potionLuck = player.potionLuck ?? user.potionLuck;
+        // SSOT: ALWAYS load resources from DB on auth (no memory fallback)
+        player.ether = user.ether ?? 0;
+        player.etherDust = user.etherDust ?? 0;
+        player.potionHaste = user.potionHaste ?? 0;
+        player.potionAcumen = user.potionAcumen ?? 0;
+        player.potionLuck = user.potionLuck ?? 0;
+        // Mark resources as loaded (SSOT ready)
+        player.resourcesLoaded = true;
+        player.dirty = false;
 
         // Level and Skill levels
         player.level = user.level || 1;
@@ -3369,8 +3424,8 @@ app.prepare().then(async () => {
           isFirstLogin: user.isFirstLogin,
           totalDamage: Number(user.totalDamage),
           bossesKilled: user.bossesKilled,
-          autoEther: player.autoEther ?? user.autoEther ?? false,
-          autoAttack: player.autoAttack ?? user.autoAttack ?? false,
+          autoEther: player.autoEther,  // SSOT: from memory only
+          autoAttack: player.autoAttack, // SSOT: from memory only
           // Use in-memory values (preserved from session, or DB on first auth)
           ether: player.ether,
           etherDust: player.etherDust,
@@ -3455,6 +3510,7 @@ app.prepare().then(async () => {
 
       // Deduct stamina
       player.stamina -= tapCount * staminaCostPerTap;
+      player.dirty = true;  // SSOT: mark for flush
 
       const { totalDamage, crits, etherUsed } = calculateDamage(player, tapCount);
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
@@ -3560,6 +3616,7 @@ app.prepare().then(async () => {
 
       // Deduct mana
       player.mana -= skill.manaCost;
+      player.dirty = true;  // SSOT: mark for flush
 
       // Get skill level for this player
       const skillLevelMap = {
@@ -6177,6 +6234,7 @@ app.prepare().then(async () => {
           if (player.autoEther && player.ether > 0) {
             dmg *= 2;
             player.ether -= 1;
+            player.dirty = true;  // SSOT: mark for flush
             etherUsed++;
           }
 
