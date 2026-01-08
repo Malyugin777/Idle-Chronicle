@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// CRAFTING SYSTEM - Salvage, Enchant, Fusion
+// CRAFTING SYSTEM v1.2 - Salvage, Enchant, Broken Items
 // Idle Chronicle
 // ═══════════════════════════════════════════════════════════
 
@@ -22,10 +22,6 @@ export type SlotType =
   | 'ring2'
   | 'necklace';
 
-export type MaterialType = 'ore' | 'leather' | 'coal' | 'enchantDust';
-
-export type ScrollType = 'enchantWeapon' | 'enchantArmor' | 'protection';
-
 export type ChestType = 'wooden' | 'bronze' | 'silver' | 'gold';
 
 export interface ItemStats {
@@ -47,59 +43,40 @@ export interface InventoryItem {
   baseStats: ItemStats;
   enchantLevel: number;
   setId?: string | null;
+  // Broken Item System v1.2
+  isBroken?: boolean;
+  brokenUntil?: string | null;  // ISO date string
+  enchantOnBreak?: number;
 }
 
-export interface Materials {
-  ore: number;
-  leather: number;
-  coal: number;
+// Новая структура ресурсов v1.2
+export interface PlayerResources {
   enchantDust: number;
-}
-
-export interface Scrolls {
-  enchantWeapon: number;
-  enchantArmor: number;
-  protection: number;
-}
-
-export interface SalvageOutput {
-  baseMaterial: MaterialType;
-  baseMaterialAmount: number;
-  dustAmount: number;
+  enchantCharges: number;
+  protectionCharges: number;
+  premiumCrystals: number;
+  gold: number;
 }
 
 export interface EnchantResult {
   success: boolean;
-  itemDestroyed: boolean;
+  itemBroken: boolean;       // v1.2: предмет сломан (не удалён!)
   newEnchantLevel: number;
-  scrollConsumed: boolean;
+  chargeConsumed: boolean;   // v1.2: enchantCharge потрачен
   protectionConsumed: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════
-// CONSTANTS - SALVAGE
+// CONSTANTS - SALVAGE v1.2
 // ═══════════════════════════════════════════════════════════
 
-// Материал по слоту
-export const SLOT_TO_MATERIAL: Record<SlotType, MaterialType> = {
-  weapon: 'ore',
-  shield: 'leather',
-  helmet: 'leather',
-  armor: 'leather',
-  gloves: 'leather',
-  legs: 'leather',
-  boots: 'leather',
-  ring1: 'coal',
-  ring2: 'coal',
-  necklace: 'coal',
-};
-
-// Выход материалов по редкости (x3 на тир)
-export const SALVAGE_OUTPUT: Record<Rarity, { baseMat: number; dust: number }> = {
-  common:   { baseMat: 2,  dust: 1 },
-  uncommon: { baseMat: 6,  dust: 3 },
-  rare:     { baseMat: 18, dust: 9 },
-  epic:     { baseMat: 54, dust: 27 },
+// Выход только Enchant Dust по редкости (x3 на тир)
+// v1.2: убраны материалы ore/leather/coal
+export const SALVAGE_OUTPUT: Record<Rarity, number> = {
+  common:   1,
+  uncommon: 3,
+  rare:     9,
+  epic:    27,
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -139,14 +116,36 @@ export const ENCHANT_DUST_BASE = 5;
 export const ENCHANT_DUST_PER_LEVEL = 2;
 
 // ═══════════════════════════════════════════════════════════
-// CONSTANTS - SCROLL CRAFTING
+// CONSTANTS - BROKEN ITEMS v1.2
 // ═══════════════════════════════════════════════════════════
 
-export const SCROLL_RECIPES: Record<ScrollType, { dust: number; gold: number; coal?: number }> = {
-  enchantWeapon: { dust: 10, gold: 500 },
-  enchantArmor:  { dust: 10, gold: 500 },
-  protection:    { dust: 20, gold: 1000, coal: 5 },
+// Таймер поломки (8 часов)
+export const BROKEN_TIMER_MS = 8 * 60 * 60 * 1000;
+
+// Базовая стоимость восстановления за 💎 по редкости
+export const RESTORE_COST_BASE: Record<Rarity, number> = {
+  common: 10,
+  uncommon: 25,
+  rare: 60,
+  epic: 120,
 };
+
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS - ENCHANT CHARGES FROM CHESTS v1.2
+// ═══════════════════════════════════════════════════════════
+
+export const CHEST_ENCHANT_CHARGES: Record<ChestType, { min: number; max: number }> = {
+  wooden: { min: 1, max: 2 },
+  bronze: { min: 2, max: 4 },
+  silver: { min: 4, max: 8 },
+  gold:   { min: 8, max: 15 },
+};
+
+// Шанс дропа Protection из Gold сундуков
+export const PROTECTION_DROP_CHANCE = 0.05; // 5%
+
+// Стоимость покупки Protection за 💎
+export const PROTECTION_BUY_COST = 50;
 
 // ═══════════════════════════════════════════════════════════
 // CONSTANTS - FUSION
@@ -161,54 +160,77 @@ export const FUSION_REQUIREMENTS: Record<Rarity, { count: number; resultChest: C
 };
 
 // ═══════════════════════════════════════════════════════════
-// PURE FUNCTIONS - SALVAGE
+// PURE FUNCTIONS - SALVAGE v1.2
 // ═══════════════════════════════════════════════════════════
 
 /**
- * Получить выход материалов от разбора предмета
+ * Получить выход Enchant Dust от разбора предмета
+ * v1.2: возвращает только dust, без материалов
  */
-export function getSalvageOutput(item: InventoryItem): SalvageOutput {
-  const material = SLOT_TO_MATERIAL[item.slotType];
-  const output = SALVAGE_OUTPUT[item.rarity];
-
-  return {
-    baseMaterial: material,
-    baseMaterialAmount: output.baseMat,
-    dustAmount: output.dust,
-  };
+export function getSalvageOutput(item: InventoryItem): number {
+  // Broken items нельзя разбирать
+  if (item.isBroken) return 0;
+  return SALVAGE_OUTPUT[item.rarity] || 0;
 }
 
 /**
- * Разобрать несколько предметов и получить суммарный выход
+ * Разобрать несколько предметов и получить суммарный Enchant Dust
+ * v1.2: возвращает только число dust
  */
-export function salvageItems(items: InventoryItem[]): Materials {
-  const result: Materials = {
-    ore: 0,
-    leather: 0,
-    coal: 0,
-    enchantDust: 0,
-  };
-
+export function salvageItems(items: InventoryItem[]): number {
+  let totalDust = 0;
   for (const item of items) {
-    const output = getSalvageOutput(item);
-    result[output.baseMaterial] += output.baseMaterialAmount;
-    result.enchantDust += output.dustAmount;
+    // Пропускаем broken items
+    if (!item.isBroken) {
+      totalDust += getSalvageOutput(item);
+    }
   }
-
-  return result;
+  return totalDust;
 }
 
 /**
  * Превью разбора (для UI)
+ * v1.2: показывает только dust
  */
 export function previewSalvage(items: InventoryItem[]): {
-  materials: Materials;
+  dustAmount: number;
   itemCount: number;
 } {
+  // Фильтруем broken items
+  const validItems = items.filter(item => !item.isBroken);
   return {
-    materials: salvageItems(items),
-    itemCount: items.length,
+    dustAmount: salvageItems(validItems),
+    itemCount: validItems.length,
   };
+}
+
+/**
+ * Стоимость восстановления сломанного предмета в 💎
+ */
+export function getRestoreCost(rarity: Rarity, enchantLevel: number): number {
+  const base = RESTORE_COST_BASE[rarity] || 10;
+  return Math.floor(base * (1 + enchantLevel * 0.25));
+}
+
+/**
+ * Получить оставшееся время до удаления сломанного предмета
+ */
+export function getBrokenTimeRemaining(brokenUntil: string | null): number {
+  if (!brokenUntil) return 0;
+  const until = new Date(brokenUntil).getTime();
+  const now = Date.now();
+  return Math.max(0, until - now);
+}
+
+/**
+ * Форматировать время до удаления (ЧЧ:ММ:СС)
+ */
+export function formatBrokenTimer(ms: number): string {
+  if (ms <= 0) return '00:00:00';
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -281,39 +303,28 @@ export function getEnchantCost(currentLevel: number): { gold: number; dust: numb
 }
 
 /**
- * Проверить, подходит ли свиток для предмета
+ * Проверить, можно ли точить предмет
+ * v1.2: любой предмет можно точить universal charges
  */
-export function isScrollValidForItem(scrollType: ScrollType, item: InventoryItem): boolean {
-  if (scrollType === 'protection') return false; // Protection не используется напрямую
-
-  if (scrollType === 'enchantWeapon') {
-    return item.slotType === 'weapon';
-  }
-
-  if (scrollType === 'enchantArmor') {
-    // Все слоты кроме оружия и аксессуаров
-    return ['shield', 'helmet', 'armor', 'gloves', 'legs', 'boots'].includes(item.slotType);
-  }
-
-  return false;
+export function canEnchantItem(item: InventoryItem): boolean {
+  // Нельзя точить broken items
+  if (item.isBroken) return false;
+  // Нельзя точить выше максимума
+  if (item.enchantLevel >= MAX_ENCHANT_LEVEL) return false;
+  return true;
 }
 
 /**
- * Получить список предметов, подходящих для свитка
+ * Получить список предметов, подходящих для заточки
+ * v1.2: все не-broken предметы с enchant < MAX
  */
-export function getValidItemsForScroll(
-  scrollType: ScrollType,
-  inventory: InventoryItem[]
-): InventoryItem[] {
-  return inventory.filter(item =>
-    isScrollValidForItem(scrollType, item) &&
-    item.enchantLevel < MAX_ENCHANT_LEVEL
-  );
+export function getEnchantableItems(inventory: InventoryItem[]): InventoryItem[] {
+  return inventory.filter(item => canEnchantItem(item));
 }
 
 /**
  * Попытка энчанта (чистая функция - только расчёт)
- * Возвращает результат без побочных эффектов
+ * v1.2: использует charges вместо scrolls, broken вместо destroyed
  */
 export function calculateEnchantResult(
   item: InventoryItem,
@@ -327,9 +338,9 @@ export function calculateEnchantResult(
   if (success) {
     return {
       success: true,
-      itemDestroyed: false,
+      itemBroken: false,
       newEnchantLevel: item.enchantLevel + 1,
-      scrollConsumed: true,
+      chargeConsumed: true,
       protectionConsumed: useProtection && !isSafe,
     };
   }
@@ -339,30 +350,31 @@ export function calculateEnchantResult(
     // Безопасный энчант не может провалиться, но на всякий случай
     return {
       success: false,
-      itemDestroyed: false,
+      itemBroken: false,
       newEnchantLevel: item.enchantLevel,
-      scrollConsumed: true,
+      chargeConsumed: true,
       protectionConsumed: false,
     };
   }
 
   // Рискованный провал
   if (useProtection) {
+    // С Protection: -1 уровень, не ломается
     return {
       success: false,
-      itemDestroyed: false,
+      itemBroken: false,
       newEnchantLevel: Math.max(0, item.enchantLevel - 1),
-      scrollConsumed: true,
+      chargeConsumed: true,
       protectionConsumed: true,
     };
   }
 
-  // Провал без защиты - предмет уничтожен
+  // Провал без защиты - предмет ЛОМАЕТСЯ (не удаляется!)
   return {
     success: false,
-    itemDestroyed: true,
-    newEnchantLevel: 0,
-    scrollConsumed: true,
+    itemBroken: true,
+    newEnchantLevel: item.enchantLevel, // Сохраняем для restore -1
+    chargeConsumed: true,
     protectionConsumed: false,
   };
 }
@@ -383,44 +395,6 @@ export function applyEnchantToStats(baseStats: ItemStats, enchantLevel: number):
   if (baseStats.atkSpdFlat) result.atkSpdFlat = Math.floor(baseStats.atkSpdFlat * multiplier);
 
   return result;
-}
-
-// ═══════════════════════════════════════════════════════════
-// PURE FUNCTIONS - SCROLL CRAFTING
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Проверить, можно ли скрафтить свиток
- */
-export function canCraftScroll(
-  scrollType: ScrollType,
-  materials: Materials,
-  gold: number,
-  quantity: number = 1
-): boolean {
-  const recipe = SCROLL_RECIPES[scrollType];
-
-  if (materials.enchantDust < recipe.dust * quantity) return false;
-  if (gold < recipe.gold * quantity) return false;
-  if (recipe.coal && materials.coal < recipe.coal * quantity) return false;
-
-  return true;
-}
-
-/**
- * Получить стоимость крафта свитка
- */
-export function getScrollCraftCost(scrollType: ScrollType, quantity: number = 1): {
-  dust: number;
-  gold: number;
-  coal: number;
-} {
-  const recipe = SCROLL_RECIPES[scrollType];
-  return {
-    dust: recipe.dust * quantity,
-    gold: recipe.gold * quantity,
-    coal: (recipe.coal || 0) * quantity,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -497,17 +471,13 @@ export const RARITY_NAMES: Record<Rarity, { ru: string; en: string }> = {
   epic: { ru: 'Эпический', en: 'Epic' },
 };
 
-export const MATERIAL_NAMES: Record<MaterialType, { ru: string; en: string; icon: string }> = {
-  ore: { ru: 'Руда', en: 'Ore', icon: '🪨' },
-  leather: { ru: 'Кожа', en: 'Leather', icon: '🧶' },
-  coal: { ru: 'Уголь', en: 'Coal', icon: 'ite' },
+// v1.2: Новые ресурсы
+export const RESOURCE_NAMES = {
   enchantDust: { ru: 'Пыль энчанта', en: 'Enchant Dust', icon: '✨' },
-};
-
-export const SCROLL_NAMES: Record<ScrollType, { ru: string; en: string; icon: string }> = {
-  enchantWeapon: { ru: 'Свиток: Оружие', en: 'Scroll: Weapon', icon: '📜⚔️' },
-  enchantArmor: { ru: 'Свиток: Броня', en: 'Scroll: Armor', icon: '📜🛡️' },
-  protection: { ru: 'Свиток: Защита', en: 'Scroll: Protection', icon: '📜💎' },
+  enchantCharges: { ru: 'Заряды заточки', en: 'Enchant Charges', icon: '⚡' },
+  protectionCharges: { ru: 'Защита', en: 'Protection', icon: '🛡️' },
+  premiumCrystals: { ru: 'Кристаллы', en: 'Crystals', icon: '💎' },
+  gold: { ru: 'Золото', en: 'Gold', icon: '🪙' },
 };
 
 // ═══════════════════════════════════════════════════════════

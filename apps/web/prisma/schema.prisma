@@ -95,10 +95,15 @@ model User {
   matCoal         Int      @default(0)    // Уголь (от аксессуаров)
   matEnchantDust  Int      @default(0)    // Пыль энчанта (универсальная)
 
-  // Crafting Scrolls
+  // Crafting Scrolls (LEGACY - оставлено для обратной совместимости)
   scrollEnchantWeapon  Int @default(0)    // Свиток энчанта оружия
   scrollEnchantArmor   Int @default(0)    // Свиток энчанта брони
   scrollProtection     Int @default(0)    // Свиток защиты
+
+  // Enchant System v1.2
+  enchantCharges       Int @default(10)   // Заряды для заточки (из сундуков)
+  protectionCharges    Int @default(0)    // Защита при заточке (редкий дроп + донат)
+  premiumCrystals      Int @default(0)    // Донат-валюта 💎
 
   // Ether System (Эфирный цикл)
   ether           Int      @default(100)
@@ -246,6 +251,11 @@ model UserEquipment {
   // Is currently equipped?
   isEquipped  Boolean       @default(false)
 
+  // Broken Item System v1.2
+  isBroken       Boolean    @default(false)   // Сломан ли предмет
+  brokenUntil    DateTime?                    // Когда будет удалён (null = не сломан)
+  enchantOnBreak Int        @default(0)       // Уровень энчанта на момент поломки
+
   createdAt   DateTime      @default(now())
 
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -253,6 +263,7 @@ model UserEquipment {
 
   @@index([userId])
   @@index([equipmentId])
+  @@index([isBroken, brokenUntil])  // Для cleanup expired broken items
 }
 
 enum EquipmentSlot {

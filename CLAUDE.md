@@ -136,3 +136,21 @@ Rank 101+:  только базовые 2 Wooden
 - `offlineEarnings` state в PhaserGame.tsx
 - `offline:earnings` socket listener
 - переводы `offline.*` в i18n.ts
+
+## Legacy поля (НЕ удалять, для обратной совместимости)
+- User: `matOre`, `matLeather`, `matCoal`
+- User: `scrollEnchantWeapon`, `scrollEnchantArmor`, `scrollProtection`
+
+## TODO для будущих ТЗ
+- [ ] Система Merge/Fusion - объединение одинаковых предметов
+- [ ] Дейлики с наградами EnchantCharges
+- [ ] Активность/урон/рейтинги → награда EnchantCharges
+- [ ] Shop UI для покупки Protection за 💎 (premiumCrystals)
+- [ ] Источник premiumCrystals (донат/достижения)
+
+## Enchant System v1.2 (текущая)
+- EnchantCharges: из сундуков (Wooden:1-2, Bronze:2-4, Silver:4-8, Gold:8-15)
+- Protection: 5% шанс из Gold сундуков + покупка за 50💎
+- Broken items: 8 часов таймер, потом авто-удаление
+- Restore: стоимость = BaseByRarity * (1 + enchantLevel * 0.25)
+- Base costs: common=10💎, uncommon=25💎, rare=60💎, epic=120💎

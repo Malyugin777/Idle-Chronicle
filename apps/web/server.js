@@ -3237,11 +3237,14 @@ app.prepare().then(async () => {
         const goldReward = dropRates.gold;
         const expReward = goldReward * 10; // EXP = gold * 10
 
-        // Enchant scrolls
-        let enchantScrolls = 0;
-        if (Math.random() < dropRates.enchantChance) {
-          const [minQty, maxQty] = dropRates.enchantQty;
-          enchantScrolls = Math.floor(Math.random() * (maxQty - minQty + 1)) + minQty;
+        // v1.2: Enchant Charges (всегда выпадают из сундуков)
+        const chargesRange = CHEST_ENCHANT_CHARGES[chestType] || { min: 1, max: 2 };
+        const enchantCharges = Math.floor(Math.random() * (chargesRange.max - chargesRange.min + 1)) + chargesRange.min;
+
+        // v1.2: Protection drop from Gold chests (5% chance)
+        let protectionDrop = 0;
+        if (chestType === 'GOLD' && Math.random() < PROTECTION_DROP_CHANCE) {
+          protectionDrop = 1;
         }
 
         // Get current pity counter for Epic (only silver+gold chests count)
@@ -3378,14 +3381,19 @@ app.prepare().then(async () => {
         // Delete chest and give rewards
         await prisma.chest.delete({ where: { id: chestId } });
 
-        // Build update data with pity counter handling
+        // Build update data with pity counter handling (v1.2: charges instead of scrolls)
         const updateData = {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(expReward) },
           totalGoldEarned: { increment: BigInt(goldReward) },
-          enchantScrolls: { increment: enchantScrolls },
+          enchantCharges: { increment: enchantCharges },
           [chestTypeCounterField]: { increment: 1 },
         };
+
+        // v1.2: Add protection if dropped
+        if (protectionDrop > 0) {
+          updateData.protectionCharges = { increment: protectionDrop };
+        }
 
         // Handle pity counter (increment or reset)
         if (pityCounterDelta !== 0) {
@@ -3410,7 +3418,8 @@ app.prepare().then(async () => {
           rewards: {
             gold: goldReward,
             exp: expReward,
-            enchantScrolls,
+            enchantCharges,      // v1.2: charges instead of scrolls
+            protectionDrop,      // v1.2: protection from gold chests
             equipment: droppedItem, // Changed from 'item' to 'equipment' to match TreasuryTab
           },
         });
@@ -4547,31 +4556,38 @@ app.prepare().then(async () => {
     // ═══════════════════════════════════════════════════════════
 
     // Salvage output by rarity (x3 per tier)
+    // v1.2: Salvage даёт только Enchant Dust
     const SALVAGE_OUTPUT = {
-      COMMON:   { baseMat: 2,  dust: 1 },
-      UNCOMMON: { baseMat: 6,  dust: 3 },
-      RARE:     { baseMat: 18, dust: 9 },
-      EPIC:     { baseMat: 54, dust: 27 },
+      COMMON:   1,
+      UNCOMMON: 3,
+      RARE:     9,
+      EPIC:    27,
     };
 
-    // Slot to material mapping
-    const SLOT_TO_MATERIAL = {
-      WEAPON: 'matOre',
-      SHIELD: 'matLeather',
-      HELMET: 'matLeather',
-      CHEST: 'matLeather',
-      GLOVES: 'matLeather',
-      LEGS: 'matLeather',
-      BOOTS: 'matLeather',
-      // Accessories would be matCoal but we don't have them in UserEquipment yet
+    // v1.2: Enchant Charges из сундуков
+    const CHEST_ENCHANT_CHARGES = {
+      WOODEN: { min: 1, max: 2 },
+      BRONZE: { min: 2, max: 4 },
+      SILVER: { min: 4, max: 8 },
+      GOLD:   { min: 8, max: 15 },
     };
 
-    // Scroll crafting recipes
-    const SCROLL_RECIPES = {
-      enchantWeapon: { dust: 10, gold: 500 },
-      enchantArmor:  { dust: 10, gold: 500 },
-      protection:    { dust: 20, gold: 1000, coal: 5 },
+    // v1.2: Broken item timer (8 часов)
+    const BROKEN_TIMER_MS = 8 * 60 * 60 * 1000;
+
+    // v1.2: Protection drop chance из Gold сундуков
+    const PROTECTION_DROP_CHANCE = 0.05; // 5%
+
+    // v1.2: Стоимость восстановления за 💎
+    const RESTORE_COST_BASE = {
+      COMMON: 10,
+      UNCOMMON: 25,
+      RARE: 60,
+      EPIC: 120,
     };
+
+    // v1.2: Стоимость покупки Protection за 💎
+    const PROTECTION_BUY_COST = 50;
 
     // Enchant success chances
     const ENCHANT_CHANCES = {
@@ -4588,7 +4604,7 @@ app.prepare().then(async () => {
       RARE:     { count: 4, resultChest: 'GOLD' },
     };
 
-    // FORGE:GET - Get forge data (inventory, materials, scrolls)
+    // FORGE:GET - Get forge data (inventory, resources) v1.2
     socket.on('forge:get', async () => {
       if (!player.odamage) return;
 
@@ -4597,19 +4613,22 @@ app.prepare().then(async () => {
           where: { id: player.odamage },
           select: {
             gold: true,
-            matOre: true,
-            matLeather: true,
-            matCoal: true,
             matEnchantDust: true,
-            scrollEnchantWeapon: true,
-            scrollEnchantArmor: true,
-            scrollProtection: true,
+            enchantCharges: true,
+            protectionCharges: true,
+            premiumCrystals: true,
           },
         });
 
-        // Get equipment inventory (not equipped)
+        // Get equipment inventory (not equipped, not broken - для salvage/fusion)
         const equipment = await prisma.userEquipment.findMany({
-          where: { userId: player.odamage, isEquipped: false },
+          where: { userId: player.odamage, isEquipped: false, isBroken: false },
+          include: { equipment: true },
+        });
+
+        // Get broken items separately
+        const brokenItems = await prisma.userEquipment.findMany({
+          where: { userId: player.odamage, isBroken: true },
           include: { equipment: true },
         });
 
@@ -4626,22 +4645,38 @@ app.prepare().then(async () => {
           },
           enchantLevel: eq.enchant,
           setId: null,
+          isBroken: false,
+        }));
+
+        const broken = brokenItems.map(eq => ({
+          id: eq.id,
+          templateId: eq.equipmentId,
+          name: eq.equipment.nameRu || eq.equipment.name,
+          icon: eq.equipment.icon,
+          slotType: eq.equipment.slot.toLowerCase(),
+          rarity: eq.equipment.rarity.toLowerCase(),
+          baseStats: {
+            pAtkFlat: eq.pAtk,
+            pDefFlat: eq.pDef,
+          },
+          enchantLevel: eq.enchant,
+          enchantOnBreak: eq.enchantOnBreak,
+          brokenUntil: eq.brokenUntil?.toISOString() || null,
+          setId: null,
+          isBroken: true,
         }));
 
         socket.emit('forge:data', {
           inventory,
-          materials: {
-            ore: user?.matOre || 0,
-            leather: user?.matLeather || 0,
-            coal: user?.matCoal || 0,
+          brokenItems: broken,
+          // v1.2: новая структура ресурсов
+          resources: {
             enchantDust: user?.matEnchantDust || 0,
+            enchantCharges: user?.enchantCharges || 0,
+            protectionCharges: user?.protectionCharges || 0,
+            premiumCrystals: user?.premiumCrystals || 0,
+            gold: Number(user?.gold || 0),
           },
-          scrolls: {
-            enchantWeapon: user?.scrollEnchantWeapon || 0,
-            enchantArmor: user?.scrollEnchantArmor || 0,
-            protection: user?.scrollProtection || 0,
-          },
-          gold: Number(user?.gold || 0),
         });
       } catch (err) {
         console.error('[Forge] Get error:', err.message);
@@ -4649,19 +4684,20 @@ app.prepare().then(async () => {
       }
     });
 
-    // FORGE:SALVAGE - Salvage items for materials
+    // FORGE:SALVAGE - Salvage items for Enchant Dust only (v1.2)
     socket.on('forge:salvage', async (data) => {
       if (!player.odamage) return;
       const { itemIds } = data;
       if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) return;
 
       try {
-        // Get items to salvage
+        // Get items to salvage (v1.2: exclude broken items)
         const items = await prisma.userEquipment.findMany({
           where: {
             id: { in: itemIds },
             userId: player.odamage,
-            isEquipped: false, // Can't salvage equipped items
+            isEquipped: false,
+            isBroken: false, // v1.2: broken items cannot be salvaged
           },
           include: { equipment: true },
         });
@@ -4671,20 +4707,14 @@ app.prepare().then(async () => {
           return;
         }
 
-        // Calculate materials gained
-        const materialsGained = { matOre: 0, matLeather: 0, matCoal: 0, matEnchantDust: 0 };
-
+        // v1.2: Calculate only Enchant Dust gained
+        let dustGained = 0;
         for (const item of items) {
           const rarity = item.equipment.rarity;
-          const slot = item.equipment.slot;
-          const output = SALVAGE_OUTPUT[rarity];
-          const matField = SLOT_TO_MATERIAL[slot] || 'matLeather';
-
-          materialsGained[matField] += output.baseMat;
-          materialsGained.matEnchantDust += output.dust;
+          dustGained += SALVAGE_OUTPUT[rarity] || 0;
         }
 
-        // Delete items and update materials
+        // Delete items and update dust
         await prisma.$transaction([
           prisma.userEquipment.deleteMany({
             where: { id: { in: items.map(i => i.id) } },
@@ -4692,15 +4722,12 @@ app.prepare().then(async () => {
           prisma.user.update({
             where: { id: player.odamage },
             data: {
-              matOre: { increment: materialsGained.matOre },
-              matLeather: { increment: materialsGained.matLeather },
-              matCoal: { increment: materialsGained.matCoal },
-              matEnchantDust: { increment: materialsGained.matEnchantDust },
+              matEnchantDust: { increment: dustGained },
             },
           }),
         ]);
 
-        console.log(`[Forge] ${player.odamage} salvaged ${items.length} items`);
+        console.log(`[Forge] ${player.odamage} salvaged ${items.length} items -> ${dustGained} dust`);
 
         // Send updated forge data
         socket.emit('forge:get');
@@ -4710,66 +4737,165 @@ app.prepare().then(async () => {
       }
     });
 
-    // FORGE:CRAFTSCROLL - Craft enchant scrolls
-    socket.on('forge:craftScroll', async (data) => {
+    // FORGE:RESTORE - Restore broken item for Premium Crystals (v1.2)
+    socket.on('forge:restore', async (data) => {
       if (!player.odamage) return;
-      const { scrollType, quantity = 1 } = data;
+      const { itemId } = data;
 
-      const recipe = SCROLL_RECIPES[scrollType];
-      if (!recipe) {
-        socket.emit('forge:error', { message: 'Invalid scroll type' });
+      if (!itemId) {
+        socket.emit('forge:error', { message: 'Item ID required' });
         return;
       }
 
       try {
-        const user = await prisma.user.findUnique({
-          where: { id: player.odamage },
-          select: { gold: true, matEnchantDust: true, matCoal: true },
+        // Get broken item
+        const item = await prisma.userEquipment.findFirst({
+          where: { id: itemId, userId: player.odamage, isBroken: true },
+          include: { equipment: true },
         });
 
-        const dustNeeded = recipe.dust * quantity;
-        const goldNeeded = recipe.gold * quantity;
-        const coalNeeded = (recipe.coal || 0) * quantity;
-
-        if ((user?.matEnchantDust || 0) < dustNeeded) {
-          socket.emit('forge:error', { message: 'Not enough enchant dust' });
-          return;
-        }
-        if (Number(user?.gold || 0) < goldNeeded) {
-          socket.emit('forge:error', { message: 'Not enough gold' });
-          return;
-        }
-        if (recipe.coal && (user?.matCoal || 0) < coalNeeded) {
-          socket.emit('forge:error', { message: 'Not enough coal' });
+        if (!item) {
+          socket.emit('forge:error', { message: 'Broken item not found' });
           return;
         }
 
-        // Craft scrolls
-        const scrollField = scrollType === 'enchantWeapon' ? 'scrollEnchantWeapon'
-          : scrollType === 'enchantArmor' ? 'scrollEnchantArmor'
-          : 'scrollProtection';
+        // Check if not expired
+        if (item.brokenUntil && new Date(item.brokenUntil) < new Date()) {
+          socket.emit('forge:error', { message: 'Item has expired' });
+          return;
+        }
 
-        const updateData = {
-          matEnchantDust: { decrement: dustNeeded },
-          gold: { decrement: goldNeeded },
-          [scrollField]: { increment: quantity },
-        };
-        if (recipe.coal) {
-          updateData.matCoal = { decrement: coalNeeded };
+        // Calculate restore cost
+        const rarity = item.equipment.rarity;
+        const baseCost = RESTORE_COST_BASE[rarity] || 10;
+        const restoreCost = Math.floor(baseCost * (1 + item.enchantOnBreak * 0.25));
+
+        // Check user crystals
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { premiumCrystals: true },
+        });
+
+        if ((user?.premiumCrystals || 0) < restoreCost) {
+          socket.emit('forge:error', { message: `Need ${restoreCost} crystals` });
+          return;
+        }
+
+        // Restore item: enchant = enchantOnBreak - 1, isBroken = false
+        const newEnchant = Math.max(0, item.enchantOnBreak - 1);
+
+        await prisma.$transaction([
+          prisma.userEquipment.update({
+            where: { id: itemId },
+            data: {
+              isBroken: false,
+              brokenUntil: null,
+              enchant: newEnchant,
+              enchantOnBreak: 0,
+            },
+          }),
+          prisma.user.update({
+            where: { id: player.odamage },
+            data: { premiumCrystals: { decrement: restoreCost } },
+          }),
+        ]);
+
+        console.log(`[Forge] ${player.odamage} restored ${item.equipment.name} for ${restoreCost} crystals, enchant: ${item.enchantOnBreak} -> ${newEnchant}`);
+
+        socket.emit('forge:restored', {
+          itemId,
+          itemName: item.equipment.nameRu || item.equipment.name,
+          newEnchant,
+          cost: restoreCost,
+        });
+
+        // Refresh forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Forge] Restore error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to restore item' });
+      }
+    });
+
+    // FORGE:ABANDON - Delete broken item permanently (v1.2)
+    socket.on('forge:abandon', async (data) => {
+      if (!player.odamage) return;
+      const { itemId } = data;
+
+      if (!itemId) {
+        socket.emit('forge:error', { message: 'Item ID required' });
+        return;
+      }
+
+      try {
+        // Get broken item
+        const item = await prisma.userEquipment.findFirst({
+          where: { id: itemId, userId: player.odamage, isBroken: true },
+          include: { equipment: true },
+        });
+
+        if (!item) {
+          socket.emit('forge:error', { message: 'Broken item not found' });
+          return;
+        }
+
+        // Delete item permanently
+        await prisma.userEquipment.delete({ where: { id: itemId } });
+
+        console.log(`[Forge] ${player.odamage} abandoned ${item.equipment.name}`);
+
+        socket.emit('forge:abandoned', {
+          itemId,
+          itemName: item.equipment.nameRu || item.equipment.name,
+        });
+
+        // Refresh forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Forge] Abandon error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to abandon item' });
+      }
+    });
+
+    // SHOP:BUYPROTECTION - Buy protection charges for crystals (v1.2)
+    socket.on('shop:buyProtection', async (data) => {
+      if (!player.odamage) return;
+      const { quantity = 1 } = data;
+
+      const cost = PROTECTION_BUY_COST * quantity;
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { premiumCrystals: true },
+        });
+
+        if ((user?.premiumCrystals || 0) < cost) {
+          socket.emit('shop:error', { message: `Need ${cost} crystals` });
+          return;
         }
 
         await prisma.user.update({
           where: { id: player.odamage },
-          data: updateData,
+          data: {
+            premiumCrystals: { decrement: cost },
+            protectionCharges: { increment: quantity },
+          },
         });
 
-        console.log(`[Forge] ${player.odamage} crafted ${quantity}x ${scrollType}`);
+        console.log(`[Shop] ${player.odamage} bought ${quantity}x protection for ${cost} crystals`);
 
-        // Send updated forge data
+        socket.emit('shop:purchased', {
+          item: 'protection',
+          quantity,
+          cost,
+        });
+
+        // Refresh forge data
         socket.emit('forge:get');
       } catch (err) {
-        console.error('[Forge] CraftScroll error:', err.message);
-        socket.emit('forge:error', { message: 'Failed to craft scroll' });
+        console.error('[Shop] BuyProtection error:', err.message);
+        socket.emit('shop:error', { message: 'Failed to buy protection' });
       }
     });
 
@@ -4847,67 +4973,58 @@ app.prepare().then(async () => {
       }
     });
 
-    // ENCHANT:TRY - Attempt to enchant an item
+    // ENCHANT:TRY - Attempt to enchant an item (v1.2: charges + broken items)
     socket.on('enchant:try', async (data) => {
       if (!player.odamage) return;
-      const { itemId, scrollType, useProtection } = data;
+      const { itemId, useProtection } = data;
 
-      if (!itemId || !scrollType) {
-        socket.emit('enchant:error', { message: 'Missing parameters' });
+      if (!itemId) {
+        socket.emit('enchant:error', { message: 'Item ID required' });
         return;
       }
 
       try {
-        // Get item
+        // Get item (v1.2: check not broken)
         const item = await prisma.userEquipment.findFirst({
-          where: { id: itemId, userId: player.odamage },
+          where: { id: itemId, userId: player.odamage, isBroken: false },
           include: { equipment: true },
         });
 
         if (!item) {
-          socket.emit('enchant:error', { message: 'Item not found' });
+          socket.emit('enchant:error', { message: 'Item not found or broken' });
           return;
         }
 
-        // Check scroll type matches item
-        const isWeapon = item.equipment.slot === 'WEAPON';
-        const isArmor = ['SHIELD', 'HELMET', 'CHEST', 'GLOVES', 'LEGS', 'BOOTS'].includes(item.equipment.slot);
-
-        if (scrollType === 'enchantWeapon' && !isWeapon) {
-          socket.emit('enchant:error', { message: 'Weapon scroll requires weapon' });
-          return;
-        }
-        if (scrollType === 'enchantArmor' && !isArmor) {
-          socket.emit('enchant:error', { message: 'Armor scroll requires armor' });
+        // Check max level
+        if (item.enchant >= 20) {
+          socket.emit('enchant:error', { message: 'Item at max enchant level' });
           return;
         }
 
-        // Get user data
+        // Get user data (v1.2: charges instead of scrolls)
         const user = await prisma.user.findUnique({
           where: { id: player.odamage },
           select: {
             gold: true,
             matEnchantDust: true,
-            scrollEnchantWeapon: true,
-            scrollEnchantArmor: true,
-            scrollProtection: true,
+            enchantCharges: true,
+            protectionCharges: true,
           },
         });
 
-        // Check scroll availability
-        const scrollField = scrollType === 'enchantWeapon' ? 'scrollEnchantWeapon' : 'scrollEnchantArmor';
-        if ((user?.[scrollField] || 0) < 1) {
-          socket.emit('enchant:error', { message: 'No enchant scroll available' });
+        // v1.2: Check enchant charges
+        if ((user?.enchantCharges || 0) < 1) {
+          socket.emit('enchant:error', { message: 'No enchant charges' });
           return;
         }
 
-        // Check protection scroll if needed
+        // Check protection if needed
         const currentLevel = item.enchant;
         const isSafe = currentLevel < 3;
         const needsProtection = !isSafe && useProtection;
 
-        if (needsProtection && (user?.scrollProtection || 0) < 1) {
-          socket.emit('enchant:error', { message: 'No protection scroll available' });
+        if (needsProtection && (user?.protectionCharges || 0) < 1) {
+          socket.emit('enchant:error', { message: 'No protection charges' });
           return;
         }
 
@@ -4932,18 +5049,18 @@ app.prepare().then(async () => {
 
         console.log(`[Enchant] ${player.odamage} trying +${currentLevel}->+${targetLevel}, chance=${(chance*100).toFixed(0)}%, roll=${roll.toFixed(3)}, success=${success}`);
 
-        // Prepare update
+        // Prepare user update (v1.2: charges)
         const userUpdate = {
           gold: { decrement: goldCost },
           matEnchantDust: { decrement: dustCost },
-          [scrollField]: { decrement: 1 },
+          enchantCharges: { decrement: 1 },
         };
 
         if (needsProtection) {
-          userUpdate.scrollProtection = { decrement: 1 };
+          userUpdate.protectionCharges = { decrement: 1 };
         }
 
-        let itemDestroyed = false;
+        let itemBroken = false;
         let newEnchantLevel = currentLevel;
 
         if (success) {
@@ -4970,20 +5087,34 @@ app.prepare().then(async () => {
             }),
           ]);
         } else {
-          // Unprotected fail - item destroyed
-          itemDestroyed = true;
+          // v1.2: Unprotected fail - item BROKEN (not deleted!)
+          itemBroken = true;
+          const brokenUntil = new Date(Date.now() + BROKEN_TIMER_MS);
+
           await prisma.$transaction([
             prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
-            prisma.userEquipment.delete({ where: { id: itemId } }),
+            prisma.userEquipment.update({
+              where: { id: itemId },
+              data: {
+                isBroken: true,
+                brokenUntil: brokenUntil,
+                enchantOnBreak: currentLevel,
+                isEquipped: false, // Unequip if was equipped
+              },
+            }),
           ]);
+
+          console.log(`[Enchant] Item BROKEN: ${item.equipment.name} +${currentLevel}, expires: ${brokenUntil.toISOString()}`);
         }
 
         socket.emit('enchant:result', {
           success,
-          itemDestroyed,
+          itemBroken, // v1.2: broken instead of destroyed
           newEnchantLevel,
           itemName: item.equipment.nameRu || item.equipment.name,
           itemIcon: item.equipment.icon,
+          // v1.2: Additional info for broken items
+          brokenUntil: itemBroken ? new Date(Date.now() + BROKEN_TIMER_MS).toISOString() : null,
         });
 
         // Refresh forge data
@@ -5036,6 +5167,23 @@ app.prepare().then(async () => {
   // ─────────────────────────────────────────────────────────
   // INTERVALS
   // ─────────────────────────────────────────────────────────
+
+  // v1.2: Cleanup expired broken items every minute
+  setInterval(async () => {
+    try {
+      const result = await prisma.userEquipment.deleteMany({
+        where: {
+          isBroken: true,
+          brokenUntil: { lt: new Date() },
+        },
+      });
+      if (result.count > 0) {
+        console.log(`[Cleanup] Deleted ${result.count} expired broken items`);
+      }
+    } catch (err) {
+      console.error('[Cleanup] Broken items error:', err.message);
+    }
+  }, 60000); // 1 minute
 
   // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {

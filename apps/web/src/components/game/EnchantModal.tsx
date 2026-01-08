@@ -1,36 +1,33 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Sparkles, Shield, AlertTriangle, Check, Zap } from 'lucide-react';
+import { X, Sparkles, Shield, AlertTriangle, Zap } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
   InventoryItem,
-  ScrollType,
-  getValidItemsForScroll,
+  getEnchantableItems,
   getEnchantChance,
   getEnchantCost,
   getEnchantMultiplier,
   isSafeEnchant,
   applyEnchantToStats,
   MAX_ENCHANT_LEVEL,
-  SAFE_ENCHANT_MAX,
   RARITY_COLORS,
   RARITY_BG_COLORS,
   RARITY_NAMES,
-  SCROLL_NAMES,
 } from '@/lib/craftingSystem';
 
 // ═══════════════════════════════════════════════════════════
-// TYPES
+// TYPES v1.2
 // ═══════════════════════════════════════════════════════════
 
 interface EnchantModalProps {
   isOpen: boolean;
   onClose: () => void;
-  scrollType: ScrollType;
   inventory: InventoryItem[];
-  protectionScrolls: number;
+  enchantCharges: number;      // v1.2: charges instead of scrolls
+  protectionCharges: number;   // v1.2: charges instead of scrolls
   gold: number;
   enchantDust: number;
 }
@@ -39,22 +36,23 @@ type EnchantStep = 'select' | 'enchant' | 'result';
 
 interface EnchantResultData {
   success: boolean;
-  itemDestroyed: boolean;
+  itemBroken: boolean;        // v1.2: broken instead of destroyed
   newEnchantLevel: number;
   itemName: string;
   itemIcon: string;
+  brokenUntil?: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════
-// ENCHANT MODAL
+// ENCHANT MODAL v1.2
 // ═══════════════════════════════════════════════════════════
 
 export default function EnchantModal({
   isOpen,
   onClose,
-  scrollType,
   inventory,
-  protectionScrolls,
+  enchantCharges,
+  protectionCharges,
   gold,
   enchantDust,
 }: EnchantModalProps) {
@@ -101,8 +99,8 @@ export default function EnchantModal({
     };
   }, [isOpen]);
 
-  // Get valid items for this scroll type
-  const validItems = getValidItemsForScroll(scrollType, inventory);
+  // v1.2: Get all enchantable items (any slot)
+  const validItems = getEnchantableItems(inventory);
 
   // ─────────────────────────────────────────────────────────
   // HANDLERS
@@ -119,15 +117,16 @@ export default function EnchantModal({
 
     const cost = getEnchantCost(selectedItem.enchantLevel);
     if (gold < cost.gold || enchantDust < cost.dust) return;
+    if (enchantCharges < 1) return;
 
     setLoading(true);
     const socket = getSocket();
+    // v1.2: no scrollType needed, just itemId and useProtection
     socket.emit('enchant:try', {
       itemId: selectedItem.id,
-      scrollType,
       useProtection,
     });
-  }, [selectedItem, scrollType, useProtection, gold, enchantDust, loading]);
+  }, [selectedItem, useProtection, gold, enchantDust, enchantCharges, loading]);
 
   const handleBack = useCallback(() => {
     if (step === 'enchant') {
@@ -150,8 +149,6 @@ export default function EnchantModal({
 
   if (!isOpen) return null;
 
-  const scrollName = SCROLL_NAMES[scrollType];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl w-full max-w-md max-h-[80vh] flex flex-col border border-cyan-500/30">
@@ -160,12 +157,34 @@ export default function EnchantModal({
           <div className="flex items-center gap-2">
             <Sparkles className="text-cyan-400" size={24} />
             <h2 className="text-lg font-bold text-cyan-400">
-              {lang === 'ru' ? scrollName.ru : scrollName.en}
+              {lang === 'ru' ? 'Заточка' : 'Enchant'}
             </h2>
           </div>
           <button onClick={handleClose} className="p-2 hover:bg-gray-700 rounded-lg">
             <X size={20} className="text-gray-400" />
           </button>
+        </div>
+
+        {/* Resources bar v1.2 */}
+        <div className="px-4 py-2 bg-black/30 flex gap-4 text-xs">
+          <span className="flex items-center gap-1">
+            <span>⚡</span>
+            <span className={enchantCharges > 0 ? 'text-yellow-300' : 'text-red-400'}>
+              {enchantCharges}
+            </span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>🛡️</span>
+            <span className="text-blue-300">{protectionCharges}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>✨</span>
+            <span className="text-cyan-300">{enchantDust}</span>
+          </span>
+          <span className="flex items-center gap-1 ml-auto">
+            <span>🪙</span>
+            <span className="text-amber-300">{gold.toLocaleString()}</span>
+          </span>
         </div>
 
         {/* Content */}
@@ -174,7 +193,6 @@ export default function EnchantModal({
             <ItemSelectStep
               items={validItems}
               onSelect={handleSelectItem}
-              scrollType={scrollType}
               lang={lang}
             />
           )}
@@ -184,7 +202,8 @@ export default function EnchantModal({
               item={selectedItem}
               useProtection={useProtection}
               setUseProtection={setUseProtection}
-              protectionScrolls={protectionScrolls}
+              enchantCharges={enchantCharges}
+              protectionCharges={protectionCharges}
               gold={gold}
               enchantDust={enchantDust}
               onEnchant={handleEnchant}
@@ -209,30 +228,21 @@ export default function EnchantModal({
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 1: ITEM SELECT
+// STEP 1: ITEM SELECT v1.2
 // ═══════════════════════════════════════════════════════════
 
 interface ItemSelectStepProps {
   items: InventoryItem[];
   onSelect: (item: InventoryItem) => void;
-  scrollType: ScrollType;
   lang: Language;
 }
 
-function ItemSelectStep({ items, onSelect, scrollType, lang }: ItemSelectStepProps) {
+function ItemSelectStep({ items, onSelect, lang }: ItemSelectStepProps) {
   if (items.length === 0) {
     return (
       <div className="text-center text-gray-500 py-8">
         <Sparkles size={48} className="mx-auto mb-2 opacity-50" />
-        <p>
-          {lang === 'ru'
-            ? scrollType === 'enchantWeapon'
-              ? 'Нет оружия для энчанта'
-              : 'Нет брони для энчанта'
-            : scrollType === 'enchantWeapon'
-              ? 'No weapons to enchant'
-              : 'No armor to enchant'}
-        </p>
+        <p>{lang === 'ru' ? 'Нет предметов для заточки' : 'No items to enchant'}</p>
       </div>
     );
   }
@@ -240,10 +250,10 @@ function ItemSelectStep({ items, onSelect, scrollType, lang }: ItemSelectStepPro
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-400">
-        {lang === 'ru' ? 'Выберите предмет для энчанта:' : 'Select an item to enchant:'}
+        {lang === 'ru' ? 'Выберите предмет для заточки:' : 'Select an item to enchant:'}
       </p>
 
-      <div className="space-y-2">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         {items.map(item => (
           <button
             key={item.id}
@@ -277,14 +287,15 @@ function ItemSelectStep({ items, onSelect, scrollType, lang }: ItemSelectStepPro
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 2: ENCHANT SCREEN
+// STEP 2: ENCHANT SCREEN v1.2
 // ═══════════════════════════════════════════════════════════
 
 interface EnchantStepProps {
   item: InventoryItem;
   useProtection: boolean;
   setUseProtection: (v: boolean) => void;
-  protectionScrolls: number;
+  enchantCharges: number;
+  protectionCharges: number;
   gold: number;
   enchantDust: number;
   onEnchant: () => void;
@@ -297,7 +308,8 @@ function EnchantStep({
   item,
   useProtection,
   setUseProtection,
-  protectionScrolls,
+  enchantCharges,
+  protectionCharges,
   gold,
   enchantDust,
   onEnchant,
@@ -310,7 +322,7 @@ function EnchantStep({
   const isSafe = isSafeEnchant(item.enchantLevel);
   const currentMult = getEnchantMultiplier(item.enchantLevel);
   const nextMult = getEnchantMultiplier(item.enchantLevel + 1);
-  const canAfford = gold >= cost.gold && enchantDust >= cost.dust;
+  const canAfford = gold >= cost.gold && enchantDust >= cost.dust && enchantCharges >= 1;
   const atMaxLevel = item.enchantLevel >= MAX_ENCHANT_LEVEL;
 
   // Current and next stats
@@ -342,7 +354,7 @@ function EnchantStep({
       {atMaxLevel ? (
         <div className="bg-amber-500/20 border border-amber-500/30 rounded-lg p-3 text-center">
           <p className="text-amber-400">
-            {lang === 'ru' ? 'Максимальный уровень энчанта!' : 'Maximum enchant level!'}
+            {lang === 'ru' ? 'Максимальный уровень!' : 'Maximum level!'}
           </p>
         </div>
       ) : (
@@ -391,7 +403,7 @@ function EnchantStep({
                   <AlertTriangle className="text-red-400" size={20} />
                 )}
                 <span className={isSafe ? 'text-green-400' : 'text-red-400'}>
-                  {lang === 'ru' ? 'Шанс успеха:' : 'Success chance:'}
+                  {lang === 'ru' ? 'Шанс:' : 'Chance:'}
                 </span>
               </div>
               <span className={`font-bold text-lg ${isSafe ? 'text-green-400' : 'text-white'}`}>
@@ -400,12 +412,12 @@ function EnchantStep({
             </div>
             {isSafe && (
               <p className="text-xs text-green-400/70 mt-1">
-                {lang === 'ru' ? 'Безопасный энчант (не ломается)' : 'Safe enchant (won\'t break)'}
+                {lang === 'ru' ? 'Безопасная заточка' : 'Safe enchant'}
               </p>
             )}
             {!isSafe && !useProtection && (
               <p className="text-xs text-red-400/70 mt-1">
-                {lang === 'ru' ? '⚠️ При провале предмет будет уничтожен!' : '⚠️ Item will be destroyed on failure!'}
+                {lang === 'ru' ? '⚠️ При провале предмет сломается!' : '⚠️ Item will break on failure!'}
               </p>
             )}
           </div>
@@ -418,10 +430,10 @@ function EnchantStep({
                   <Shield className="text-purple-400" size={20} />
                   <div>
                     <div className="text-purple-400 font-medium">
-                      {lang === 'ru' ? 'Свиток защиты' : 'Protection Scroll'}
+                      {lang === 'ru' ? 'Защита' : 'Protection'} 🛡️
                     </div>
                     <div className="text-xs text-gray-400">
-                      {lang === 'ru' ? `Есть: ${protectionScrolls}` : `Owned: ${protectionScrolls}`}
+                      {lang === 'ru' ? `Есть: ${protectionCharges}` : `Owned: ${protectionCharges}`}
                     </div>
                   </div>
                 </div>
@@ -429,24 +441,27 @@ function EnchantStep({
                   type="checkbox"
                   checked={useProtection}
                   onChange={(e) => setUseProtection(e.target.checked)}
-                  disabled={protectionScrolls === 0}
+                  disabled={protectionCharges === 0}
                   className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-500 focus:ring-purple-500"
                 />
               </label>
               {useProtection && (
                 <p className="text-xs text-purple-400/70 mt-2">
-                  {lang === 'ru' ? 'При провале: -1 уровень вместо уничтожения' : 'On fail: -1 level instead of destruction'}
+                  {lang === 'ru' ? 'При провале: -1 уровень, не ломается' : 'On fail: -1 level, no break'}
                 </p>
               )}
             </div>
           )}
 
-          {/* Cost */}
+          {/* Cost v1.2 */}
           <div className="bg-black/30 rounded-lg p-3">
             <div className="text-xs text-gray-400 mb-2">
               {lang === 'ru' ? 'Стоимость:' : 'Cost:'}
             </div>
             <div className="flex gap-4">
+              <span className={enchantCharges >= 1 ? 'text-yellow-300' : 'text-red-400'}>
+                ⚡ 1
+              </span>
               <span className={gold >= cost.gold ? 'text-amber-300' : 'text-red-400'}>
                 🪙 {cost.gold}
               </span>
@@ -467,7 +482,7 @@ function EnchantStep({
             }`}
           >
             <Zap size={20} />
-            {loading ? '...' : lang === 'ru' ? 'Энчантить!' : 'Enchant!'}
+            {loading ? '...' : lang === 'ru' ? 'Заточить!' : 'Enchant!'}
           </button>
         </>
       )}
@@ -476,7 +491,7 @@ function EnchantStep({
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 3: RESULT
+// STEP 3: RESULT v1.2
 // ═══════════════════════════════════════════════════════════
 
 interface ResultStepProps {
@@ -502,20 +517,27 @@ function ResultStep({ result, onContinue, onClose, lang }: ResultStepProps) {
             </div>
           </div>
         </>
-      ) : result.itemDestroyed ? (
+      ) : result.itemBroken ? (
+        // v1.2: Item BROKEN (not destroyed)
         <>
-          <div className="text-6xl">💔</div>
+          <div className="text-6xl animate-pulse">💔</div>
           <div className="text-2xl font-bold text-red-400">
-            {lang === 'ru' ? 'Провал!' : 'Failed!'}
+            {lang === 'ru' ? 'Сломано!' : 'Broken!'}
           </div>
           <div className="text-lg">
             <span className="text-3xl opacity-50">{result.itemIcon}</span>
             <div className="text-red-400 mt-2">
-              {lang === 'ru' ? 'Предмет уничтожен' : 'Item destroyed'}
+              {result.itemName}
+            </div>
+            <div className="text-xs text-gray-400 mt-2 bg-red-900/30 p-2 rounded">
+              {lang === 'ru'
+                ? '⏳ Восстановите за 💎 в Кузнице или предмет удалится через 8 часов'
+                : '⏳ Restore for 💎 in Forge or item will be deleted in 8 hours'}
             </div>
           </div>
         </>
       ) : (
+        // Protected fail
         <>
           <div className="text-6xl">😓</div>
           <div className="text-2xl font-bold text-yellow-400">
@@ -534,7 +556,7 @@ function ResultStep({ result, onContinue, onClose, lang }: ResultStepProps) {
       )}
 
       <div className="flex gap-3 mt-6">
-        {!result.itemDestroyed && (
+        {!result.itemBroken && (
           <button
             onClick={onContinue}
             className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold"
@@ -544,7 +566,7 @@ function ResultStep({ result, onContinue, onClose, lang }: ResultStepProps) {
         )}
         <button
           onClick={onClose}
-          className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold"
+          className={`${result.itemBroken ? 'w-full' : 'flex-1'} py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold`}
         >
           {lang === 'ru' ? 'Закрыть' : 'Close'}
         </button>

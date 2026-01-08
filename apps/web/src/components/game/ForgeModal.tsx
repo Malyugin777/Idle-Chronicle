@@ -1,28 +1,24 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Hammer, Scroll, Flame, Package, Check, AlertTriangle } from 'lucide-react';
+import { X, Hammer, Flame, Package, Check, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
   InventoryItem,
-  Materials,
-  Scrolls,
   Rarity,
-  ScrollType,
+  PlayerResources,
   previewSalvage,
-  canCraftScroll,
-  getScrollCraftCost,
   getFusionRequirements,
   getItemsForFusion,
   canFuse,
   getMaxFusions,
+  getRestoreCost,
+  getBrokenTimeRemaining,
+  formatBrokenTimer,
   RARITY_COLORS,
   RARITY_BG_COLORS,
   RARITY_NAMES,
-  MATERIAL_NAMES,
-  SCROLL_NAMES,
-  SCROLL_RECIPES,
 } from '@/lib/craftingSystem';
 
 // ═══════════════════════════════════════════════════════════
@@ -36,15 +32,14 @@ interface ForgeModalProps {
 
 interface ForgeState {
   inventory: InventoryItem[];
-  materials: Materials;
-  scrolls: Scrolls;
-  gold: number;
+  brokenItems: InventoryItem[];
+  resources: PlayerResources;
 }
 
-type ForgeTab = 'salvage' | 'craft' | 'fusion';
+type ForgeTab = 'salvage' | 'broken' | 'fusion';
 
 // ═══════════════════════════════════════════════════════════
-// FORGE MODAL
+// FORGE MODAL v1.2
 // ═══════════════════════════════════════════════════════════
 
 export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
@@ -52,9 +47,8 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   const [activeTab, setActiveTab] = useState<ForgeTab>('salvage');
   const [forgeState, setForgeState] = useState<ForgeState>({
     inventory: [],
-    materials: { ore: 0, leather: 0, coal: 0, enchantDust: 0 },
-    scrolls: { enchantWeapon: 0, enchantArmor: 0, protection: 0 },
-    gold: 0,
+    brokenItems: [],
+    resources: { enchantDust: 0, enchantCharges: 0, protectionCharges: 0, premiumCrystals: 0, gold: 0 },
   });
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +58,9 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   // Fusion state
   const [selectedFusionRarity, setSelectedFusionRarity] = useState<Rarity>('common');
 
+  // Timer update for broken items
+  const [, setTimerTick] = useState(0);
+
   // ─────────────────────────────────────────────────────────
   // DATA LOADING
   // ─────────────────────────────────────────────────────────
@@ -72,16 +69,10 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
     if (!isOpen) return;
 
     const socket = getSocket();
-
-    // Request forge data
     socket.emit('forge:get');
 
     const handleForgeData = (data: ForgeState) => {
       setForgeState(data);
-    };
-
-    const handleForgeUpdate = (data: Partial<ForgeState>) => {
-      setForgeState(prev => ({ ...prev, ...data }));
       setLoading(false);
     };
 
@@ -91,15 +82,20 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
     };
 
     socket.on('forge:data', handleForgeData);
-    socket.on('forge:update', handleForgeUpdate);
     socket.on('forge:error', handleForgeError);
 
     return () => {
       socket.off('forge:data', handleForgeData);
-      socket.off('forge:update', handleForgeUpdate);
       socket.off('forge:error', handleForgeError);
     };
   }, [isOpen]);
+
+  // Timer update every second for broken items
+  useEffect(() => {
+    if (!isOpen || forgeState.brokenItems.length === 0) return;
+    const interval = setInterval(() => setTimerTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, forgeState.brokenItems.length]);
 
   // ─────────────────────────────────────────────────────────
   // SALVAGE HANDLERS
@@ -127,29 +123,33 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
   const handleSalvage = useCallback(() => {
     if (selectedItems.size === 0 || loading) return;
-
     setLoading(true);
     const socket = getSocket();
     socket.emit('forge:salvage', { itemIds: Array.from(selectedItems) });
     setSelectedItems(new Set());
   }, [selectedItems, loading]);
 
-  // Preview salvage output
+  // Preview salvage output (v1.2: only dust)
   const selectedItemsList = forgeState.inventory.filter(item => selectedItems.has(item.id));
   const salvagePreview = previewSalvage(selectedItemsList);
 
   // ─────────────────────────────────────────────────────────
-  // CRAFT SCROLL HANDLERS
+  // BROKEN ITEM HANDLERS
   // ─────────────────────────────────────────────────────────
 
-  const handleCraftScroll = useCallback((scrollType: ScrollType, quantity: number = 1) => {
+  const handleRestore = useCallback((itemId: string) => {
     if (loading) return;
-    if (!canCraftScroll(scrollType, forgeState.materials, forgeState.gold, quantity)) return;
-
     setLoading(true);
     const socket = getSocket();
-    socket.emit('forge:craftScroll', { scrollType, quantity });
-  }, [forgeState.materials, forgeState.gold, loading]);
+    socket.emit('forge:restore', { itemId });
+  }, [loading]);
+
+  const handleAbandon = useCallback((itemId: string) => {
+    if (loading) return;
+    setLoading(true);
+    const socket = getSocket();
+    socket.emit('forge:abandon', { itemId });
+  }, [loading]);
 
   // ─────────────────────────────────────────────────────────
   // FUSION HANDLERS
@@ -158,7 +158,6 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   const handleFusion = useCallback(() => {
     if (loading) return;
     if (!canFuse(forgeState.inventory, selectedFusionRarity)) return;
-
     setLoading(true);
     const socket = getSocket();
     socket.emit('forge:fusion', { rarity: selectedFusionRarity });
@@ -170,9 +169,14 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
   if (!isOpen) return null;
 
-  const tabs: { id: ForgeTab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: ForgeTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'salvage', label: lang === 'ru' ? 'Разбор' : 'Salvage', icon: <Hammer size={16} /> },
-    { id: 'craft', label: lang === 'ru' ? 'Крафт' : 'Craft', icon: <Scroll size={16} /> },
+    {
+      id: 'broken',
+      label: lang === 'ru' ? 'Сломано' : 'Broken',
+      icon: <AlertTriangle size={16} />,
+      badge: forgeState.brokenItems.length || undefined,
+    },
     { id: 'fusion', label: lang === 'ru' ? 'Слияние' : 'Fusion', icon: <Flame size={16} /> },
   ];
 
@@ -192,27 +196,27 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
           </button>
         </div>
 
-        {/* Materials Bar */}
+        {/* Resources Bar v1.2 */}
         <div className="px-4 py-2 bg-black/30 flex flex-wrap gap-3 text-xs">
           <span className="flex items-center gap-1">
-            <span>🪨</span>
-            <span className="text-gray-300">{forgeState.materials.ore}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span>🧶</span>
-            <span className="text-gray-300">{forgeState.materials.leather}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span>�ite</span>
-            <span className="text-gray-300">{forgeState.materials.coal}</span>
-          </span>
-          <span className="flex items-center gap-1">
             <span>✨</span>
-            <span className="text-cyan-300">{forgeState.materials.enchantDust}</span>
+            <span className="text-cyan-300">{forgeState.resources.enchantDust}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>⚡</span>
+            <span className="text-yellow-300">{forgeState.resources.enchantCharges}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>🛡️</span>
+            <span className="text-blue-300">{forgeState.resources.protectionCharges}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>💎</span>
+            <span className="text-purple-300">{forgeState.resources.premiumCrystals}</span>
           </span>
           <span className="flex items-center gap-1 ml-auto">
             <span>🪙</span>
-            <span className="text-amber-300">{forgeState.gold.toLocaleString()}</span>
+            <span className="text-amber-300">{forgeState.resources.gold.toLocaleString()}</span>
           </span>
         </div>
 
@@ -222,7 +226,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-2 px-3 flex items-center justify-center gap-1 text-sm transition-colors ${
+              className={`flex-1 py-2 px-3 flex items-center justify-center gap-1 text-sm transition-colors relative ${
                 activeTab === tab.id
                   ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-400'
                   : 'text-gray-400 hover:text-gray-300'
@@ -230,6 +234,11 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             >
               {tab.icon}
               {tab.label}
+              {tab.badge && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -250,12 +259,12 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             />
           )}
 
-          {activeTab === 'craft' && (
-            <CraftTab
-              materials={forgeState.materials}
-              scrolls={forgeState.scrolls}
-              gold={forgeState.gold}
-              onCraft={handleCraftScroll}
+          {activeTab === 'broken' && (
+            <BrokenTab
+              brokenItems={forgeState.brokenItems}
+              crystals={forgeState.resources.premiumCrystals}
+              onRestore={handleRestore}
+              onAbandon={handleAbandon}
               loading={loading}
               lang={lang}
             />
@@ -278,7 +287,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SALVAGE TAB
+// SALVAGE TAB v1.2
 // ═══════════════════════════════════════════════════════════
 
 interface SalvageTabProps {
@@ -287,7 +296,7 @@ interface SalvageTabProps {
   toggleItem: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
-  preview: { materials: Materials; itemCount: number };
+  preview: { dustAmount: number; itemCount: number };
   onSalvage: () => void;
   loading: boolean;
   lang: Language;
@@ -361,25 +370,15 @@ function SalvageTab({
         ))}
       </div>
 
-      {/* Preview */}
+      {/* Preview v1.2: only dust */}
       {selectedItems.size > 0 && (
         <div className="bg-black/30 rounded-lg p-3">
           <p className="text-xs text-gray-400 mb-2">
             {lang === 'ru' ? 'Получите:' : 'You will receive:'}
           </p>
-          <div className="flex flex-wrap gap-3 text-sm">
-            {preview.materials.ore > 0 && (
-              <span className="text-gray-300">🪨 {preview.materials.ore}</span>
-            )}
-            {preview.materials.leather > 0 && (
-              <span className="text-gray-300">🧶 {preview.materials.leather}</span>
-            )}
-            {preview.materials.coal > 0 && (
-              <span className="text-gray-300">⬛ {preview.materials.coal}</span>
-            )}
-            {preview.materials.enchantDust > 0 && (
-              <span className="text-cyan-300">✨ {preview.materials.enchantDust}</span>
-            )}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-cyan-300">✨ {preview.dustAmount}</span>
+            <span className="text-gray-500">Enchant Dust</span>
           </div>
         </div>
       )}
@@ -402,67 +401,100 @@ function SalvageTab({
 }
 
 // ═══════════════════════════════════════════════════════════
-// CRAFT TAB
+// BROKEN TAB v1.2 (NEW)
 // ═══════════════════════════════════════════════════════════
 
-interface CraftTabProps {
-  materials: Materials;
-  scrolls: Scrolls;
-  gold: number;
-  onCraft: (type: ScrollType, qty: number) => void;
+interface BrokenTabProps {
+  brokenItems: InventoryItem[];
+  crystals: number;
+  onRestore: (itemId: string) => void;
+  onAbandon: (itemId: string) => void;
   loading: boolean;
   lang: Language;
 }
 
-function CraftTab({ materials, scrolls, gold, onCraft, loading, lang }: CraftTabProps) {
-  const scrollTypes: ScrollType[] = ['enchantWeapon', 'enchantArmor', 'protection'];
+function BrokenTab({
+  brokenItems,
+  crystals,
+  onRestore,
+  onAbandon,
+  loading,
+  lang,
+}: BrokenTabProps) {
+  if (brokenItems.length === 0) {
+    return (
+      <div className="text-center text-gray-500 py-8">
+        <Check size={48} className="mx-auto mb-2 opacity-50 text-green-500" />
+        <p>{lang === 'ru' ? 'Нет сломанных предметов' : 'No broken items'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-gray-400 mb-2">
-        {lang === 'ru' ? 'Ваши свитки:' : 'Your scrolls:'}
+      <p className="text-xs text-gray-400">
+        {lang === 'ru'
+          ? 'Восстановите за 💎 или предмет будет удалён'
+          : 'Restore for 💎 or item will be deleted'}
       </p>
-      <div className="flex gap-4 mb-4 text-sm">
-        <span>📜⚔️ {scrolls.enchantWeapon}</span>
-        <span>📜🛡️ {scrolls.enchantArmor}</span>
-        <span>📜💎 {scrolls.protection}</span>
-      </div>
 
-      {scrollTypes.map(type => {
-        const cost = getScrollCraftCost(type);
-        const canCraft = canCraftScroll(type, materials, gold);
-        const name = SCROLL_NAMES[type];
+      {brokenItems.map(item => {
+        const timeRemaining = getBrokenTimeRemaining(item.brokenUntil || null);
+        const restoreCost = getRestoreCost(item.rarity, item.enchantOnBreak || 0);
+        const canAfford = crystals >= restoreCost;
 
         return (
           <div
-            key={type}
-            className={`p-3 rounded-lg border ${
-              canCraft ? 'bg-gray-800/50 border-gray-600' : 'bg-gray-900/50 border-gray-700 opacity-60'
-            }`}
+            key={item.id}
+            className="bg-red-900/20 border border-red-500/30 rounded-lg p-3"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium text-white flex items-center gap-2">
-                  <span>{name.icon}</span>
-                  <span>{lang === 'ru' ? name.ru : name.en}</span>
-                </div>
-                <div className="text-xs text-gray-400 mt-1 flex gap-2">
-                  <span>✨ {cost.dust}</span>
-                  <span>🪙 {cost.gold}</span>
-                  {cost.coal > 0 && <span>⬛ {cost.coal}</span>}
+            <div className="flex items-center gap-3">
+              {/* Icon with crack overlay */}
+              <div className={`relative w-12 h-12 rounded-lg ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-xl opacity-60`}>
+                <span>{item.icon}</span>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-red-500 text-2xl">💔</span>
                 </div>
               </div>
-              <button
-                onClick={() => onCraft(type, 1)}
-                disabled={!canCraft || loading}
-                className={`px-4 py-2 rounded-lg text-sm font-bold ${
-                  canCraft && !loading
-                    ? 'bg-amber-500 hover:bg-amber-400 text-black'
-                    : 'bg-gray-700 text-gray-500'
-                }`}
-              >
-                {loading ? '...' : lang === 'ru' ? 'Крафт' : 'Craft'}
-              </button>
+
+              {/* Info */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium ${RARITY_COLORS[item.rarity]}`}>
+                    {item.name}
+                  </span>
+                  {(item.enchantOnBreak || 0) > 0 && (
+                    <span className="text-amber-400 text-sm">+{item.enchantOnBreak}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
+                  <span className="text-red-400">⏳ {formatBrokenTimer(timeRemaining)}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => onRestore(item.id)}
+                  disabled={!canAfford || loading}
+                  className={`px-3 py-1 rounded text-xs font-bold flex items-center gap-1 ${
+                    canAfford && !loading
+                      ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                      : 'bg-gray-700 text-gray-500'
+                  }`}
+                >
+                  <RefreshCw size={12} />
+                  💎{restoreCost}
+                </button>
+                <button
+                  onClick={() => onAbandon(item.id)}
+                  disabled={loading}
+                  className="px-3 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center gap-1"
+                >
+                  <Trash2 size={12} />
+                  {lang === 'ru' ? 'Удалить' : 'Delete'}
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -539,7 +571,6 @@ function FusionTab({
       {(() => {
         const req = getFusionRequirements(selectedRarity);
         const items = getItemsForFusion(inventory, selectedRarity);
-        const canDoFusion = canFuse(inventory, selectedRarity);
 
         if (!req) return null;
 
@@ -564,12 +595,10 @@ function FusionTab({
             {/* Items preview */}
             {items.length > 0 && (
               <div className="mt-4 grid grid-cols-5 gap-1">
-                {items.slice(0, req.count).map((item, i) => (
+                {items.slice(0, req.count).map((item) => (
                   <div
                     key={item.id}
-                    className={`w-10 h-10 rounded border flex items-center justify-center text-lg ${
-                      i < items.length ? RARITY_BG_COLORS[item.rarity] : 'bg-gray-800 border-gray-700'
-                    }`}
+                    className={`w-10 h-10 rounded border flex items-center justify-center text-lg ${RARITY_BG_COLORS[item.rarity]}`}
                   >
                     {item.icon}
                   </div>
