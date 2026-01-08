@@ -29,6 +29,9 @@ interface Item {
   icon: string;
   stats: ItemStats;
   setId?: string | null;
+  enchantLevel?: number;
+  isBroken?: boolean;
+  brokenUntil?: number | null;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -355,7 +358,7 @@ function Slot({ slotType, item, size = 'normal', onClick }: SlotProps) {
       <button
         onClick={onClick}
         className={`${sizeClasses} bg-black/30 rounded-lg border border-gray-700/50 flex items-center justify-center
-          hover:border-gray-500/70 active:scale-95 transition-all`}
+          hover:border-gray-500/70 active:scale-95 transition-all relative`}
       >
         {SLOT_ICONS[slotType]}
       </button>
@@ -363,14 +366,29 @@ function Slot({ slotType, item, size = 'normal', onClick }: SlotProps) {
   }
 
   const style = RARITY_STYLES[item.rarity];
+  const isBroken = item.isBroken;
+  const enchantLevel = item.enchantLevel || 0;
 
   return (
     <button
       onClick={onClick}
       className={`${sizeClasses} bg-black/30 rounded-lg border ${style.border} ${style.glow}
-        flex items-center justify-center hover:brightness-125 active:scale-95 transition-all`}
+        flex items-center justify-center hover:brightness-125 active:scale-95 transition-all relative
+        ${isBroken ? 'opacity-50 grayscale' : ''}`}
     >
       <span className={iconSize}>{item.icon}</span>
+      {/* Enchant level badge */}
+      {enchantLevel > 0 && !isBroken && (
+        <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[9px] font-bold px-1 rounded">
+          +{enchantLevel}
+        </span>
+      )}
+      {/* Broken overlay */}
+      {isBroken && (
+        <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 rounded-lg">
+          <span className="text-red-400 text-lg">💔</span>
+        </div>
+      )}
     </button>
   );
 }
@@ -991,14 +1009,29 @@ export default function CharacterTab() {
           {/* Equipment items */}
           {heroState.inventory.map((item) => {
             const style = RARITY_STYLES[item.rarity];
+            const isBroken = item.isBroken;
+            const enchantLevel = item.enchantLevel || 0;
             return (
               <button
                 key={item.id}
                 onClick={() => setSelectedItem({ item, isEquipped: false })}
                 className={`aspect-square bg-black/30 rounded-lg border ${style.border} ${style.glow}
-                  flex items-center justify-center hover:brightness-125 active:scale-95 transition-all`}
+                  flex items-center justify-center hover:brightness-125 active:scale-95 transition-all relative
+                  ${isBroken ? 'opacity-50 grayscale' : ''}`}
               >
                 <span className="text-xl">{item.icon}</span>
+                {/* Enchant level badge */}
+                {enchantLevel > 0 && !isBroken && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[8px] font-bold px-1 rounded">
+                    +{enchantLevel}
+                  </span>
+                )}
+                {/* Broken overlay */}
+                {isBroken && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 rounded-lg">
+                    <span className="text-red-400 text-sm">💔</span>
+                  </div>
+                )}
               </button>
             );
           })}
