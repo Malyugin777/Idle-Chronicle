@@ -210,6 +210,8 @@ async function loadBossState(prisma) {
 
 async function saveBossState(prisma) {
   try {
+    console.log(`[Boss] Saving state: HP=${bossState.currentHp}/${bossState.maxHp}, index=${currentBossIndex}`);
+
     // Serialize leaderboard with explicit userId field (avoid collision with damage)
     const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([userId, data]) => ({
       userId,
@@ -668,6 +670,7 @@ const DEFAULT_BOSSES = new Proxy([], {
 let currentBossIndex = 0;
 
 async function respawnBoss(prisma, forceNext = true) {
+  console.log(`[Boss] respawnBoss called with forceNext=${forceNext}, currentIndex=${currentBossIndex}`);
   try {
     // Try to get bosses from DB
     const bosses = await prisma.boss.findMany({
