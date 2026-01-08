@@ -3467,7 +3467,14 @@ app.prepare().then(async () => {
 
       // Rate limiting based on tapsPerSecond
       const timeSinceLastTap = now - player.lastTapTime;
-      const maxTapsAllowed = Math.floor((timeSinceLastTap / 1000) * player.tapsPerSecond) + 1;
+
+      // FIX: Apply haste buff to tap speed (+30% taps allowed)
+      player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > now);
+      const hasteBuff = player.activeBuffs.find(b => b.type === 'haste');
+      const hasteMultiplier = hasteBuff ? (1 + hasteBuff.value) : 1.0;  // 1.3x with haste
+
+      const effectiveTapsPerSecond = player.tapsPerSecond * hasteMultiplier;
+      const maxTapsAllowed = Math.floor((timeSinceLastTap / 1000) * effectiveTapsPerSecond) + 1;
 
       if (timeSinceLastTap < 100) {
         // Too fast, limit taps
@@ -6227,13 +6234,32 @@ app.prepare().then(async () => {
         let totalAutoDamage = 0;
         let crits = 0;
         let etherUsed = 0;
-        const critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
+
+        // FIX: Apply buffs to auto-attack (was missing!)
+        const now = Date.now();
+        player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > now);
+
+        let damageBonus = 1.0;
+        let critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
+
+        let hasteBonus = 0;
+        for (const buff of player.activeBuffs) {
+          if (buff.type === 'acumen') damageBonus += buff.value;  // +50% damage
+          if (buff.type === 'luck') critChance = Math.min(0.75, critChance + buff.value);  // +10% crit
+          if (buff.type === 'haste') hasteBonus = buff.value;  // +30% attack speed
+        }
 
         // Number of auto attacks per second (limited by stamina)
-        const maxHits = Math.min(AUTO_ATTACKS_PER_SECOND, Math.floor(player.stamina / AUTO_STAMINA_COST));
+        // FIX: Haste gives chance for bonus attack
+        let baseHits = AUTO_ATTACKS_PER_SECOND;
+        if (hasteBonus > 0 && Math.random() < hasteBonus) {
+          baseHits += 1;  // Haste proc: extra attack
+        }
+        const maxHits = Math.min(baseHits, Math.floor(player.stamina / AUTO_STAMINA_COST));
 
         for (let i = 0; i < maxHits; i++) {
           let dmg = baseDamage * (0.8 + Math.random() * 0.2);
+          dmg *= damageBonus;  // FIX: Apply acumen buff
           const rageMultiplier = RAGE_PHASES[bossState.ragePhase]?.multiplier || 1.0;
           dmg *= rageMultiplier;
 
