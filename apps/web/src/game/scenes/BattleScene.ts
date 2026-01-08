@@ -200,12 +200,14 @@ export class BattleScene extends Phaser.Scene {
         onComplete: () => glow.destroy(),
       });
 
-      // Sparkles around crit
+      // Sparkles around crit (diamond shapes)
       for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2;
         const spark = this.add.graphics();
         spark.fillStyle(0xffff00, 1);
-        spark.fillStar(0, 0, 4, 6, 3);
+        // Diamond shape
+        spark.fillTriangle(0, -6, 4, 0, 0, 6);
+        spark.fillTriangle(0, -6, -4, 0, 0, 6);
         spark.setPosition(x, y);
         spark.setRotation(angle);
 
@@ -459,11 +461,14 @@ export class BattleScene extends Phaser.Scene {
       });
     }
 
-    // Snowflakes
+    // Snowflakes (simple cross pattern)
     for (let i = 0; i < 10; i++) {
       const flake = this.add.graphics();
       flake.fillStyle(0xffffff, 0.8);
-      flake.fillStar(0, 0, 6, 8, 4);
+      // Cross pattern for snowflake
+      flake.fillRect(-1, -6, 2, 12);
+      flake.fillRect(-6, -1, 12, 2);
+      flake.fillCircle(0, 0, 3);
       flake.setPosition(
         targetX + Phaser.Math.Between(-60, 60),
         targetY + Phaser.Math.Between(-60, 60)
