@@ -108,8 +108,8 @@ const SKILLS_DATA: SkillInfo[] = [
     id: 'fireball',
     nameRu: 'Огненный шар',
     nameEn: 'Fireball',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '🔥',
     gradient: 'from-orange-700/70 to-red-900/90',
     glow: 'shadow-[0_0_12px_rgba(249,115,22,0.4)]',
@@ -121,27 +121,27 @@ const SKILLS_DATA: SkillInfo[] = [
     id: 'iceball',
     nameRu: 'Ледяная стрела',
     nameEn: 'Ice Arrow',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '❄️',
     gradient: 'from-cyan-700/70 to-blue-900/90',
     glow: 'shadow-[0_0_12px_rgba(34,211,238,0.4)]',
     manaCost: 100,
     cooldown: 10000,
-    unlockLevel: 3,
+    unlockLevel: 2,
   },
   {
     id: 'lightning',
     nameRu: 'Молния',
     nameEn: 'Lightning',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '⚡',
     gradient: 'from-yellow-600/70 to-amber-900/90',
     glow: 'shadow-[0_0_12px_rgba(250,204,21,0.4)]',
     manaCost: 100,
     cooldown: 10000,
-    unlockLevel: 5,
+    unlockLevel: 3,
   },
 ];
 
@@ -170,6 +170,10 @@ interface PlayerStats {
   scrollHaste?: number;
   scrollAcumen?: number;
   scrollLuck?: number;
+  // Skill levels (0 = locked, 1+ = level)
+  skillFireball?: number;
+  skillIceball?: number;
+  skillLightning?: number;
 }
 
 interface HeroState {
@@ -569,11 +573,19 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
 
 interface SkillsPopupProps {
   level: number;
+  skillLevels: { fireball: number; iceball: number; lightning: number };
   onClose: () => void;
   lang: Language;
 }
 
-function SkillsPopup({ level, onClose, lang }: SkillsPopupProps) {
+function SkillsPopup({ level, skillLevels, onClose, lang }: SkillsPopupProps) {
+  const getSkillLevel = (skillId: string): number => {
+    if (skillId === 'fireball') return skillLevels.fireball;
+    if (skillId === 'iceball') return skillLevels.iceball;
+    if (skillId === 'lightning') return skillLevels.lightning;
+    return 0;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -595,6 +607,7 @@ function SkillsPopup({ level, onClose, lang }: SkillsPopupProps) {
         <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
           {SKILLS_DATA.map((skill) => {
             const isLocked = level < skill.unlockLevel;
+            const skillLevel = getSkillLevel(skill.id);
 
             return (
               <div
@@ -604,8 +617,14 @@ function SkillsPopup({ level, onClose, lang }: SkillsPopupProps) {
               >
                 {!isLocked && <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />}
                 <div className="flex items-center gap-3 relative z-10">
-                  <div className={`w-14 h-14 rounded-xl bg-black/40 flex items-center justify-center border-2 ${isLocked ? 'border-gray-600/50' : 'border-white/20'}`}>
+                  <div className={`w-14 h-14 rounded-xl bg-black/40 flex items-center justify-center border-2 ${isLocked ? 'border-gray-600/50' : 'border-white/20'} relative`}>
                     <span className="text-3xl drop-shadow-lg">{skill.icon}</span>
+                    {/* Skill level badge */}
+                    {!isLocked && skillLevel > 0 && (
+                      <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-b from-blue-600 to-blue-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-white border border-blue-400/50 shadow-md">
+                        {skillLevel}
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -741,6 +760,23 @@ export default function CharacterTab() {
       }));
     };
 
+    // Handle level up (boss kill rewards)
+    const handleLevelUp = (data: { level: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
+      setHeroState(prev => {
+        if (!prev.baseStats) return prev;
+        return {
+          ...prev,
+          baseStats: {
+            ...prev.baseStats,
+            level: data.level,
+            skillFireball: data.skillFireball,
+            skillIceball: data.skillIceball,
+            skillLightning: data.skillLightning,
+          },
+        };
+      });
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
@@ -748,6 +784,7 @@ export default function CharacterTab() {
     socket.on('tap:result', handleTapResult);
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('player:state', handlePlayerState);
+    socket.on('level:up', handleLevelUp);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -758,6 +795,7 @@ export default function CharacterTab() {
       socket.off('tap:result', handleTapResult);
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('player:state', handlePlayerState);
+      socket.off('level:up', handleLevelUp);
     };
   }, []);
 
@@ -1076,6 +1114,11 @@ export default function CharacterTab() {
       {showSkillsPopup && (
         <SkillsPopup
           level={stats.level}
+          skillLevels={{
+            fireball: stats.skillFireball ?? 1,
+            iceball: stats.skillIceball ?? 0,
+            lightning: stats.skillLightning ?? 0,
+          }}
           onClose={() => setShowSkillsPopup(false)}
           lang={lang}
         />

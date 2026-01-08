@@ -52,6 +52,10 @@ interface PlayerState {
   level: number;
   crystals: number;
   photoUrl: string | null;
+  // Skill levels (0 = locked)
+  skillFireball: number;
+  skillIceball: number;
+  skillLightning: number;
 }
 
 interface MeditationData {
@@ -222,6 +226,9 @@ export default function PhaserGame() {
     level: 1,
     crystals: 0,
     photoUrl: null,
+    skillFireball: 1,
+    skillIceball: 0,
+    skillLightning: 0,
   });
 
   // Ether auto-use toggle (persisted in localStorage)
@@ -361,10 +368,16 @@ export default function PhaserGame() {
     sceneRef.current?.playSkillEffect(skill.id);
   }, [playerState.mana, bossState.hp]);
 
-  // Format helpers
+  // Format helpers - show 1 decimal for better precision (1.5M instead of 1M)
   const formatCompact = (num: number) => {
-    if (num >= 1000000) return Math.floor(num / 1000000) + 'M';
-    if (num >= 1000) return Math.floor(num / 1000) + 'K';
+    if (num >= 1000000) {
+      const m = num / 1000000;
+      return m % 1 === 0 ? m + 'M' : m.toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+      const k = num / 1000;
+      return k % 1 === 0 ? k + 'K' : k.toFixed(1) + 'K';
+    }
     return num.toString();
   };
 
@@ -571,9 +584,17 @@ export default function PhaserGame() {
         level: data.level ?? 1,
         crystals: data.ancientCoin ?? 0,
         photoUrl: data.photoUrl ?? null,
+        skillFireball: data.skillFireball ?? 1,
+        skillIceball: data.skillIceball ?? 0,
+        skillLightning: data.skillLightning ?? 0,
       });
       // Set auto-attack state from server
       setAutoAttack(data.autoAttack || false);
+      // FIX: Sync autoEther from server (don't rely only on localStorage)
+      // Server is the source of truth - update localStorage to match
+      const serverAutoEther = data.autoEther || false;
+      setAutoUseEther(serverAutoEther);
+      localStorage.setItem('ic_auto_ether', String(serverAutoEther));
       // Set active buffs from auth data
       if (data.activeBuffs && Array.isArray(data.activeBuffs)) {
         const now = Date.now();
@@ -612,6 +633,18 @@ export default function PhaserGame() {
       setPlayerState(p => ({ ...p, etherDust: data.etherDust }));
     });
 
+    // Level up (after boss kill)
+    socket.on('level:up', (data: { level: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
+      console.log('[Level] Level up!', data);
+      setPlayerState(p => ({
+        ...p,
+        level: data.level,
+        skillFireball: data.skillFireball,
+        skillIceball: data.skillIceball,
+        skillLightning: data.skillLightning,
+      }));
+    });
+
     // Ether crafted
     socket.on('ether:craft:success', (data: { ether: number; etherDust: number; gold: number }) => {
       setPlayerState(p => ({
@@ -625,6 +658,13 @@ export default function PhaserGame() {
     // Auto-attack toggle ack
     socket.on('autoAttack:toggle:ack', (data: { enabled: boolean }) => {
       setAutoAttack(data.enabled);
+    });
+
+    // Ether toggle ack - sync client state with server
+    socket.on('ether:toggle:ack', (data: { enabled: boolean; ether: number }) => {
+      setAutoUseEther(data.enabled);
+      localStorage.setItem('ic_auto_ether', String(data.enabled));
+      setPlayerState(p => ({ ...p, ether: data.ether }));
     });
 
     // Exhaustion
@@ -807,6 +847,11 @@ export default function PhaserGame() {
       socket.off('chest:buySlot:success');
       socket.off('chest:buySlot:error');
       socket.off('activity:status');
+      socket.off('autoAttack:toggle:ack');
+      socket.off('ether:toggle:ack');
+      socket.off('meditation:collected');
+      socket.off('ether:craft:success');
+      socket.off('level:up');
 
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -1162,7 +1207,21 @@ export default function PhaserGame() {
             const onCooldown = remaining > 0;
             // Check if real data loaded (maxHp > 1 means server sent boss:state)
             const dataLoaded = bossState.maxHp > 1;
-            const canUse = dataLoaded && !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
+
+            // Skill unlock requirements: fireball@1, iceball@2, lightning@3
+            const SKILL_UNLOCK_LEVELS: Record<string, number> = { fireball: 1, iceball: 2, lightning: 3 };
+            const requiredLevel = SKILL_UNLOCK_LEVELS[skill.id] || 1;
+            const isUnlocked = playerState.level >= requiredLevel;
+
+            // Get skill level
+            const skillLevelMap: Record<string, number> = {
+              fireball: playerState.skillFireball,
+              iceball: playerState.skillIceball,
+              lightning: playerState.skillLightning,
+            };
+            const skillLevel = skillLevelMap[skill.id] || 0;
+
+            const canUse = dataLoaded && isUnlocked && !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
 
             // Skill-specific gradient colors
             const skillGradient = skill.id === 'fireball'
@@ -1183,20 +1242,34 @@ export default function PhaserGame() {
                 disabled={!canUse}
                 className={`
                   relative w-14 h-14 rounded-lg ${skill.color}
-                  ${canUse
-                    ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
-                    : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
+                  ${!isUnlocked
+                    ? 'bg-gradient-to-b from-gray-900/80 to-black/90 opacity-40'
+                    : canUse
+                      ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
+                      : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
                   flex flex-col items-center justify-center
                   transition-all
                   ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
                 `}
               >
                 <span className="text-2xl drop-shadow-lg">{skill.icon}</span>
+                {/* Locked overlay */}
+                {!isUnlocked && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
+                    <span className="text-[10px] font-bold text-gray-400">Lv.{requiredLevel}</span>
+                  </div>
+                )}
+                {/* Skill level badge */}
+                {isUnlocked && skillLevel > 0 && (
+                  <div className="absolute -top-1 -right-1 bg-gradient-to-b from-blue-600 to-blue-800 px-1 py-0.5 rounded text-[8px] font-bold text-white border border-blue-400/50">
+                    {skillLevel}
+                  </div>
+                )}
                 {/* Shine effect when available */}
                 {canUse && !onCooldown && (
                   <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
                 )}
-                {onCooldown && (
+                {onCooldown && isUnlocked && (
                   <>
                     <div
                       className="absolute inset-0 bg-black/75 rounded-lg"

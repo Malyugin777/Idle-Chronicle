@@ -721,6 +721,9 @@ function calculateDamage(player, tapCount) {
   const baseDamage = player.pAtk * (1 + player.str * STAT_EFFECTS.str);
   let critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
 
+  // Level multiplier: +2% per level (1.02^(level-1))
+  const levelMultiplier = Math.pow(1.02, (player.level || 1) - 1);
+
   // Check active buffs
   const now = Date.now();
   player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > now);
@@ -747,6 +750,9 @@ function calculateDamage(player, tapCount) {
 
   for (let i = 0; i < tapCount; i++) {
     let dmg = baseDamage * (0.9 + Math.random() * 0.2);
+
+    // Apply level multiplier (+2% per level)
+    dmg *= levelMultiplier;
 
     // Apply ether (only for taps that had ether)
     if (i < etherUsed) {
@@ -867,9 +873,12 @@ async function respawnBoss(prisma, forceNext = true) {
         console.error('[Boss] Session create error:', e.message);
       }
 
+      // FIX: Use BOSS_TEMPLATES image for DB bosses (matched by index % templates.length)
+      const dbBossTemplate = BOSS_TEMPLATES[currentBossIndex % BOSS_TEMPLATES.length];
       bossState = {
         id: boss.id,
         name: boss.name,
+        nameRu: dbBossTemplate?.nameRu || boss.name, // Use template nameRu
         title: boss.title || 'World Boss',
         maxHp: Number(boss.baseHp),
         currentHp: Number(boss.baseHp),
@@ -877,11 +886,12 @@ async function respawnBoss(prisma, forceNext = true) {
         thornsDamage: boss.thornsDamage || 0,  // L2: обратка
         ragePhase: 0,
         sessionId: session?.id || null,
-        icon: boss.iconUrl || '👹',
+        icon: boss.iconUrl || dbBossTemplate?.icon || '👹',
+        image: dbBossTemplate?.image || null, // FIX: Set image from template
         bossIndex: currentBossIndex + 1,
         totalBosses: bosses.length,
       };
-      console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP, thorns: ${boss.thornsDamage || 0})`);
+      console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP, thorns: ${boss.thornsDamage || 0}), image: ${bossState.image}`);
     } else {
       // Use default bosses
       if (forceNext) {
@@ -1064,9 +1074,42 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       isTopDamage,
     });
 
-    // Update player stats in DB (adena, exp, totalDamage)
-    // bossesKilled increments for all eligible participants, not just final blow
+    // Update player stats in DB (adena, exp, totalDamage, level, skills)
+    // Level-up: +1 for ALL participants who dealt damage (max 90)
+    // Skill level-up: +1 for each skill used in this boss fight
     try {
+      // First fetch current user data for level/skill calculations
+      const currentUser = await prisma.user.findUnique({
+        where: { id: entry.odamage },
+        select: { level: true, skillFireball: true, skillIceball: true, skillLightning: true },
+      });
+
+      if (!currentUser) continue;
+
+      const MAX_LEVEL = 90;
+      const newLevel = Math.min(MAX_LEVEL, currentUser.level + 1);
+
+      // Get skills used by this player from sessionLeaderboard
+      const leaderboardEntry = sessionLeaderboard.get(entry.odamage);
+      const skillsUsed = leaderboardEntry?.skillsUsed || new Set();
+
+      // Calculate new skill levels
+      // Skills unlock: fireball@1, iceball@2, lightning@3
+      // If skill was used AND unlocked, +1 level
+      let newSkillFireball = currentUser.skillFireball;
+      let newSkillIceball = currentUser.skillIceball;
+      let newSkillLightning = currentUser.skillLightning;
+
+      // Unlock skills based on NEW level
+      if (newLevel >= 1 && newSkillFireball === 0) newSkillFireball = 1;
+      if (newLevel >= 2 && newSkillIceball === 0) newSkillIceball = 1;
+      if (newLevel >= 3 && newSkillLightning === 0) newSkillLightning = 1;
+
+      // +1 skill level for each skill used (only if unlocked)
+      if (skillsUsed.has('fireball') && newSkillFireball > 0) newSkillFireball++;
+      if (skillsUsed.has('iceball') && newSkillIceball > 0) newSkillIceball++;
+      if (skillsUsed.has('lightning') && newSkillLightning > 0) newSkillLightning++;
+
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
@@ -1074,8 +1117,21 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           exp: { increment: BigInt(expReward) },
           totalDamage: { increment: BigInt(entry.damage) },
           bossesKilled: { increment: entry.isEligible ? 1 : 0 },
+          // Level-up system
+          level: newLevel,
+          skillFireball: newSkillFireball,
+          skillIceball: newSkillIceball,
+          skillLightning: newSkillLightning,
         },
       });
+
+      // Log level-up
+      if (newLevel > currentUser.level) {
+        console.log(`[Level] ${entry.visitorName} leveled up: ${currentUser.level} → ${newLevel}`);
+      }
+      if (skillsUsed.size > 0) {
+        console.log(`[Skills] ${entry.visitorName} skills used: ${[...skillsUsed].join(', ')}`);
+      }
 
       // Create PendingReward for eligible players (TZ Этап 2)
       if (entry.isEligible) {
@@ -1118,6 +1174,21 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           p.activityTime = 0;
           p.isEligible = false;
           p.activityBossSession = null;
+          // Update level and skills in memory
+          p.level = newLevel;
+          p.skillFireball = newSkillFireball;
+          p.skillIceball = newSkillIceball;
+          p.skillLightning = newSkillLightning;
+          // Emit level:up to this player's socket
+          const playerSocket = io.sockets.sockets.get(sid);
+          if (playerSocket) {
+            playerSocket.emit('level:up', {
+              level: newLevel,
+              skillFireball: newSkillFireball,
+              skillIceball: newSkillIceball,
+              skillLightning: newSkillLightning,
+            });
+          }
           break;
         }
       }
@@ -2591,8 +2662,7 @@ app.prepare().then(async () => {
     onlineUsers.set(socket.id, player);
 
     // Send initial state (with all fields including image)
-    // Берём defense/image из шаблона по currentBossIndex
-    const initTemplate = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
+    // FIX: Use bossState.image directly (set correctly in respawnBoss)
     socket.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
@@ -2600,11 +2670,11 @@ app.prepare().then(async () => {
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
-      defense: initTemplate.defense, // Из шаблона
+      defense: bossState.defense, // From bossState (set in respawnBoss)
       ragePhase: bossState.ragePhase,
       playersOnline: onlineUsers.size,
       icon: bossState.icon,
-      image: initTemplate.image || bossState.image, // Из шаблона
+      image: bossState.image, // FIX: Use bossState.image directly
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       // Respawn timer info
@@ -3121,11 +3191,13 @@ app.prepare().then(async () => {
         player.critChance = derivedStats.critChance;
         // L2 Stamina (from StatsService - formula: max(100, floor(maxHealth * 10)))
         player.maxStamina = derivedStats.maxStamina;
-        player.stamina = Math.min(user.stamina || player.maxStamina, player.maxStamina);
+        // FIX: Use ?? instead of || to preserve stamina=0 (falsy bug)
+        player.stamina = Math.min(user.stamina ?? player.maxStamina, player.maxStamina);
         player.exhaustedUntil = user.exhaustedUntil ? user.exhaustedUntil.getTime() : null;
         // Mana (from StatsService + DB)
         player.maxMana = derivedStats.maxMana;
-        player.mana = Math.min(user.mana || player.maxMana, player.maxMana);
+        // FIX: Use ?? instead of || to preserve mana=0
+        player.mana = Math.min(user.mana ?? player.maxMana, player.maxMana);
         player.manaRegen = user.manaRegen;
         player.tapsPerSecond = user.tapsPerSecond;
         player.autoAttackSpeed = user.autoAttackSpeed;
@@ -3140,6 +3212,12 @@ app.prepare().then(async () => {
         player.potionHaste = player.potionHaste ?? user.potionHaste;
         player.potionAcumen = player.potionAcumen ?? user.potionAcumen;
         player.potionLuck = player.potionLuck ?? user.potionLuck;
+
+        // Level and Skill levels
+        player.level = user.level || 1;
+        player.skillFireball = user.skillFireball ?? 1;
+        player.skillIceball = user.skillIceball ?? 0;
+        player.skillLightning = user.skillLightning ?? 0;
 
         // Calculate offline meditation dust
         const now = Date.now();
@@ -3254,6 +3332,10 @@ app.prepare().then(async () => {
           potionAcumen: player.potionAcumen,
           potionLuck: player.potionLuck,
           activeBuffs: player.activeBuffs,
+          // Skill levels
+          skillFireball: player.skillFireball,
+          skillIceball: player.skillIceball,
+          skillLightning: player.skillLightning,
         });
       } catch (err) {
         console.error('[Auth] Error:', err.message);
@@ -3393,6 +3475,16 @@ app.prepare().then(async () => {
         return;
       }
 
+      // Skill unlock levels: fireball@1, iceball@2, lightning@3
+      const SKILL_UNLOCK_LEVELS = { fireball: 1, iceball: 2, lightning: 3 };
+      const requiredLevel = SKILL_UNLOCK_LEVELS[skillId] || 1;
+      const playerLevel = player.level || 1;
+
+      if (playerLevel < requiredLevel) {
+        socket.emit('skill:error', { message: `Requires level ${requiredLevel}` });
+        return;
+      }
+
       // Check boss alive
       if (bossState.currentHp <= 0) {
         socket.emit('skill:error', { message: 'Boss is dead' });
@@ -3408,8 +3500,23 @@ app.prepare().then(async () => {
       // Deduct mana
       player.mana -= skill.manaCost;
 
-      // Calculate damage: baseDamage + (pAtk * multiplier)
-      const damage = Math.floor(skill.baseDamage + (player.pAtk * skill.multiplier));
+      // Get skill level for this player
+      const skillLevelMap = {
+        fireball: player.skillFireball || 1,
+        iceball: player.skillIceball || 0,
+        lightning: player.skillLightning || 0,
+      };
+      const skillLevel = skillLevelMap[skillId] || 1;
+
+      // Level multiplier: +2% per hero level
+      const levelMultiplier = Math.pow(1.02, playerLevel - 1);
+
+      // Skill level multiplier: +2% per skill level
+      const skillMultiplier = Math.pow(1.02, skillLevel - 1);
+
+      // Calculate damage: (baseDamage + pAtk * multiplier) * levelMult * skillMult
+      const baseDmg = skill.baseDamage + (player.pAtk * skill.multiplier);
+      const damage = Math.floor(baseDmg * levelMultiplier * skillMultiplier);
       const actualDamage = Math.min(damage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
 
@@ -3419,11 +3526,14 @@ app.prepare().then(async () => {
       // Update leaderboard (only if authenticated)
       if (player.odamage) {
         const existing = sessionLeaderboard.get(player.odamage);
+        const skillsUsed = existing?.skillsUsed || new Set();
+        skillsUsed.add(skillId); // Track skill usage for level-up
         sessionLeaderboard.set(player.odamage, {
           damage: (existing?.damage || 0) + actualDamage,
           visitorName: player.odamageN,
           photoUrl: player.photoUrl,
           isEligible: existing?.isEligible || player.isEligible || false,
+          skillsUsed, // Skills used in this boss session
         });
       }
 
@@ -4929,34 +5039,46 @@ app.prepare().then(async () => {
         player[potionKey] -= 1;
 
         const buff = BUFFS[buffId];
-        const expiresAt = Date.now() + buff.duration;
+        const now = Date.now();
 
-        // Remove existing buff of same type (prevent stacking!)
-        player.activeBuffs = player.activeBuffs.filter(b => b.type !== buffId);
+        // FIX: Extend buff timer instead of replacing
+        // If buff is active, add duration to remaining time
+        const existingBuff = player.activeBuffs.find(b => b.type === buffId && b.expiresAt > now);
+        let expiresAt;
 
-        // Add new buff
-        player.activeBuffs.push({
-          type: buffId,
-          value: buff.value,
-          expiresAt,
-        });
+        if (existingBuff) {
+          // Extend: add buff.duration to remaining time
+          expiresAt = existingBuff.expiresAt + buff.duration;
+          existingBuff.expiresAt = expiresAt;
+        } else {
+          // New buff
+          expiresAt = now + buff.duration;
+          player.activeBuffs.push({
+            type: buffId,
+            value: buff.value,
+            expiresAt,
+          });
+        }
 
-        // Save to DB
+        // Save potion count to DB
         await prisma.user.update({
           where: { id: player.odamage },
           data: { [potionKey]: player[potionKey] },
         });
 
-        // Delete old buff of same type (prevent stacking in DB!)
-        await prisma.activeBuff.deleteMany({
+        // Update or create buff in DB
+        await prisma.activeBuff.upsert({
           where: {
-            userId: player.odamage,
-            buffType: buffId.toUpperCase(),
+            // Use unique constraint on (userId, buffType)
+            userId_buffType: {
+              userId: player.odamage,
+              buffType: buffId.toUpperCase(),
+            },
           },
-        });
-
-        await prisma.activeBuff.create({
-          data: {
+          update: {
+            expiresAt: new Date(expiresAt),
+          },
+          create: {
             userId: player.odamage,
             buffType: buffId.toUpperCase(),
             value: buff.value,
@@ -5616,8 +5738,7 @@ app.prepare().then(async () => {
 
   // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {
-    // Всегда берём defense/image из шаблона по currentBossIndex
-    const template = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
+    // FIX: Use bossState.image directly (set correctly in respawnBoss)
     io.emit('boss:state', {
       id: bossState.id,
       name: bossState.name,
@@ -5625,10 +5746,10 @@ app.prepare().then(async () => {
       title: bossState.title,
       hp: bossState.currentHp,
       maxHp: bossState.maxHp,
-      defense: template.defense, // Из шаблона
+      defense: bossState.defense, // FIX: From bossState
       ragePhase: bossState.ragePhase,
       icon: bossState.icon,
-      image: template.image || bossState.image, // Из шаблона
+      image: bossState.image, // FIX: From bossState directly
       bossIndex: bossState.bossIndex,
       totalBosses: bossState.totalBosses,
       playersOnline: onlineUsers.size,
@@ -5653,7 +5774,7 @@ app.prepare().then(async () => {
       await saveBossState(prisma);
 
       // После respawnBoss currentBossIndex уже обновлён
-      const respawnTemplate = DEFAULT_BOSSES[currentBossIndex] || DEFAULT_BOSSES[0];
+      // FIX: Use bossState directly (image is set in respawnBoss)
       io.emit('boss:respawn', {
         id: bossState.id,
         name: bossState.name,
@@ -5662,8 +5783,8 @@ app.prepare().then(async () => {
         hp: bossState.currentHp,
         maxHp: bossState.maxHp,
         icon: bossState.icon,
-        image: respawnTemplate.image || bossState.image,
-        defense: respawnTemplate.defense,
+        image: bossState.image, // FIX: From bossState directly
+        defense: bossState.defense, // FIX: From bossState
         bossIndex: bossState.bossIndex,
         totalBosses: bossState.totalBosses,
         prizePool: {

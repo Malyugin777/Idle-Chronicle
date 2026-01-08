@@ -113,6 +113,13 @@ model User {
   potionAcumen    Int      @default(0)
   potionLuck      Int      @default(0)
 
+  // Skill Levels (0 = locked, 1+ = level)
+  // Unlock: Fireball@Lv1, IceArrow@Lv2, Lightning@Lv3
+  // +1 level per use in boss fight
+  skillFireball   Int      @default(1)   // Unlocked from start
+  skillIceball    Int      @default(0)   // Unlocks at hero Lv.2
+  skillLightning  Int      @default(0)   // Unlocks at hero Lv.3
+
   // Equipment (legacy weapon)
   weaponId        String?
   weapon          Weapon?  @relation(fields: [weaponId], references: [id])
@@ -324,7 +331,7 @@ model ActiveBuff {
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@unique([userId, buffType])  // For upsert to extend buff timer
   @@index([expiresAt])
 }
 
