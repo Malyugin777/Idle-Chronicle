@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Package, Gem, Coins, Lock, X, ScrollText } from 'lucide-react';
+import { Package, Gem, Coins, Lock, X, ScrollText, Hammer } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import ChestOpenModal from '../modals/ChestOpenModal';
+import ForgeModal from '../game/ForgeModal';
 import { getTaskManager } from '@/lib/taskManager';
 
 type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
@@ -93,6 +94,7 @@ export default function TreasuryTab() {
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [showForge, setShowForge] = useState(false);
 
   // Update timer every second
   useEffect(() => {
@@ -330,6 +332,9 @@ export default function TreasuryTab() {
         />
       )}
 
+      {/* Forge Modal */}
+      <ForgeModal isOpen={showForge} onClose={() => setShowForge(false)} />
+
       {/* Header - Total Earnings */}
       <div className="bg-l2-panel p-3 border-b border-white/10">
         <div className="flex items-center justify-between mb-2">
@@ -337,9 +342,21 @@ export default function TreasuryTab() {
             <Package className="text-l2-gold" size={20} />
             <span className="font-bold text-white">Добыча</span>
           </div>
-          <div className="flex items-center gap-1 bg-purple-500/20 px-2 py-1 rounded">
-            <Gem className="text-purple-400" size={14} />
-            <span className="text-sm font-bold text-purple-400">{crystals}</span>
+          <div className="flex items-center gap-2">
+            {/* Forge Button */}
+            <button
+              onClick={() => setShowForge(true)}
+              className="flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-1 rounded transition-colors"
+            >
+              <Hammer className="text-amber-400" size={14} />
+              <span className="text-sm font-bold text-amber-400">
+                {lang === 'ru' ? 'Кузница' : 'Forge'}
+              </span>
+            </button>
+            <div className="flex items-center gap-1 bg-purple-500/20 px-2 py-1 rounded">
+              <Gem className="text-purple-400" size={14} />
+              <span className="text-sm font-bold text-purple-400">{crystals}</span>
+            </div>
           </div>
         </div>
 

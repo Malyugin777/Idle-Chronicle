@@ -4523,6 +4523,458 @@ app.prepare().then(async () => {
       }
     });
 
+    // ═══════════════════════════════════════════════════════════
+    // FORGE SYSTEM - Salvage, Craft, Enchant, Fusion
+    // ═══════════════════════════════════════════════════════════
+
+    // Salvage output by rarity (x3 per tier)
+    const SALVAGE_OUTPUT = {
+      COMMON:   { baseMat: 2,  dust: 1 },
+      UNCOMMON: { baseMat: 6,  dust: 3 },
+      RARE:     { baseMat: 18, dust: 9 },
+      EPIC:     { baseMat: 54, dust: 27 },
+    };
+
+    // Slot to material mapping
+    const SLOT_TO_MATERIAL = {
+      WEAPON: 'matOre',
+      SHIELD: 'matLeather',
+      HELMET: 'matLeather',
+      CHEST: 'matLeather',
+      GLOVES: 'matLeather',
+      LEGS: 'matLeather',
+      BOOTS: 'matLeather',
+      // Accessories would be matCoal but we don't have them in UserEquipment yet
+    };
+
+    // Scroll crafting recipes
+    const SCROLL_RECIPES = {
+      enchantWeapon: { dust: 10, gold: 500 },
+      enchantArmor:  { dust: 10, gold: 500 },
+      protection:    { dust: 20, gold: 1000, coal: 5 },
+    };
+
+    // Enchant success chances
+    const ENCHANT_CHANCES = {
+      4: 0.70, 5: 0.60, 6: 0.50, 7: 0.42, 8: 0.35,
+      9: 0.28, 10: 0.22, 11: 0.18, 12: 0.15, 13: 0.12,
+      14: 0.10, 15: 0.08, 16: 0.06, 17: 0.05, 18: 0.04,
+      19: 0.03, 20: 0.02,
+    };
+
+    // Fusion requirements
+    const FUSION_REQS = {
+      COMMON:   { count: 5, resultChest: 'BRONZE' },
+      UNCOMMON: { count: 5, resultChest: 'SILVER' },
+      RARE:     { count: 4, resultChest: 'GOLD' },
+    };
+
+    // FORGE:GET - Get forge data (inventory, materials, scrolls)
+    socket.on('forge:get', async () => {
+      if (!player.odamage) return;
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: {
+            gold: true,
+            matOre: true,
+            matLeather: true,
+            matCoal: true,
+            matEnchantDust: true,
+            scrollEnchantWeapon: true,
+            scrollEnchantArmor: true,
+            scrollProtection: true,
+          },
+        });
+
+        // Get equipment inventory (not equipped)
+        const equipment = await prisma.userEquipment.findMany({
+          where: { userId: player.odamage, isEquipped: false },
+          include: { equipment: true },
+        });
+
+        const inventory = equipment.map(eq => ({
+          id: eq.id,
+          templateId: eq.equipmentId,
+          name: eq.equipment.nameRu || eq.equipment.name,
+          icon: eq.equipment.icon,
+          slotType: eq.equipment.slot.toLowerCase(),
+          rarity: eq.equipment.rarity.toLowerCase(),
+          baseStats: {
+            pAtkFlat: eq.pAtk,
+            pDefFlat: eq.pDef,
+          },
+          enchantLevel: eq.enchant,
+          setId: null,
+        }));
+
+        socket.emit('forge:data', {
+          inventory,
+          materials: {
+            ore: user?.matOre || 0,
+            leather: user?.matLeather || 0,
+            coal: user?.matCoal || 0,
+            enchantDust: user?.matEnchantDust || 0,
+          },
+          scrolls: {
+            enchantWeapon: user?.scrollEnchantWeapon || 0,
+            enchantArmor: user?.scrollEnchantArmor || 0,
+            protection: user?.scrollProtection || 0,
+          },
+          gold: Number(user?.gold || 0),
+        });
+      } catch (err) {
+        console.error('[Forge] Get error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to get forge data' });
+      }
+    });
+
+    // FORGE:SALVAGE - Salvage items for materials
+    socket.on('forge:salvage', async (data) => {
+      if (!player.odamage) return;
+      const { itemIds } = data;
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) return;
+
+      try {
+        // Get items to salvage
+        const items = await prisma.userEquipment.findMany({
+          where: {
+            id: { in: itemIds },
+            userId: player.odamage,
+            isEquipped: false, // Can't salvage equipped items
+          },
+          include: { equipment: true },
+        });
+
+        if (items.length === 0) {
+          socket.emit('forge:error', { message: 'No valid items to salvage' });
+          return;
+        }
+
+        // Calculate materials gained
+        const materialsGained = { matOre: 0, matLeather: 0, matCoal: 0, matEnchantDust: 0 };
+
+        for (const item of items) {
+          const rarity = item.equipment.rarity;
+          const slot = item.equipment.slot;
+          const output = SALVAGE_OUTPUT[rarity];
+          const matField = SLOT_TO_MATERIAL[slot] || 'matLeather';
+
+          materialsGained[matField] += output.baseMat;
+          materialsGained.matEnchantDust += output.dust;
+        }
+
+        // Delete items and update materials
+        await prisma.$transaction([
+          prisma.userEquipment.deleteMany({
+            where: { id: { in: items.map(i => i.id) } },
+          }),
+          prisma.user.update({
+            where: { id: player.odamage },
+            data: {
+              matOre: { increment: materialsGained.matOre },
+              matLeather: { increment: materialsGained.matLeather },
+              matCoal: { increment: materialsGained.matCoal },
+              matEnchantDust: { increment: materialsGained.matEnchantDust },
+            },
+          }),
+        ]);
+
+        console.log(`[Forge] ${player.odamage} salvaged ${items.length} items`);
+
+        // Send updated forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Forge] Salvage error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to salvage items' });
+      }
+    });
+
+    // FORGE:CRAFTSCROLL - Craft enchant scrolls
+    socket.on('forge:craftScroll', async (data) => {
+      if (!player.odamage) return;
+      const { scrollType, quantity = 1 } = data;
+
+      const recipe = SCROLL_RECIPES[scrollType];
+      if (!recipe) {
+        socket.emit('forge:error', { message: 'Invalid scroll type' });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { gold: true, matEnchantDust: true, matCoal: true },
+        });
+
+        const dustNeeded = recipe.dust * quantity;
+        const goldNeeded = recipe.gold * quantity;
+        const coalNeeded = (recipe.coal || 0) * quantity;
+
+        if ((user?.matEnchantDust || 0) < dustNeeded) {
+          socket.emit('forge:error', { message: 'Not enough enchant dust' });
+          return;
+        }
+        if (Number(user?.gold || 0) < goldNeeded) {
+          socket.emit('forge:error', { message: 'Not enough gold' });
+          return;
+        }
+        if (recipe.coal && (user?.matCoal || 0) < coalNeeded) {
+          socket.emit('forge:error', { message: 'Not enough coal' });
+          return;
+        }
+
+        // Craft scrolls
+        const scrollField = scrollType === 'enchantWeapon' ? 'scrollEnchantWeapon'
+          : scrollType === 'enchantArmor' ? 'scrollEnchantArmor'
+          : 'scrollProtection';
+
+        const updateData = {
+          matEnchantDust: { decrement: dustNeeded },
+          gold: { decrement: goldNeeded },
+          [scrollField]: { increment: quantity },
+        };
+        if (recipe.coal) {
+          updateData.matCoal = { decrement: coalNeeded };
+        }
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: updateData,
+        });
+
+        console.log(`[Forge] ${player.odamage} crafted ${quantity}x ${scrollType}`);
+
+        // Send updated forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Forge] CraftScroll error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to craft scroll' });
+      }
+    });
+
+    // FORGE:FUSION - Fuse items into chest
+    socket.on('forge:fusion', async (data) => {
+      if (!player.odamage) return;
+      const { rarity } = data;
+
+      const rarityUpper = rarity?.toUpperCase();
+      const req = FUSION_REQS[rarityUpper];
+      if (!req) {
+        socket.emit('forge:error', { message: 'Invalid rarity for fusion' });
+        return;
+      }
+
+      try {
+        // Get items of this rarity (not equipped)
+        const items = await prisma.userEquipment.findMany({
+          where: {
+            userId: player.odamage,
+            isEquipped: false,
+            equipment: { rarity: rarityUpper },
+          },
+          take: req.count,
+          include: { equipment: true },
+        });
+
+        if (items.length < req.count) {
+          socket.emit('forge:error', { message: `Need ${req.count} ${rarity} items` });
+          return;
+        }
+
+        // Check chest slot availability
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { chestSlots: true },
+        });
+        const chestCount = await prisma.chest.count({
+          where: { userId: player.odamage },
+        });
+
+        if (chestCount >= (user?.chestSlots || 5)) {
+          socket.emit('forge:error', { message: 'No chest slots available' });
+          return;
+        }
+
+        // Delete items and create chest
+        const chestDurations = {
+          WOODEN: 5 * 60 * 1000,
+          BRONZE: 30 * 60 * 1000,
+          SILVER: 4 * 60 * 60 * 1000,
+          GOLD: 8 * 60 * 60 * 1000,
+        };
+
+        await prisma.$transaction([
+          prisma.userEquipment.deleteMany({
+            where: { id: { in: items.map(i => i.id) } },
+          }),
+          prisma.chest.create({
+            data: {
+              userId: player.odamage,
+              chestType: req.resultChest,
+              openingDuration: chestDurations[req.resultChest],
+            },
+          }),
+        ]);
+
+        console.log(`[Forge] ${player.odamage} fused ${req.count} ${rarity} items -> ${req.resultChest} chest`);
+
+        // Send updated forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Forge] Fusion error:', err.message);
+        socket.emit('forge:error', { message: 'Failed to fuse items' });
+      }
+    });
+
+    // ENCHANT:TRY - Attempt to enchant an item
+    socket.on('enchant:try', async (data) => {
+      if (!player.odamage) return;
+      const { itemId, scrollType, useProtection } = data;
+
+      if (!itemId || !scrollType) {
+        socket.emit('enchant:error', { message: 'Missing parameters' });
+        return;
+      }
+
+      try {
+        // Get item
+        const item = await prisma.userEquipment.findFirst({
+          where: { id: itemId, userId: player.odamage },
+          include: { equipment: true },
+        });
+
+        if (!item) {
+          socket.emit('enchant:error', { message: 'Item not found' });
+          return;
+        }
+
+        // Check scroll type matches item
+        const isWeapon = item.equipment.slot === 'WEAPON';
+        const isArmor = ['SHIELD', 'HELMET', 'CHEST', 'GLOVES', 'LEGS', 'BOOTS'].includes(item.equipment.slot);
+
+        if (scrollType === 'enchantWeapon' && !isWeapon) {
+          socket.emit('enchant:error', { message: 'Weapon scroll requires weapon' });
+          return;
+        }
+        if (scrollType === 'enchantArmor' && !isArmor) {
+          socket.emit('enchant:error', { message: 'Armor scroll requires armor' });
+          return;
+        }
+
+        // Get user data
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: {
+            gold: true,
+            matEnchantDust: true,
+            scrollEnchantWeapon: true,
+            scrollEnchantArmor: true,
+            scrollProtection: true,
+          },
+        });
+
+        // Check scroll availability
+        const scrollField = scrollType === 'enchantWeapon' ? 'scrollEnchantWeapon' : 'scrollEnchantArmor';
+        if ((user?.[scrollField] || 0) < 1) {
+          socket.emit('enchant:error', { message: 'No enchant scroll available' });
+          return;
+        }
+
+        // Check protection scroll if needed
+        const currentLevel = item.enchant;
+        const isSafe = currentLevel < 3;
+        const needsProtection = !isSafe && useProtection;
+
+        if (needsProtection && (user?.scrollProtection || 0) < 1) {
+          socket.emit('enchant:error', { message: 'No protection scroll available' });
+          return;
+        }
+
+        // Check gold and dust cost
+        const goldCost = 100 + currentLevel * 50;
+        const dustCost = 5 + currentLevel * 2;
+
+        if (Number(user?.gold || 0) < goldCost) {
+          socket.emit('enchant:error', { message: 'Not enough gold' });
+          return;
+        }
+        if ((user?.matEnchantDust || 0) < dustCost) {
+          socket.emit('enchant:error', { message: 'Not enough enchant dust' });
+          return;
+        }
+
+        // Calculate success
+        const targetLevel = currentLevel + 1;
+        const chance = targetLevel <= 3 ? 1.0 : (ENCHANT_CHANCES[targetLevel] || 0);
+        const roll = Math.random();
+        const success = roll < chance;
+
+        console.log(`[Enchant] ${player.odamage} trying +${currentLevel}->+${targetLevel}, chance=${(chance*100).toFixed(0)}%, roll=${roll.toFixed(3)}, success=${success}`);
+
+        // Prepare update
+        const userUpdate = {
+          gold: { decrement: goldCost },
+          matEnchantDust: { decrement: dustCost },
+          [scrollField]: { decrement: 1 },
+        };
+
+        if (needsProtection) {
+          userUpdate.scrollProtection = { decrement: 1 };
+        }
+
+        let itemDestroyed = false;
+        let newEnchantLevel = currentLevel;
+
+        if (success) {
+          newEnchantLevel = currentLevel + 1;
+          // Update item enchant level
+          await prisma.$transaction([
+            prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
+            prisma.userEquipment.update({
+              where: { id: itemId },
+              data: { enchant: newEnchantLevel },
+            }),
+          ]);
+        } else if (isSafe) {
+          // Safe enchant fail (shouldn't happen with 100% chance, but just in case)
+          await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
+        } else if (useProtection) {
+          // Protected fail - item survives but loses level
+          newEnchantLevel = Math.max(0, currentLevel - 1);
+          await prisma.$transaction([
+            prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
+            prisma.userEquipment.update({
+              where: { id: itemId },
+              data: { enchant: newEnchantLevel },
+            }),
+          ]);
+        } else {
+          // Unprotected fail - item destroyed
+          itemDestroyed = true;
+          await prisma.$transaction([
+            prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
+            prisma.userEquipment.delete({ where: { id: itemId } }),
+          ]);
+        }
+
+        socket.emit('enchant:result', {
+          success,
+          itemDestroyed,
+          newEnchantLevel,
+          itemName: item.equipment.nameRu || item.equipment.name,
+          itemIcon: item.equipment.icon,
+        });
+
+        // Refresh forge data
+        socket.emit('forge:get');
+      } catch (err) {
+        console.error('[Enchant] Error:', err.message);
+        socket.emit('enchant:error', { message: 'Enchant failed' });
+      }
+    });
+
     // DISCONNECT
     socket.on('disconnect', async () => {
       console.log(`[Socket] Disconnected: ${socket.id}, userId: ${player.odamage || 'guest'}`);
