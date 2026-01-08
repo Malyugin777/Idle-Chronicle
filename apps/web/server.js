@@ -189,15 +189,31 @@ async function loadBossState(prisma) {
     console.log('[Boss] Loading state from DB...');
     const state = await prisma.gameState.findUnique({ where: { id: 'singleton' } });
     if (!state) {
-      console.log('[Boss] No gameState record found in DB!');
+      console.log('[Boss] ⚠️ No gameState record found in DB! Will spawn fresh boss.');
+      addLog('warn', 'boss', 'No gameState found - spawning fresh boss');
       return false;
     }
-    console.log(`[Boss] Found gameState: bossIndex=${state.currentBossIndex}, HP=${state.bossCurrentHp}/${state.bossMaxHp}`);
+
+    // Debug: Log ALL GameState values
+    console.log('[Boss] === GameState from DB ===');
+    console.log(`[Boss]   currentBossIndex: ${state.currentBossIndex}`);
+    console.log(`[Boss]   bossCurrentHp: ${state.bossCurrentHp} (type: ${typeof state.bossCurrentHp})`);
+    console.log(`[Boss]   bossMaxHp: ${state.bossMaxHp} (type: ${typeof state.bossMaxHp})`);
+    console.log(`[Boss]   respawnAt: ${state.respawnAt} (type: ${typeof state.respawnAt})`);
+    console.log(`[Boss]   bossName: ${state.bossName}`);
+    console.log('[Boss] ========================');
 
     // Check if boss is respawning
-    if (state.respawnAt && new Date(state.respawnAt) > new Date()) {
-      bossRespawnAt = new Date(state.respawnAt);
-      console.log(`[Boss] Respawning at ${bossRespawnAt.toISOString()}`);
+    const now = new Date();
+    const respawnAtDate = state.respawnAt ? new Date(state.respawnAt) : null;
+    const isRespawnInFuture = respawnAtDate && respawnAtDate > now;
+
+    console.log(`[Boss] Respawn check: respawnAt=${respawnAtDate?.toISOString()}, now=${now.toISOString()}, inFuture=${isRespawnInFuture}`);
+
+    if (isRespawnInFuture) {
+      bossRespawnAt = respawnAtDate;
+      console.log(`[Boss] ⏰ Boss is in respawn phase until ${bossRespawnAt.toISOString()}`);
+      addLog('info', 'boss', 'Loaded respawn timer', { respawnAt: bossRespawnAt.toISOString() });
     }
 
     // Load boss state
@@ -208,10 +224,17 @@ async function loadBossState(prisma) {
     const savedHp = Number(state.bossCurrentHp);
     const needsRespawn = savedHp <= 0 && !bossRespawnAt;
 
+    console.log(`[Boss] HP Decision: savedHp=${savedHp}, bossRespawnAt=${bossRespawnAt ? 'SET' : 'NULL'}, needsRespawn=${needsRespawn}`);
+
     if (needsRespawn) {
-      console.log('[Boss] Boss HP=0 and respawn timer expired, will respawn on startup');
+      console.log('[Boss] ⚠️ Boss HP=0 and respawn timer expired, will respawn on startup');
+      addLog('warn', 'boss', 'Boss HP=0 with no respawn timer - forcing respawn');
       return 'respawn'; // Signal to respawn
     }
+
+    // Determine which HP to use
+    const finalHp = bossRespawnAt ? Number(state.bossMaxHp) : savedHp;
+    console.log(`[Boss] HP Assignment: Using ${bossRespawnAt ? 'maxHp (respawn phase)' : 'savedHp'} = ${finalHp}`);
 
     // ВСЕГДА используем данные из шаблона по currentBossIndex для синхронизации
     bossState = {
@@ -220,7 +243,7 @@ async function loadBossState(prisma) {
       nameRu: boss.nameRu || boss.name,
       title: 'World Boss',
       maxHp: Number(state.bossMaxHp),
-      currentHp: bossRespawnAt ? Number(state.bossMaxHp) : savedHp,
+      currentHp: finalHp,  // Uses savedHp or maxHp based on respawn state
       defense: boss.defense,
       thornsDamage: boss.thornsDamage || 0,
       ragePhase: 0,
@@ -273,17 +296,26 @@ async function loadBossState(prisma) {
       console.log('[Boss] Loaded previous boss session');
     }
 
-    console.log(`[Boss] Loaded state: ${bossState.name} (${bossState.nameRu}) HP=${bossState.currentHp}/${bossState.maxHp}`);
+    const hpPercent = ((bossState.currentHp / bossState.maxHp) * 100).toFixed(1);
+    console.log(`[Boss] ✅ Loaded state: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp} (${hpPercent}%)`);
+    addLog('info', 'boss', `Loaded from DB: ${bossState.name} HP ${hpPercent}%`, {
+      currentHp: bossState.currentHp,
+      maxHp: bossState.maxHp,
+      bossIndex: currentBossIndex,
+      hadRespawnTimer: !!bossRespawnAt,
+    });
     return true;
   } catch (err) {
-    console.error('[Boss] Load state error:', err.message);
+    console.error('[Boss] ❌ Load state error:', err.message);
+    addLog('error', 'boss', 'Load state failed', { error: err.message });
     return false;
   }
 }
 
 async function saveBossState(prisma) {
   try {
-    console.log(`[Boss] Saving state: HP=${bossState.currentHp}/${bossState.maxHp}, index=${currentBossIndex}`);
+    const hpPercent = ((bossState.currentHp / bossState.maxHp) * 100).toFixed(1);
+    console.log(`[Boss] 💾 Saving: HP=${bossState.currentHp}/${bossState.maxHp} (${hpPercent}%), index=${currentBossIndex}, respawnAt=${bossRespawnAt?.toISOString() || 'null'}`);
 
     // Serialize leaderboard with explicit userId field (avoid collision with damage)
     const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([userId, data]) => ({
@@ -332,8 +364,14 @@ async function saveBossState(prisma) {
         previousBossSession: previousBossSession, // Сохраняем предыдущего босса
       },
     });
+    // Log successful save (every 60 seconds to reduce spam)
+    if (!saveBossState.lastLogTime || Date.now() - saveBossState.lastLogTime > 60000) {
+      addLog('debug', 'boss', `State saved: HP ${hpPercent}%`, { hp: bossState.currentHp, max: bossState.maxHp });
+      saveBossState.lastLogTime = Date.now();
+    }
   } catch (err) {
-    console.error('[Boss] Save state error:', err.message);
+    console.error('[Boss] ❌ Save state FAILED:', err.message);
+    addLog('error', 'boss', 'Save state failed', { error: err.message, hp: bossState.currentHp });
   }
 }
 
