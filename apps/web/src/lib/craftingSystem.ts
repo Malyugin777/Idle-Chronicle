@@ -511,10 +511,10 @@ export function debugEnchantChances(): void {
  * Тест: проверка выхода от разбора
  */
 export function debugSalvageOutput(): void {
-  console.log('=== Salvage Output ===');
+  console.log('=== Salvage Output (Enchant Dust) ===');
   const rarities: Rarity[] = ['common', 'uncommon', 'rare', 'epic'];
   for (const rarity of rarities) {
-    const output = SALVAGE_OUTPUT[rarity];
-    console.log(`${rarity}: ${output.baseMat} base mat, ${output.dust} dust`);
+    const dust = SALVAGE_OUTPUT[rarity];
+    console.log(`${rarity}: ${dust} dust`);
   }
 }
