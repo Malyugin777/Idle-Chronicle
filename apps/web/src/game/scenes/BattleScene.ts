@@ -225,12 +225,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ─────────────────────────────────────────────────────────
-  // HIT EFFECTS (improved visuals)
+  // HIT EFFECTS (ULTRA REALISTIC)
   // ─────────────────────────────────────────────────────────
 
   playHitAnimation() {
     const now = Date.now();
-    if (now - this.lastHitTime < 100) return;
+    if (now - this.lastHitTime < 80) return;
     this.lastHitTime = now;
 
     if (!this.bossSprite) return;
@@ -239,113 +239,291 @@ export class BattleScene extends Phaser.Scene {
     this.bossSprite.setPosition(this.originalBossX, this.originalBossY);
     this.bossSprite.setScale(this.originalBossScale);
 
-    // Impact shake - more dynamic
-    const shakeX = Phaser.Math.Between(-12, 12);
-    const shakeY = Phaser.Math.Between(-8, 8);
+    // Random hit position offset
+    const hitOffsetX = Phaser.Math.Between(-40, 40);
+    const hitOffsetY = Phaser.Math.Between(-50, 30);
+    const hitX = this.originalBossX + hitOffsetX;
+    const hitY = this.originalBossY + hitOffsetY;
+
+    // Impact shake - aggressive
+    const shakeIntensity = 15;
     this.tweens.add({
       targets: this.bossSprite,
-      x: this.originalBossX + shakeX,
-      y: this.originalBossY + shakeY,
-      duration: 40,
+      x: this.originalBossX + Phaser.Math.Between(-shakeIntensity, shakeIntensity),
+      y: this.originalBossY + Phaser.Math.Between(-shakeIntensity/2, shakeIntensity/2),
+      duration: 35,
       yoyo: true,
-      repeat: 1,
+      repeat: 2,
       ease: 'Sine.easeInOut',
       onComplete: () => {
         this.bossSprite?.setPosition(this.originalBossX, this.originalBossY);
       }
     });
 
-    // Scale punch - squash and stretch
+    // Squash and stretch - cartoon impact
     this.tweens.add({
       targets: this.bossSprite,
-      scaleX: this.originalBossScale * 1.08,
-      scaleY: this.originalBossScale * 0.94,
-      duration: 60,
+      scaleX: this.originalBossScale * 1.12,
+      scaleY: this.originalBossScale * 0.90,
+      duration: 50,
       yoyo: true,
-      ease: 'Quad.easeOut',
+      ease: 'Back.easeOut',
       onComplete: () => {
         this.bossSprite?.setScale(this.originalBossScale);
       }
     });
 
-    // Red flash tint
-    this.bossSprite.setTint(0xff6666);
-    this.time.delayedCall(60, () => {
-      this.bossSprite?.clearTint();
+    // Red damage tint
+    this.bossSprite.setTint(0xff4444);
+    this.time.delayedCall(50, () => {
+      this.bossSprite?.setTint(0xff8888);
+      this.time.delayedCall(30, () => {
+        this.bossSprite?.clearTint();
+      });
     });
 
-    // Hit sparks particles
-    this.createHitSparks();
+    // === IMPACT SHOCKWAVE ===
+    this.createShockwave(hitX, hitY);
 
-    // Slash mark effect
-    this.createSlashEffect();
+    // === BLOOD/DAMAGE SPLATTER ===
+    this.createBloodSplatter(hitX, hitY);
+
+    // === SPARKS BURST ===
+    this.createHitSparks(hitX, hitY);
+
+    // === SLASH MARKS ===
+    this.createSlashEffect(hitX, hitY);
+
+    // === IMPACT FLASH ===
+    this.createImpactFlash(hitX, hitY);
+
+    // === DEBRIS PARTICLES ===
+    this.createDebris(hitX, hitY);
   }
 
-  private createHitSparks() {
-    const numSparks = 8;
+  private createShockwave(x: number, y: number) {
+    // Inner ring
+    const ring1 = this.add.graphics();
+    ring1.lineStyle(3, 0xffffff, 0.8);
+    ring1.strokeCircle(0, 0, 10);
+    ring1.setPosition(x, y);
+
+    this.tweens.add({
+      targets: ring1,
+      scale: 4,
+      alpha: 0,
+      duration: 300,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring1.destroy(),
+    });
+
+    // Outer ring (delayed)
+    this.time.delayedCall(50, () => {
+      const ring2 = this.add.graphics();
+      ring2.lineStyle(2, 0xffaa00, 0.5);
+      ring2.strokeCircle(0, 0, 15);
+      ring2.setPosition(x, y);
+
+      this.tweens.add({
+        targets: ring2,
+        scale: 3,
+        alpha: 0,
+        duration: 250,
+        ease: 'Cubic.easeOut',
+        onComplete: () => ring2.destroy(),
+      });
+    });
+  }
+
+  private createBloodSplatter(x: number, y: number) {
+    const numDrops = 12;
+    for (let i = 0; i < numDrops; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 60 + Math.random() * 100;
+      const size = 2 + Math.random() * 5;
+
+      const drop = this.add.graphics();
+      // Blood colors: dark red to bright red
+      const bloodColors = [0xcc0000, 0xff0000, 0xaa0000, 0xff2222, 0x880000];
+      drop.fillStyle(bloodColors[Math.floor(Math.random() * bloodColors.length)], 1);
+
+      // Elongated drop shape
+      drop.fillEllipse(0, 0, size, size * 1.5);
+      drop.setPosition(x, y);
+      drop.setRotation(angle);
+
+      const targetX = x + Math.cos(angle) * speed;
+      const targetY = y + Math.sin(angle) * speed + 20; // Gravity effect
+
+      this.tweens.add({
+        targets: drop,
+        x: targetX,
+        y: targetY,
+        alpha: 0,
+        scaleX: 0.3,
+        scaleY: 0.1,
+        duration: 350 + Math.random() * 200,
+        ease: 'Quad.easeOut',
+        onComplete: () => drop.destroy(),
+      });
+    }
+  }
+
+  private createHitSparks(x: number, y: number) {
+    const numSparks = 15;
     for (let i = 0; i < numSparks; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 80 + Math.random() * 60;
-      const size = 3 + Math.random() * 4;
+      const speed = 50 + Math.random() * 100;
+      const size = 2 + Math.random() * 4;
 
       const spark = this.add.graphics();
-      // Random warm colors: yellow, orange, white
-      const colors = [0xffff00, 0xff8800, 0xffffff, 0xffcc00];
-      spark.fillStyle(colors[Math.floor(Math.random() * colors.length)], 1);
-      spark.fillCircle(0, 0, size);
-      spark.setPosition(this.originalBossX, this.originalBossY);
+      const colors = [0xffff00, 0xff8800, 0xffffff, 0xffcc00, 0xffee88];
+      const color = colors[Math.floor(Math.random() * colors.length)];
 
-      const targetX = this.originalBossX + Math.cos(angle) * speed;
-      const targetY = this.originalBossY + Math.sin(angle) * speed;
+      // Spark with trail effect
+      spark.fillStyle(color, 1);
+      spark.fillCircle(0, 0, size);
+      spark.fillStyle(color, 0.5);
+      spark.fillEllipse(-size, 0, size * 3, size * 0.8);
+      spark.setPosition(x, y);
+      spark.setRotation(angle);
+
+      const targetX = x + Math.cos(angle) * speed;
+      const targetY = y + Math.sin(angle) * speed;
 
       this.tweens.add({
         targets: spark,
         x: targetX,
         y: targetY,
         alpha: 0,
-        scale: 0.2,
-        duration: 250 + Math.random() * 150,
+        scale: 0.1,
+        duration: 200 + Math.random() * 150,
         ease: 'Cubic.easeOut',
         onComplete: () => spark.destroy(),
       });
     }
   }
 
-  private createSlashEffect() {
-    const slash = this.add.graphics();
+  private createSlashEffect(x: number, y: number) {
+    // Create 2-3 crossing slash marks
+    const numSlashes = Phaser.Math.Between(2, 3);
 
-    // Random slash angle
-    const angle = Phaser.Math.Between(-30, 30) * (Math.PI / 180);
-    const length = 80;
+    for (let s = 0; s < numSlashes; s++) {
+      const slash = this.add.graphics();
+      const angle = Phaser.Math.Between(-60, 60) * (Math.PI / 180);
+      const length = 60 + Math.random() * 40;
+      const offsetX = Phaser.Math.Between(-20, 20);
+      const offsetY = Phaser.Math.Between(-20, 20);
 
-    slash.lineStyle(4, 0xffffff, 0.9);
-    slash.beginPath();
-    slash.moveTo(-length/2, 0);
-    slash.lineTo(length/2, 0);
-    slash.strokePath();
+      // Main slash line
+      slash.lineStyle(3, 0xffffff, 0.95);
+      slash.beginPath();
+      slash.moveTo(-length/2, 0);
+      slash.lineTo(length/2, 0);
+      slash.strokePath();
 
-    // Glow line
-    slash.lineStyle(12, 0xffff88, 0.3);
-    slash.beginPath();
-    slash.moveTo(-length/2, 0);
-    slash.lineTo(length/2, 0);
-    slash.strokePath();
+      // Glow effect
+      slash.lineStyle(10, 0xffffaa, 0.4);
+      slash.beginPath();
+      slash.moveTo(-length/2, 0);
+      slash.lineTo(length/2, 0);
+      slash.strokePath();
 
-    slash.setPosition(
-      this.originalBossX + Phaser.Math.Between(-30, 30),
-      this.originalBossY + Phaser.Math.Between(-40, 40)
-    );
-    slash.setRotation(angle);
-    slash.setScale(0.5, 1);
+      // Core bright line
+      slash.lineStyle(1, 0xffffff, 1);
+      slash.beginPath();
+      slash.moveTo(-length/2, 0);
+      slash.lineTo(length/2, 0);
+      slash.strokePath();
+
+      slash.setPosition(x + offsetX, y + offsetY);
+      slash.setRotation(angle);
+      slash.setScale(0.3, 1);
+      slash.setAlpha(0);
+
+      // Animate in then out
+      this.tweens.add({
+        targets: slash,
+        scaleX: 1.2,
+        alpha: 1,
+        duration: 60,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          this.tweens.add({
+            targets: slash,
+            scaleX: 1.5,
+            alpha: 0,
+            duration: 150,
+            ease: 'Cubic.easeIn',
+            onComplete: () => slash.destroy(),
+          });
+        }
+      });
+    }
+  }
+
+  private createImpactFlash(x: number, y: number) {
+    // Bright white flash
+    const flash = this.add.graphics();
+    flash.fillStyle(0xffffff, 0.9);
+    flash.fillCircle(0, 0, 25);
+    flash.setPosition(x, y);
 
     this.tweens.add({
-      targets: slash,
-      scaleX: 1.5,
+      targets: flash,
+      scale: 2.5,
       alpha: 0,
-      duration: 200,
+      duration: 120,
       ease: 'Cubic.easeOut',
-      onComplete: () => slash.destroy(),
+      onComplete: () => flash.destroy(),
     });
+
+    // Orange core
+    const core = this.add.graphics();
+    core.fillStyle(0xff6600, 0.8);
+    core.fillCircle(0, 0, 15);
+    core.setPosition(x, y);
+
+    this.tweens.add({
+      targets: core,
+      scale: 1.8,
+      alpha: 0,
+      duration: 180,
+      ease: 'Cubic.easeOut',
+      onComplete: () => core.destroy(),
+    });
+  }
+
+  private createDebris(x: number, y: number) {
+    const numDebris = 8;
+    for (let i = 0; i < numDebris; i++) {
+      const debris = this.add.graphics();
+      const size = 2 + Math.random() * 4;
+
+      // Gray/brown debris colors
+      const debrisColors = [0x666666, 0x888888, 0x554433, 0x776655, 0x444444];
+      debris.fillStyle(debrisColors[Math.floor(Math.random() * debrisColors.length)], 1);
+
+      // Simple triangle debris
+      debris.fillTriangle(0, -size, size * 0.7, size * 0.5, -size * 0.7, size * 0.5);
+      debris.setPosition(x, y);
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 80;
+      const targetX = x + Math.cos(angle) * speed;
+      const targetY = y + Math.sin(angle) * speed + 30; // Gravity
+
+      this.tweens.add({
+        targets: debris,
+        x: targetX,
+        y: targetY,
+        rotation: Math.random() * Math.PI * 4,
+        alpha: 0,
+        duration: 400 + Math.random() * 200,
+        ease: 'Quad.easeOut',
+        onComplete: () => debris.destroy(),
+      });
+    }
   }
 
   // ─────────────────────────────────────────────────────────
