@@ -220,9 +220,9 @@ async function loadBossState(prisma) {
       console.log(`[Boss] ⏰ Boss is in respawn phase until ${bossRespawnAt.toISOString()}`);
       addLog('info', 'boss', 'Loaded respawn timer', { respawnAt: bossRespawnAt.toISOString() });
     } else if (respawnTooFar) {
-      console.log(`[Boss] ⚠️ Ignoring old respawn timer (${Math.round((respawnAtDate.getTime() - now.getTime()) / 60000)} min in future) - forcing immediate respawn`);
+      console.log(`[Boss] ⚠️ Ignoring old respawn timer (${Math.round((respawnAtDate.getTime() - now.getTime()) / 60000)} min in future) - respawning CURRENT boss`);
       addLog('warn', 'boss', 'Cleared old respawn timer', { was: respawnAtDate.toISOString() });
-      return 'respawn'; // Force respawn to clear old state
+      return 'respawn_current'; // Respawn current boss (NOT next!) to clear old state
     }
 
     // Load boss state
@@ -1420,10 +1420,12 @@ app.prepare().then(async () => {
   // Try to load saved boss state first
   const loadedState = await loadBossState(prisma);
   console.log(`[Startup] loadBossState returned: ${loadedState}`);
-  if (!loadedState || loadedState === 'respawn') {
-    // No saved state OR boss HP=0 with expired respawn timer - spawn (next) boss
-    const forceNext = loadedState === 'respawn'; // Move to next boss if HP=0
-    console.log(`[Startup] Calling respawnBoss with forceNext=${forceNext}`);
+  if (!loadedState || loadedState === 'respawn' || loadedState === 'respawn_current') {
+    // No saved state OR boss HP=0 with expired respawn timer - spawn boss
+    // 'respawn' = boss was killed, advance to NEXT boss
+    // 'respawn_current' = old timer cleared, stay on CURRENT boss
+    const forceNext = loadedState === 'respawn'; // Only advance if HP=0 (was killed)
+    console.log(`[Startup] Calling respawnBoss with forceNext=${forceNext} (state: ${loadedState})`);
     await respawnBoss(prisma, forceNext);
     await saveBossState(prisma);
   } else {
