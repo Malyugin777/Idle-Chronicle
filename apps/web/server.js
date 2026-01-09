@@ -3357,6 +3357,14 @@ app.prepare().then(async () => {
         player.resourcesLoaded = true;
         player.dirty = false;
 
+        // Restore sessionDamage from leaderboard (survives reconnect)
+        const leaderboardEntry = sessionLeaderboard.get(user.id);
+        if (leaderboardEntry) {
+          player.sessionDamage = leaderboardEntry.damage || 0;
+          player.savedSessionDamage = leaderboardEntry.damage || 0; // Already in leaderboard = already "saved"
+          console.log(`[Auth] Restored sessionDamage=${player.sessionDamage} from leaderboard`);
+        }
+
         // Level and Skill levels
         player.level = user.level || 1;
         player.skillFireball = user.skillFireball ?? 1;
