@@ -6320,6 +6320,9 @@ app.prepare().then(async () => {
         const inventory = [];
 
         for (const ue of userEquipment) {
+          // Skip broken items from regular inventory (they appear in broken list)
+          if (ue.isBroken) continue;
+
           const item = {
             id: ue.id,
             code: ue.equipment.code,
@@ -6330,9 +6333,12 @@ app.prepare().then(async () => {
             rarity: ue.equipment.rarity.toLowerCase(),
             pAtk: ue.pAtk,
             pDef: ue.pDef,
-            enchant: ue.enchant,
+            enchant: ue.enchant,             // Enchant level
+            enchantLevel: ue.enchant,        // Alias for client compatibility
+            isBroken: ue.isBroken || false,
+            brokenUntil: ue.brokenUntil ? ue.brokenUntil.toISOString() : null,
             isEquipped: ue.isEquipped,
-            setId: ITEM_SET_MAP[ue.equipment.code] || null,  // Set ID for set bonuses
+            setId: ITEM_SET_MAP[ue.equipment.code] || null,
           };
 
           if (ue.isEquipped) {

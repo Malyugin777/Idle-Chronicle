@@ -6,7 +6,7 @@ import { Rarity } from './items';
 
 export type ChestType = 'wood' | 'bronze' | 'silver' | 'gold';
 // Re-export Rarity for backwards compatibility
-export { Rarity };
+export type { Rarity };
 
 // ═══════════════════════════════════════════════════════════
 // CHEST DROP CONFIG

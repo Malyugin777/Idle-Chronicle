@@ -13,6 +13,14 @@ import {
   RARITY_COLORS,
   RARITY_BG_COLORS,
 } from '@/lib/craftingSystem';
+import {
+  ENCHANT_CHANCES,
+  ENCHANT_SAFE_LEVEL,
+  ENCHANT_BONUS_PER_LEVEL,
+  getEnchantChance,
+  isInSafeZone,
+  calculateEnchantBonus,
+} from '@shared/data';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -41,16 +49,9 @@ interface EnchantResult {
   brokenUntil?: string | null;
 }
 
-// Enchant chances by target level (synced with server)
-const ENCHANT_CHANCES: Record<number, number> = {
-  4: 0.70, 5: 0.60, 6: 0.50, 7: 0.42, 8: 0.35,
-  9: 0.28, 10: 0.22, 11: 0.18, 12: 0.15, 13: 0.12,
-  14: 0.10, 15: 0.08, 16: 0.06, 17: 0.05, 18: 0.04,
-  19: 0.03, 20: 0.02,
-};
-
 // ═══════════════════════════════════════════════════════════
 // ENCHANT MODAL v2.0 - Risky/Emotional operations (Enchant + Broken)
+// Uses shared enchant config from @shared/data/enchant.ts
 // ═══════════════════════════════════════════════════════════
 
 export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
@@ -97,8 +98,9 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
       setEnchantResult(data);
       setEnchanting(false);
       setSelectedEnchantItem(null);
-      // Refresh data
+      // Refresh forge data and equipment (so CharacterTab shows updated enchant)
       socket.emit('forge:get');
+      socket.emit('equipment:get');
     };
 
     const handleEnchantError = () => {
@@ -274,36 +276,76 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
                   {(() => {
                     const currentLevel = selectedEnchantItem.enchantLevel || 0;
                     const targetLevel = currentLevel + 1;
-                    const isInSafeZone = targetLevel <= 3; // +0→+3 = 100%
-                    const chance = isInSafeZone ? 100 : Math.floor((ENCHANT_CHANCES[targetLevel] || 0) * 100);
+                    const inSafeZone = isInSafeZone(currentLevel);
+                    const chance = Math.floor(getEnchantChance(targetLevel) * 100);
                     const hasCharges = enchantState.resources.enchantCharges > 0;
                     const hasProtection = enchantState.resources.protectionCharges > 0;
 
                     // Safe mode only matters outside safe zone
-                    const effectiveSafe = !isInSafeZone && useSafe;
+                    const effectiveSafe = !inSafeZone && useSafe;
                     const canEnchant = hasCharges && (!effectiveSafe || hasProtection);
+
+                    // Calculate enchant bonus (based on item's base stats)
+                    const basePAtk = selectedEnchantItem.baseStats?.pAtkFlat || 0;
+                    const basePDef = selectedEnchantItem.baseStats?.pDefFlat || 0;
+                    const hasPAtk = basePAtk > 0;
+                    const hasPDef = basePDef > 0;
+
+                    const currentBonusPAtk = calculateEnchantBonus(basePAtk, currentLevel);
+                    const nextBonusPAtk = calculateEnchantBonus(basePAtk, targetLevel);
+                    const currentBonusPDef = calculateEnchantBonus(basePDef, currentLevel);
+                    const nextBonusPDef = calculateEnchantBonus(basePDef, targetLevel);
 
                     return (
                       <>
+                        {/* Enchant bonus info */}
+                        <div className="mb-3 p-2 bg-black/30 rounded-lg text-xs">
+                          <div className="text-gray-400 mb-1">
+                            {lang === 'ru' ? `Бонус заточки (+${Math.round(ENCHANT_BONUS_PER_LEVEL * 100)}% за ур.):` : `Enchant bonus (+${Math.round(ENCHANT_BONUS_PER_LEVEL * 100)}% per lvl):`}
+                          </div>
+                          {hasPAtk && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">P.Atk:</span>
+                              <span>
+                                <span className="text-white">{basePAtk}</span>
+                                {currentLevel > 0 && <span className="text-green-400"> +{currentBonusPAtk}</span>}
+                                <span className="text-yellow-400 ml-2">→ +{nextBonusPAtk}</span>
+                                <span className="text-green-400 text-[10px] ml-1">(+{nextBonusPAtk - currentBonusPAtk})</span>
+                              </span>
+                            </div>
+                          )}
+                          {hasPDef && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">P.Def:</span>
+                              <span>
+                                <span className="text-white">{basePDef}</span>
+                                {currentLevel > 0 && <span className="text-green-400"> +{currentBonusPDef}</span>}
+                                <span className="text-yellow-400 ml-2">→ +{nextBonusPDef}</span>
+                                <span className="text-green-400 text-[10px] ml-1">(+{nextBonusPDef - currentBonusPDef})</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Chance bar */}
-                        <div className="mb-4">
+                        <div className="mb-3">
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-gray-400">{lang === 'ru' ? 'Шанс успеха' : 'Success chance'}</span>
-                            <span className={isInSafeZone ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
+                            <span className={inSafeZone ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
                               {chance}%
                             </span>
                           </div>
                           <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
                             <div
-                              className={`h-full transition-all ${isInSafeZone ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              className={`h-full transition-all ${inSafeZone ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
                               style={{ width: `${chance}%` }}
                             />
                           </div>
                         </div>
 
                         {/* Mode toggle (only outside safe zone) */}
-                        {!isInSafeZone && (
-                          <div className="mb-4">
+                        {!inSafeZone && (
+                          <div className="mb-3">
                             <div className="flex rounded-lg overflow-hidden border border-gray-600">
                               <button
                                 onClick={() => setUseSafe(false)}
@@ -333,16 +375,16 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
                         )}
 
                         {/* Outcome text */}
-                        <div className={`mb-4 p-2 rounded-lg text-center text-xs ${
-                          isInSafeZone
+                        <div className={`mb-3 p-2 rounded-lg text-center text-xs ${
+                          inSafeZone
                             ? 'bg-green-900/30 border border-green-500/30'
                             : effectiveSafe
                               ? 'bg-blue-900/30 border border-blue-500/30'
                               : 'bg-red-900/30 border border-red-500/30'
                         }`}>
-                          <span className={isInSafeZone ? 'text-green-400' : effectiveSafe ? 'text-blue-400' : 'text-red-400'}>
-                            {isInSafeZone
-                              ? (lang === 'ru' ? '✓ Безопасная зона (+0→+3)' : '✓ Safe zone (+0→+3)')
+                          <span className={inSafeZone ? 'text-green-400' : effectiveSafe ? 'text-blue-400' : 'text-red-400'}>
+                            {inSafeZone
+                              ? (lang === 'ru' ? `✓ Безопасная зона (+0→+${ENCHANT_SAFE_LEVEL})` : `✓ Safe zone (+0→+${ENCHANT_SAFE_LEVEL})`)
                               : effectiveSafe
                                 ? (lang === 'ru' ? '🛡️ При неудаче: предмет сохраняется' : '🛡️ On fail: item preserved')
                                 : (lang === 'ru' ? '⚠️ При неудаче: предмет ЛОМАЕТСЯ' : '⚠️ On fail: item BREAKS')}

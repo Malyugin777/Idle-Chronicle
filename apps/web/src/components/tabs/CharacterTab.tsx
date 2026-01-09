@@ -5,6 +5,7 @@ import { getSocket } from '@/lib/socket';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import { SETS, SetDefinition, SetBonus } from '@shared/data/sets';
+import { calculateEnchantBonus, ENCHANT_BONUS_PER_LEVEL } from '@shared/data/enchant';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -579,18 +580,32 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
               <span className="text-amber-400 font-bold">+{item.enchantLevel}</span>
             </div>
           )}
-          {(item.stats.pAtkFlat ?? 0) > 0 && (
-            <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
-              <span className="text-gray-300 text-sm">⚔️ {lang === 'ru' ? 'П. Атака' : 'P.Atk'}</span>
-              <span className="text-red-400 font-bold">+{item.stats.pAtkFlat}</span>
-            </div>
-          )}
-          {(item.stats.pDefFlat ?? 0) > 0 && (
-            <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
-              <span className="text-gray-300 text-sm">🛡️ {lang === 'ru' ? 'П. Защита' : 'P.Def'}</span>
-              <span className="text-blue-400 font-bold">+{item.stats.pDefFlat}</span>
-            </div>
-          )}
+          {(item.stats.pAtkFlat ?? 0) > 0 && (() => {
+            const base = item.stats.pAtkFlat!;
+            const enchantBonus = (item.enchantLevel ?? 0) > 0 ? calculateEnchantBonus(base, item.enchantLevel!) : 0;
+            return (
+              <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
+                <span className="text-gray-300 text-sm">⚔️ {lang === 'ru' ? 'П. Атака' : 'P.Atk'}</span>
+                <span className="text-red-400 font-bold">
+                  +{base}
+                  {enchantBonus > 0 && <span className="text-amber-400 ml-1">(+{enchantBonus})</span>}
+                </span>
+              </div>
+            );
+          })()}
+          {(item.stats.pDefFlat ?? 0) > 0 && (() => {
+            const base = item.stats.pDefFlat!;
+            const enchantBonus = (item.enchantLevel ?? 0) > 0 ? calculateEnchantBonus(base, item.enchantLevel!) : 0;
+            return (
+              <div className="flex justify-between items-center p-2 bg-black/30 rounded-lg">
+                <span className="text-gray-300 text-sm">🛡️ {lang === 'ru' ? 'П. Защита' : 'P.Def'}</span>
+                <span className="text-blue-400 font-bold">
+                  +{base}
+                  {enchantBonus > 0 && <span className="text-amber-400 ml-1">(+{enchantBonus})</span>}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Actions */}
@@ -1201,6 +1216,10 @@ export default function CharacterTab() {
         icon: item.icon || '📦',
         stats: { pAtkFlat: item.pAtk || 0, pDefFlat: item.pDef || 0 },
         setId: item.setId || null,
+        // Enchant fields - map from server (enchant or enchantLevel)
+        enchantLevel: item.enchantLevel ?? item.enchant ?? 0,
+        isBroken: item.isBroken ?? false,
+        brokenUntil: item.brokenUntil ? new Date(item.brokenUntil).getTime() : null,
       });
 
       const newEquipment: Partial<Record<SlotType, Item | null>> = {};
