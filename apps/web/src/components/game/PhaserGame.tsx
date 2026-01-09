@@ -21,7 +21,7 @@ import EnchantModal from './EnchantModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.2.1';
+const APP_VERSION = 'v1.2.2';
 
 interface BossState {
   name: string;
@@ -933,8 +933,8 @@ export default function PhaserGame() {
       {/* TOP HUD - Player info + Resources */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
-        {/* Row 1: Avatar + Level + Currency */}
-        <div className="flex items-center justify-between mb-2">
+        {/* Row 1: Avatar + Nickname + Level | Currency */}
+        <div className="flex items-center justify-between mb-1">
           {/* Left: Avatar + Nickname with Level badge */}
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -942,15 +942,15 @@ export default function PhaserGame() {
                 <img
                   src={playerState.photoUrl}
                   alt=""
-                  className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
+                  className="w-9 h-9 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                  <span className="text-lg">👤</span>
+                <div className="w-9 h-9 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  <span className="text-base">👤</span>
                 </div>
               )}
               {/* Level badge */}
-              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
+              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1 py-0.5 rounded text-[9px] font-bold text-white shadow-md border border-amber-400/50">
                 {playerState.level}
               </div>
             </div>
@@ -963,46 +963,46 @@ export default function PhaserGame() {
           {/* Right: Gold + Crystals */}
           <div className="flex items-center gap-2">
             {/* Gold */}
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2.5 py-1.5 rounded-lg border border-amber-600/40">
-              <span className="text-sm">🪙</span>
-              <span className="text-sm font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
+            <div className="flex items-center gap-1 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2 py-1 rounded-lg border border-amber-600/40">
+              <span className="text-xs">🪙</span>
+              <span className="text-xs font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
             </div>
             {/* Crystals */}
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2.5 py-1.5 rounded-lg border border-purple-500/40">
-              <Gem className="text-purple-400" size={14} />
-              <span className="text-sm font-bold text-purple-300">{playerState.crystals}</span>
+            <div className="flex items-center gap-1 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2 py-1 rounded-lg border border-purple-500/40">
+              <Gem className="text-purple-400" size={12} />
+              <span className="text-xs font-bold text-purple-300">{playerState.crystals}</span>
             </div>
           </div>
         </div>
 
-        {/* Row 2: Boss Progress + Online + Version (compact info line) */}
-        <div className="flex items-center justify-between px-1 mb-1.5 text-[9px]">
-          <div className="flex items-center gap-1.5">
-            <span className="text-amber-500/80">⚔️</span>
-            <span className="text-gray-400">
-              {lang === 'ru' ? 'Босс' : 'Boss'} #{bossState.bossIndex}/{bossState.totalBosses}
+        {/* Row 2: Online + Version */}
+        <div className="flex items-center gap-2 px-1 mb-1 text-[9px]">
+          <div className="flex items-center gap-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-gray-500">
+              {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-gray-500">
-                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-              </span>
-            </div>
-            <span
-              className="text-gray-600 cursor-pointer hover:text-gray-400"
-              onClick={() => setShowDebug(true)}
-            >
-              {APP_VERSION}
-            </span>
-          </div>
+          <span
+            className="text-gray-600 cursor-pointer hover:text-gray-400"
+            onClick={() => setShowDebug(true)}
+          >
+            {APP_VERSION}
+          </span>
         </div>
 
-        {/* Row 3: Resource Bars (70%) + Buffs + Tasks Button */}
+        {/* Row 3: Boss Progress */}
+        <div className="flex items-center gap-1.5 px-1 mb-1.5 text-[10px]">
+          <span className="text-amber-500/80">⚔️</span>
+          <span className="text-gray-300 font-medium">
+            {lang === 'ru' ? 'Босс' : 'Boss'} {bossState.bossIndex} / {bossState.totalBosses}
+          </span>
+        </div>
+
+        {/* Row 4: Resource Bars (55%) + Buffs + Tasks Button */}
         <div className="flex items-center gap-2">
-          {/* Bars Column (narrowed to ~70%) */}
-          <div className="w-[65%] flex flex-col gap-1">
+          {/* Bars Column (narrowed to ~55%) */}
+          <div className="w-[55%] flex flex-col gap-1">
             {/* Stamina Bar (Yellow, top) */}
             <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-yellow-500/30 shadow-inner">
               <div
@@ -1078,7 +1078,7 @@ export default function PhaserGame() {
       {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, premium design) */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
-        className="absolute top-24 left-0 right-0 z-10 flex flex-col items-center px-4"
+        className="absolute top-32 left-0 right-0 z-10 flex flex-col items-center px-4"
         onClick={handleHeaderTap}
       >
         {bossState.hp <= 0 && respawnCountdown > 0 ? (
@@ -1210,7 +1210,7 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       <button
         onClick={() => setShowForge(true)}
-        className="absolute top-56 left-2 z-10 w-12 h-12 bg-gradient-to-b from-amber-700/60 to-amber-900/80
+        className="absolute top-64 left-2 z-10 w-12 h-12 bg-gradient-to-b from-amber-700/60 to-amber-900/80
                    rounded-lg border border-amber-600/50 flex flex-col items-center justify-center
                    active:scale-90 transition-all hover:border-amber-500/70 shadow-lg shadow-amber-900/30"
       >
@@ -1221,7 +1221,7 @@ export default function PhaserGame() {
       </button>
       <button
         onClick={() => setShowEnchant(true)}
-        className="absolute top-[16.5rem] left-2 z-10 w-12 h-12 bg-gradient-to-b from-purple-700/60 to-purple-900/80
+        className="absolute top-[19rem] left-2 z-10 w-12 h-12 bg-gradient-to-b from-purple-700/60 to-purple-900/80
                    rounded-lg border border-purple-600/50 flex flex-col items-center justify-center
                    active:scale-90 transition-all hover:border-purple-500/70 shadow-lg shadow-purple-900/30"
       >
@@ -1234,7 +1234,7 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DAMAGE FEED - Right side, premium combat log */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-56 right-2 z-10 w-28">
+      <div className="absolute top-64 right-2 z-10 w-28">
         {damageFeed.length > 0 && (
           <div className="bg-black/50 rounded-lg border border-gray-800/50 overflow-hidden">
             <div className="px-1.5 py-0.5 bg-gray-900/80 border-b border-gray-800/50">
@@ -1346,7 +1346,7 @@ export default function PhaserGame() {
                 onClick={() => useSkill(skill)}
                 disabled={!canUse}
                 className={`
-                  relative w-14 h-14 rounded-lg ${skill.color}
+                  relative w-12 h-12 rounded-lg ${skill.color}
                   ${!isUnlocked
                     ? 'bg-gradient-to-b from-gray-900/80 to-black/90 opacity-40'
                     : canUse
@@ -1357,7 +1357,7 @@ export default function PhaserGame() {
                   ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
                 `}
               >
-                <span className="text-lg drop-shadow-lg">{skill.icon}</span>
+                <span className="text-base drop-shadow-lg">{skill.icon}</span>
                 {/* MP Cost - always visible when unlocked */}
                 {isUnlocked && (
                   <span className={`text-[8px] font-bold ${
@@ -1404,7 +1404,7 @@ export default function PhaserGame() {
           <button
             onClick={toggleAutoEther}
             className={`
-              relative w-14 h-14 rounded-lg
+              relative w-12 h-12 rounded-lg
               ${autoUseEther && playerState.ether > 0
                 ? 'bg-gradient-to-b from-cyan-600/70 to-cyan-900/90 border-2 border-cyan-400/60 shadow-[0_0_14px_rgba(34,211,238,0.4)]'
                 : playerState.ether > 0
@@ -1414,7 +1414,7 @@ export default function PhaserGame() {
               transition-all active:scale-95
             `}
           >
-            <span className="text-2xl drop-shadow-lg">✨</span>
+            <span className="text-xl drop-shadow-lg">✨</span>
             {/* Ether count badge */}
             <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-b from-purple-600 to-purple-800 px-1.5 py-0.5 rounded-md border border-purple-400/50 shadow-md">
               <span className="text-[9px] font-bold text-white">
