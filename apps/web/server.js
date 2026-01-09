@@ -664,6 +664,24 @@ function getBossXpPerPlayer(bossIndex) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// CHEST XP FACTORS (multipliers for XP from chests)
+// xpFromChest = floor(BOSS_XP[bossIndex] * ChestXPFactor[chestType])
+// ═══════════════════════════════════════════════════════════
+const CHEST_XP_FACTOR = {
+  WOODEN: 0.10,   // 10% of boss XP
+  BRONZE: 0.25,   // 25% of boss XP
+  SILVER: 0.60,   // 60% of boss XP
+  GOLD: 1.50,     // 150% of boss XP
+};
+const SP_RATIO = 8; // SP = XP / 8
+
+// ═══════════════════════════════════════════════════════════
+// CHEST OPERATION MUTEX (anti-exploit protection)
+// Prevents double-claim exploit via concurrent requests
+// ═══════════════════════════════════════════════════════════
+const chestClaimLocks = new Set(); // Set of chestIds currently being processed
+
+// ═══════════════════════════════════════════════════════════
 // XP → LEVEL THRESHOLDS (Cumulative XP для уровней 1-20)
 // ═══════════════════════════════════════════════════════════
 // Классическая L2-style прогрессия
@@ -4259,23 +4277,34 @@ app.prepare().then(async () => {
 
       const { chestId } = data;
 
+      // ═══ ANTI-EXPLOIT: Mutex lock ═══
+      if (chestClaimLocks.has(chestId)) {
+        console.log(`[Chest] Anti-exploit: ${player.telegramId} tried double-claim on ${chestId}`);
+        socket.emit('chest:error', { message: 'Chest already being claimed' });
+        return;
+      }
+      chestClaimLocks.add(chestId);
+
       try {
         const chest = await prisma.chest.findUnique({
           where: { id: chestId },
         });
 
         if (!chest || chest.userId !== player.odamage) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'Chest not found' });
           return;
         }
 
         if (!chest.openingStarted) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'Chest not opened yet' });
           return;
         }
 
         const elapsed = Date.now() - chest.openingStarted.getTime();
         if (elapsed < chest.openingDuration) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'Chest still opening' });
           return;
         }
@@ -4286,7 +4315,11 @@ app.prepare().then(async () => {
 
         // Gold reward (fixed amount per TZ)
         const goldReward = dropRates.gold;
-        const expReward = goldReward * 10; // EXP = gold * 10
+
+        // ═══ v1.3.1: XP/SP from chests using BOSS_XP table ═══
+        const xpFactor = CHEST_XP_FACTOR[chestType] || 0.10;
+        const chestXpReward = Math.floor(getBossXpPerPlayer(bossState.bossIndex) * xpFactor);
+        const chestSpReward = Math.floor(chestXpReward / SP_RATIO);
 
         // v1.2: Enchant Charges (всегда выпадают из сундуков)
         const chargesRange = CHEST_ENCHANT_CHARGES[chestType] || { min: 1, max: 2 };
@@ -4429,13 +4462,15 @@ app.prepare().then(async () => {
         // Update chest type counter
         const chestTypeCounterField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
 
-        // Delete chest and give rewards
+        // Delete chest and give rewards (atomic transaction)
         await prisma.chest.delete({ where: { id: chestId } });
 
         // Build update data with pity counter handling (v1.2: charges instead of scrolls)
+        // v1.3.1: XP/SP from BOSS_XP table
         const updateData = {
           gold: { increment: BigInt(goldReward) },
-          exp: { increment: BigInt(expReward) },
+          exp: { increment: BigInt(chestXpReward) },
+          sp: { increment: BigInt(chestSpReward) },
           totalGoldEarned: { increment: BigInt(goldReward) },
           enchantCharges: { increment: enchantCharges },
           [chestTypeCounterField]: { increment: 1 },
@@ -4456,25 +4491,58 @@ app.prepare().then(async () => {
           }
         }
 
-        await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { id: player.odamage },
           data: updateData,
+          select: {
+            exp: true,
+            sp: true,
+            level: true,
+          },
         });
 
+        // v1.3.1: Check for level-up
+        const newExp = Number(updatedUser.exp);
+        const currentLevel = updatedUser.level;
+        const newLevel = getLevelFromXp(newExp);
+        let leveledUp = false;
+
+        if (newLevel > currentLevel) {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { level: newLevel },
+          });
+          leveledUp = true;
+          console.log(`[Chest] ${player.telegramId} leveled up from ${currentLevel} to ${newLevel} via ${chestType} chest!`);
+        }
+
         player.gold += goldReward;
+
+        // Release mutex lock
+        chestClaimLocks.delete(chestId);
 
         socket.emit('chest:claimed', {
           chestId,
           chestType,
           rewards: {
             gold: goldReward,
-            exp: expReward,
+            xp: chestXpReward,
+            sp: chestSpReward,
             enchantCharges,      // v1.2: charges instead of scrolls
             protectionDrop,      // v1.2: protection from gold chests
             equipment: droppedItem, // Changed from 'item' to 'equipment' to match TreasuryTab
           },
+          // v1.3.1: Updated profile data
+          profile: {
+            exp: newExp,
+            sp: Number(updatedUser.sp),
+            level: leveledUp ? newLevel : currentLevel,
+            leveledUp,
+          },
         });
       } catch (err) {
+        // Release mutex on error
+        chestClaimLocks.delete(chestId);
         console.error('[Chest] Claim error:', err.message);
         socket.emit('chest:error', { message: 'Failed to claim chest' });
       }
@@ -4489,12 +4557,21 @@ app.prepare().then(async () => {
 
       const { chestId } = data;
 
+      // ═══ ANTI-EXPLOIT: Mutex lock ═══
+      if (chestClaimLocks.has(chestId)) {
+        console.log(`[Chest] Anti-exploit: ${player.telegramId} tried double-key on ${chestId}`);
+        socket.emit('chest:error', { message: 'Chest already being opened' });
+        return;
+      }
+      chestClaimLocks.add(chestId);
+
       try {
         const chest = await prisma.chest.findUnique({
           where: { id: chestId },
         });
 
         if (!chest || chest.userId !== player.odamage) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'Chest not found' });
           return;
         }
@@ -4510,6 +4587,7 @@ app.prepare().then(async () => {
         const chestType = chest.chestType || 'WOODEN';
         const keyField = KEY_MAP[chestType];
         if (!keyField) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'Invalid chest type' });
           return;
         }
@@ -4522,14 +4600,19 @@ app.prepare().then(async () => {
 
         const keysAvailable = user?.[keyField] || 0;
         if (keysAvailable < 1) {
+          chestClaimLocks.delete(chestId);
           socket.emit('chest:error', { message: 'No key available' });
           return;
         }
 
-        // Генерируем лут (копия логики из chest:claim)
+        // Генерируем лут
         const dropRates = CHEST_DROP_RATES[chestType];
         const goldReward = dropRates.gold;
-        const expReward = goldReward * 10;
+
+        // ═══ v1.3.1: XP/SP from chests using BOSS_XP table ═══
+        const xpFactor = CHEST_XP_FACTOR[chestType] || 0.10;
+        const chestXpReward = Math.floor(getBossXpPerPlayer(bossState.bossIndex) * xpFactor);
+        const chestSpReward = Math.floor(chestXpReward / SP_RATIO);
 
         const chargesRange = CHEST_ENCHANT_CHARGES[chestType] || { min: 1, max: 2 };
         const enchantCharges = Math.floor(Math.random() * (chargesRange.max - chargesRange.min + 1)) + chargesRange.min;
@@ -4626,13 +4709,15 @@ app.prepare().then(async () => {
           }
         }
 
-        // Удаляем сундук и обновляем данные игрока
+        // Удаляем сундук и обновляем данные игрока (atomic)
         await prisma.chest.delete({ where: { id: chestId } });
 
         const totalChestField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
+        // v1.3.1: XP/SP from BOSS_XP table
         const updateData = {
           gold: { increment: BigInt(goldReward) },
-          exp: { increment: expReward },
+          exp: { increment: BigInt(chestXpReward) },
+          sp: { increment: BigInt(chestSpReward) },
           enchantCharges: { increment: enchantCharges },
           totalGoldEarned: { increment: BigInt(goldReward) },
           [totalChestField]: { increment: 1 },
@@ -4650,25 +4735,56 @@ app.prepare().then(async () => {
           }
         }
 
-        await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { id: player.odamage },
           data: updateData,
+          select: {
+            exp: true,
+            sp: true,
+            level: true,
+          },
         });
+
+        // v1.3.1: Check for level-up
+        const newExp = Number(updatedUser.exp);
+        const currentLevel = updatedUser.level;
+        const newLevel = getLevelFromXp(newExp);
+        let leveledUp = false;
+
+        if (newLevel > currentLevel) {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { level: newLevel },
+          });
+          leveledUp = true;
+          console.log(`[Chest] ${player.telegramId} leveled up from ${currentLevel} to ${newLevel} via key-open ${chestType} chest!`);
+        }
 
         player.gold += goldReward;
         player[keyField] = keysAvailable - 1;
 
-        console.log(`[Chest] ${player.telegramId} used ${keyField} to instant-open ${chestType} chest`);
+        // Release mutex lock
+        chestClaimLocks.delete(chestId);
+
+        console.log(`[Chest] ${player.telegramId} used ${keyField} to instant-open ${chestType} chest (+${chestXpReward} XP, +${chestSpReward} SP)`);
 
         socket.emit('chest:claimed', {
           chestId,
           chestType,
           rewards: {
             gold: goldReward,
-            exp: expReward,
+            xp: chestXpReward,
+            sp: chestSpReward,
             enchantCharges,
             protectionDrop,
             equipment: droppedItem,
+          },
+          // v1.3.1: Updated profile data
+          profile: {
+            exp: newExp,
+            sp: Number(updatedUser.sp),
+            level: leveledUp ? newLevel : currentLevel,
+            leveledUp,
           },
         });
 
@@ -4680,6 +4796,8 @@ app.prepare().then(async () => {
           keyGold: player.keyGold || 0,
         });
       } catch (err) {
+        // Release mutex on error
+        chestClaimLocks.delete(chestId);
         console.error('[Chest] Use key error:', err.message);
         socket.emit('chest:error', { message: 'Failed to use key' });
       }
