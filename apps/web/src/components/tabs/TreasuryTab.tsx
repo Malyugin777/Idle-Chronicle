@@ -323,7 +323,24 @@ export default function TreasuryTab() {
   // TZ Этап 2: Claim pending reward
   const claimReward = (reward: PendingReward) => {
     if (claimingRewardId) return;
+
+    // Check free slots
+    const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
+    const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
+
+    if (totalChests > 0 && freeSlots === 0) {
+      // No slots - show error but don't lock button
+      console.warn('[Rewards] No free chest slots');
+      return;
+    }
+
     setClaimingRewardId(reward.id);
+
+    // Safety timeout - reset after 10s if no response
+    setTimeout(() => {
+      setClaimingRewardId(prev => prev === reward.id ? null : prev);
+    }, 10000);
+
     // Send take request with all available chests
     getSocket().emit('rewards:claim', {
       rewardId: reward.id,
@@ -484,6 +501,8 @@ export default function TreasuryTab() {
             {pendingRewards.map((reward) => {
               const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
               const isClaiming = claimingRewardId === reward.id;
+              const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
+              const noSlots = totalChests > 0 && freeSlots === 0;
 
               return (
                 <div
@@ -507,14 +526,14 @@ export default function TreasuryTab() {
                     </div>
                     <button
                       onClick={() => claimReward(reward)}
-                      disabled={isClaiming}
+                      disabled={isClaiming || noSlots}
                       className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
-                        isClaiming
+                        isClaiming || noSlots
                           ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                           : 'bg-l2-gold text-black hover:brightness-110 active:scale-95'
                       }`}
                     >
-                      {isClaiming ? '...' : (lang === 'ru' ? 'Забрать' : 'Claim')}
+                      {isClaiming ? '...' : noSlots ? (lang === 'ru' ? 'Нет слотов' : 'No slots') : (lang === 'ru' ? 'Забрать' : 'Claim')}
                     </button>
                   </div>
 
