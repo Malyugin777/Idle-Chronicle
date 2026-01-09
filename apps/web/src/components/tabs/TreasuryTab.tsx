@@ -321,10 +321,19 @@ export default function TreasuryTab() {
   };
 
   // TZ Этап 2: Claim pending reward
-  const claimReward = (rewardId: string) => {
+  const claimReward = (reward: PendingReward) => {
     if (claimingRewardId) return;
-    setClaimingRewardId(rewardId);
-    getSocket().emit('rewards:claim', { rewardId });
+    setClaimingRewardId(reward.id);
+    // Send take request with all available chests
+    getSocket().emit('rewards:claim', {
+      rewardId: reward.id,
+      take: {
+        wooden: reward.chestsWooden,
+        bronze: reward.chestsBronze,
+        silver: reward.chestsSilver,
+        gold: reward.chestsGold,
+      },
+    });
   };
 
   // Use key to instantly open chest
@@ -497,7 +506,7 @@ export default function TreasuryTab() {
                       </div>
                     </div>
                     <button
-                      onClick={() => claimReward(reward.id)}
+                      onClick={() => claimReward(reward)}
                       disabled={isClaiming}
                       className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
                         isClaiming
