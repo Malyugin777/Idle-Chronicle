@@ -258,6 +258,74 @@ function calculateEquipmentBonuses(heroState: HeroState): { pAtk: number; pDef: 
   return { pAtk, pDef, mAtk, mDef };
 }
 
+// Debug breakdown for stats
+interface StatsBreakdown {
+  base: number;
+  equipment: number;
+  enchant: number;
+  setBonus: number;
+  total: number;
+  items: Array<{ name: string; value: number; enchant?: number }>;
+  sets: Array<{ name: string; bonus: string }>;
+}
+
+function calculateStatsBreakdown(heroState: HeroState, stat: 'pAtk' | 'pDef'): StatsBreakdown {
+  const base = heroState.baseStats?.[stat] || (stat === 'pAtk' ? 10 : 0);
+  let equipment = 0;
+  let enchant = 0;
+  const items: Array<{ name: string; value: number; enchant?: number }> = [];
+
+  // Calculate equipment contributions
+  Object.values(heroState.equipment).forEach(item => {
+    if (!item?.stats) return;
+    const statKey = stat === 'pAtk' ? 'pAtkFlat' : 'pDefFlat';
+    const baseValue = item.stats[statKey] || 0;
+    if (baseValue > 0) {
+      // Enchant bonus: +3% per level for weapon/armor
+      const enchantBonus = item.enchantLevel ? Math.floor(baseValue * item.enchantLevel * 0.03) : 0;
+      equipment += baseValue;
+      enchant += enchantBonus;
+      items.push({
+        name: item.name,
+        value: baseValue,
+        enchant: enchantBonus > 0 ? enchantBonus : undefined,
+      });
+    }
+  });
+
+  // Calculate set bonuses
+  const setCounts = countSetPieces(heroState.equipment);
+  let setBonus = 0;
+  const sets: Array<{ name: string; bonus: string }> = [];
+  const subtotal = base + equipment + enchant;
+
+  for (const [setId, count] of Object.entries(setCounts)) {
+    const set = SETS[setId];
+    if (!set) continue;
+    for (const bonus of getActiveSetBonuses(setId, count)) {
+      const pctKey = stat === 'pAtk' ? 'pAtk' : 'pDef';
+      if (bonus.bonusPct?.[pctKey]) {
+        const bonusValue = Math.floor(subtotal * bonus.bonusPct[pctKey]);
+        setBonus += bonusValue;
+        sets.push({
+          name: set.nameRu,
+          bonus: `${count}/${set.totalPieces}: +${(bonus.bonusPct[pctKey] * 100).toFixed(0)}% (+${bonusValue})`,
+        });
+      }
+    }
+  }
+
+  return {
+    base,
+    equipment,
+    enchant,
+    setBonus,
+    total: base + equipment + enchant + setBonus,
+    items,
+    sets,
+  };
+}
+
 function recalculateDerivedStats(heroState: HeroState): HeroState['derivedStats'] {
   const base = heroState.baseStats;
   if (!base) return { pAtk: 10, pDef: 0, mAtk: 10, mDef: 0, critChance: 0.05, attackSpeed: 300 };
@@ -486,17 +554,22 @@ interface StatsPopupProps {
   stats: PlayerStats;
   derived: HeroState['derivedStats'];
   equipBonus: { pAtk: number; pDef: number; mAtk: number; mDef: number };
+  heroState: HeroState;
   onClose: () => void;
   lang: Language;
 }
 
-function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupProps) {
+function StatsPopup({ stats, derived, equipBonus, heroState, onClose, lang }: StatsPopupProps) {
   const [selectedStat, setSelectedStat] = useState<string | null>(null);
+  const [selectedCombatStat, setSelectedCombatStat] = useState<'pAtk' | 'pDef' | null>(null);
+
+  // Calculate breakdown when combat stat is selected
+  const breakdown = selectedCombatStat ? calculateStatsBreakdown(heroState, selectedCombatStat) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div
-        className="bg-l2-panel rounded-lg w-full max-w-sm overflow-hidden"
+        className="bg-l2-panel rounded-lg w-full max-w-sm overflow-hidden max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -509,17 +582,23 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
 
         <div className="p-4">
           {/* Combat Stats Grid */}
-          <p className="text-xs text-gray-500 mb-2">{lang === 'ru' ? 'Боевые характеристики' : 'Combat Stats'}</p>
+          <p className="text-xs text-gray-500 mb-2">{lang === 'ru' ? 'Боевые характеристики (тап = дебаг)' : 'Combat Stats (tap = debug)'}</p>
           <div className="grid grid-cols-3 gap-2 mb-4">
             {[
-              { label: lang === 'ru' ? 'АТК' : 'ATK', value: derived.pAtk, bonus: equipBonus.pAtk, icon: '⚔️', text: 'text-red-400' },
-              { label: lang === 'ru' ? 'ЗАЩ' : 'DEF', value: derived.pDef, bonus: equipBonus.pDef, icon: '🛡️', text: 'text-blue-400' },
-              { label: lang === 'ru' ? 'КРИТ' : 'CRIT', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', text: 'text-yellow-400' },
-              { label: lang === 'ru' ? 'М.АТК' : 'M.ATK', value: derived.mAtk, bonus: equipBonus.mAtk, icon: '✨', text: 'text-purple-400' },
-              { label: lang === 'ru' ? 'М.ЗАЩ' : 'M.DEF', value: derived.mDef, bonus: equipBonus.mDef, icon: '🔮', text: 'text-cyan-400' },
-              { label: lang === 'ru' ? 'СКР' : 'SPD', value: derived.attackSpeed, icon: '⚡', text: 'text-green-400' },
+              { key: 'pAtk', label: lang === 'ru' ? 'АТК' : 'ATK', value: derived.pAtk, bonus: equipBonus.pAtk, icon: '⚔️', text: 'text-red-400' },
+              { key: 'pDef', label: lang === 'ru' ? 'ЗАЩ' : 'DEF', value: derived.pDef, bonus: equipBonus.pDef, icon: '🛡️', text: 'text-blue-400' },
+              { key: null, label: lang === 'ru' ? 'КРИТ' : 'CRIT', value: `${(derived.critChance * 100).toFixed(0)}%`, icon: '💥', text: 'text-yellow-400' },
+              { key: null, label: lang === 'ru' ? 'М.АТК' : 'M.ATK', value: derived.mAtk, bonus: equipBonus.mAtk, icon: '✨', text: 'text-purple-400' },
+              { key: null, label: lang === 'ru' ? 'М.ЗАЩ' : 'M.DEF', value: derived.mDef, bonus: equipBonus.mDef, icon: '🔮', text: 'text-cyan-400' },
+              { key: null, label: lang === 'ru' ? 'СКР' : 'SPD', value: derived.attackSpeed, icon: '⚡', text: 'text-green-400' },
             ].map((stat, idx) => (
-              <div key={idx} className="bg-black/30 rounded-lg p-2 text-center">
+              <button
+                key={idx}
+                onClick={() => stat.key && setSelectedCombatStat(selectedCombatStat === stat.key ? null : stat.key as 'pAtk' | 'pDef')}
+                className={`bg-black/30 rounded-lg p-2 text-center transition-all ${
+                  stat.key && selectedCombatStat === stat.key ? 'ring-2 ring-l2-gold' : ''
+                } ${stat.key ? 'cursor-pointer hover:bg-black/50' : ''}`}
+              >
                 <div className="text-[10px] text-gray-500 mb-0.5">{stat.icon} {stat.label}</div>
                 <div className={`text-lg font-bold ${stat.text}`}>
                   {stat.value}
@@ -527,9 +606,84 @@ function StatsPopup({ stats, derived, equipBonus, onClose, lang }: StatsPopupPro
                     <span className="text-[10px] text-green-400 ml-1">(+{stat.bonus})</span>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
+
+          {/* Debug Breakdown */}
+          {breakdown && (
+            <div className="mb-4 p-3 bg-gradient-to-b from-gray-800 to-gray-900 rounded-lg border border-l2-gold/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-l2-gold font-bold">
+                  🔍 {selectedCombatStat === 'pAtk' ? (lang === 'ru' ? 'Разбор АТК' : 'ATK Breakdown') : (lang === 'ru' ? 'Разбор ЗАЩ' : 'DEF Breakdown')}
+                </span>
+                <span className="text-lg font-bold text-white">{breakdown.total}</span>
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                {/* Base */}
+                <div className="flex justify-between">
+                  <span className="text-gray-400">{lang === 'ru' ? 'База (сила)' : 'Base (STR)'}</span>
+                  <span className="text-white">{breakdown.base}</span>
+                </div>
+
+                {/* Equipment */}
+                {breakdown.equipment > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">{lang === 'ru' ? 'Экипировка' : 'Equipment'}</span>
+                    <span className="text-green-400">+{breakdown.equipment}</span>
+                  </div>
+                )}
+
+                {/* Enchant */}
+                {breakdown.enchant > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">{lang === 'ru' ? 'Заточка' : 'Enchant'}</span>
+                    <span className="text-amber-400">+{breakdown.enchant}</span>
+                  </div>
+                )}
+
+                {/* Set bonuses */}
+                {breakdown.setBonus > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">{lang === 'ru' ? 'Сет бонус' : 'Set Bonus'}</span>
+                    <span className="text-purple-400">+{breakdown.setBonus}</span>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className="border-t border-gray-700 my-2" />
+
+                {/* Item details */}
+                {breakdown.items.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500">{lang === 'ru' ? 'Предметы:' : 'Items:'}</span>
+                    {breakdown.items.map((item, i) => (
+                      <div key={i} className="flex justify-between text-[10px] pl-2">
+                        <span className="text-gray-400 truncate max-w-[150px]">{item.name}</span>
+                        <span className="text-green-400">
+                          +{item.value}
+                          {item.enchant && <span className="text-amber-400 ml-1">(+{item.enchant})</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Set details */}
+                {breakdown.sets.length > 0 && (
+                  <div className="space-y-1 mt-2">
+                    <span className="text-[10px] text-gray-500">{lang === 'ru' ? 'Сеты:' : 'Sets:'}</span>
+                    {breakdown.sets.map((set, i) => (
+                      <div key={i} className="text-[10px] pl-2 text-purple-400">
+                        {set.name} {set.bonus}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Base Attributes */}
           <p className="text-xs text-gray-500 mb-2">{lang === 'ru' ? 'Атрибуты (тап = инфо)' : 'Attributes (tap = info)'}</p>
@@ -1093,6 +1247,7 @@ export default function CharacterTab() {
           stats={stats}
           derived={derived}
           equipBonus={equipBonus}
+          heroState={heroState}
           onClose={() => setShowStatsPopup(false)}
           lang={lang}
         />

@@ -4299,10 +4299,10 @@ app.prepare().then(async () => {
 
         const totalChestField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
         const updateData = {
-          gold: { increment: goldReward },
+          gold: { increment: BigInt(goldReward) },
           exp: { increment: expReward },
           enchantCharges: { increment: enchantCharges },
-          totalGoldEarned: { increment: goldReward },
+          totalGoldEarned: { increment: BigInt(goldReward) },
           [totalChestField]: { increment: 1 },
           [keyField]: { decrement: 1 }, // Отнимаем ключ
         };
