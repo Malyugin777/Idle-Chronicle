@@ -1192,7 +1192,11 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       for (const [sid, p] of onlineUsers.entries()) {
         if (p.odamage === entry.odamage) {
           p.gold += goldReward;
+          // Reset session counters for new boss
           p.sessionDamage = 0;
+          p.sessionClicks = 0;
+          p.savedSessionDamage = 0;
+          p.savedSessionClicks = 0;
           // Reset activity for next boss
           p.activityTime = 0;
           p.isEligible = false;
@@ -2746,9 +2750,10 @@ app.prepare().then(async () => {
       isFirstLogin: true,
       // Stats
       gold: 0,
-      sessionDamage: 0,
+      sessionDamage: 0,      // Накопленный урон за босса (для отображения)
       sessionClicks: 0,
       sessionCrits: 0,
+      savedSessionDamage: 0, // Уже сохранённый в БД (для delta в auto-save)
       // Ether - use undefined so DB values are loaded on auth
       autoEther: false,
       ether: undefined,      // FIX: was 100, caused DB value to be ignored
@@ -6640,7 +6645,11 @@ app.prepare().then(async () => {
   // Auto-save player data every 30 seconds
   setInterval(async () => {
     for (const [socketId, player] of onlineUsers.entries()) {
-      if (player.odamage && player.sessionDamage > 0) {
+      // Сохраняем только дельту с прошлого сохранения
+      const damageDelta = player.sessionDamage - (player.savedSessionDamage || 0);
+      const clicksDelta = player.sessionClicks - (player.savedSessionClicks || 0);
+
+      if (player.odamage && damageDelta > 0) {
         try {
           await prisma.user.update({
             where: { id: player.odamage },
@@ -6650,14 +6659,14 @@ app.prepare().then(async () => {
               stamina: Math.floor(player.stamina),
               exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
               mana: Math.floor(player.mana),
-              totalDamage: { increment: BigInt(player.sessionDamage) },
-              totalClicks: { increment: BigInt(player.sessionClicks) },
+              totalDamage: { increment: BigInt(damageDelta) },
+              totalClicks: { increment: BigInt(clicksDelta) },
             },
           });
-          // Reset session counters after save
-          player.sessionDamage = 0;
-          player.sessionClicks = 0;
-          console.log(`[AutoSave] Saved user ${player.odamage}`);
+          // Запоминаем сколько уже сохранили (НЕ сбрасываем sessionDamage!)
+          player.savedSessionDamage = player.sessionDamage;
+          player.savedSessionClicks = player.sessionClicks;
+          console.log(`[AutoSave] Saved user ${player.odamage}: delta=${damageDelta}`);
         } catch (e) {
           console.error(`[AutoSave] Error for ${player.odamage}:`, e.message);
         }
