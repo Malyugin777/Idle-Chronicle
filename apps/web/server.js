@@ -270,13 +270,14 @@ async function loadBossState(prisma) {
     console.log(`[Boss] HP Assignment: Using ${bossRespawnAt ? 'maxHp (respawn phase)' : 'savedHp'} = ${finalHp}`);
 
     // ВСЕГДА используем данные из шаблона по currentBossIndex для синхронизации
+    const now = Date.now();
     bossState = {
       id: `default-${state.currentBossIndex}`,
       name: boss.name,           // Из шаблона (не из БД!)
       nameRu: boss.nameRu || boss.name,
       title: 'World Boss',
-      maxHp: Number(state.bossMaxHp),
-      currentHp: finalHp,  // Uses savedHp or maxHp based on respawn state
+      maxHp: Number(state.bossMaxHp) || boss.hp || 500000,
+      currentHp: finalHp || 0,  // Uses savedHp or maxHp based on respawn state
       defense: boss.defense,
       thornsDamage: boss.thornsDamage || 0,
       ragePhase: 0,
@@ -289,6 +290,14 @@ async function loadBossState(prisma) {
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
       chestsReward: boss.chestsReward || 10,
+      // v1.3.0: Dampening state (initialize with defaults when loading)
+      bossStartAt: now,
+      bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
+      bossDamageMultiplier: 1.0,
+      dpsEma: 0,
+      lastDpsSampleAt: now,
+      lastTotalDamageSample: 0,
+      totalDamageDealt: 0,
     };
 
     // Load session leaderboard (with backward compatibility + PS fields)
@@ -3110,20 +3119,21 @@ app.prepare().then(async () => {
 
     // Send initial state (with all fields including image)
     // FIX: Use bossState.image directly (set correctly in respawnBoss)
+    // FIX: Ensure no null values are sent to client
     socket.emit('boss:state', {
-      id: bossState.id,
-      name: bossState.name,
-      nameRu: bossState.nameRu,
-      title: bossState.title,
-      hp: bossState.currentHp,
-      maxHp: bossState.maxHp,
-      defense: bossState.defense, // From bossState (set in respawnBoss)
-      ragePhase: bossState.ragePhase,
+      id: bossState.id || 'default-0',
+      name: bossState.name || 'Boss',
+      nameRu: bossState.nameRu || bossState.name || 'Boss',
+      title: bossState.title || 'World Boss',
+      hp: bossState.currentHp ?? 0,
+      maxHp: bossState.maxHp ?? 500000,
+      defense: bossState.defense ?? 0,
+      ragePhase: bossState.ragePhase ?? 0,
       playersOnline: onlineUsers.size,
-      icon: bossState.icon,
-      image: bossState.image, // FIX: Use bossState.image directly
-      bossIndex: bossState.bossIndex,
-      totalBosses: bossState.totalBosses,
+      icon: bossState.icon || '👹',
+      image: bossState.image || '/assets/bosses/boss_single.png',
+      bossIndex: bossState.bossIndex ?? 1,
+      totalBosses: bossState.totalBosses ?? 100,
       // Respawn timer info
       isRespawning: bossRespawnAt !== null,
       respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
@@ -6989,26 +6999,26 @@ app.prepare().then(async () => {
 
   // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {
-    // FIX: Use bossState.image directly (set correctly in respawnBoss)
+    // FIX: Ensure no null values are sent to client
     io.emit('boss:state', {
-      id: bossState.id,
-      name: bossState.name,
-      nameRu: bossState.nameRu,
-      title: bossState.title,
-      hp: bossState.currentHp,
-      maxHp: bossState.maxHp,
-      defense: bossState.defense, // FIX: From bossState
-      ragePhase: bossState.ragePhase,
-      icon: bossState.icon,
-      image: bossState.image, // FIX: From bossState directly
-      bossIndex: bossState.bossIndex,
-      totalBosses: bossState.totalBosses,
+      id: bossState.id || 'default-0',
+      name: bossState.name || 'Boss',
+      nameRu: bossState.nameRu || bossState.name || 'Boss',
+      title: bossState.title || 'World Boss',
+      hp: bossState.currentHp ?? 0,
+      maxHp: bossState.maxHp ?? 500000,
+      defense: bossState.defense ?? 0,
+      ragePhase: bossState.ragePhase ?? 0,
+      icon: bossState.icon || '👹',
+      image: bossState.image || '/assets/bosses/boss_single.png',
+      bossIndex: bossState.bossIndex ?? 1,
+      totalBosses: bossState.totalBosses ?? 100,
       playersOnline: onlineUsers.size,
       prizePool: {
-        ton: bossState.tonReward,
-        chests: bossState.chestsReward,
-        exp: bossState.expReward,
-        gold: bossState.goldReward,
+        ton: bossState.tonReward ?? 10,
+        chests: bossState.chestsReward ?? 10,
+        exp: bossState.expReward ?? 0,
+        gold: bossState.goldReward ?? 0,
       },
       // Respawn timer info
       isRespawning: bossRespawnAt !== null,
