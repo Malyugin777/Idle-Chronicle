@@ -1,147 +1,169 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Sparkles, Shield, AlertTriangle, Zap } from 'lucide-react';
+import { X, Sparkles, AlertTriangle, RefreshCw, Trash2, Shield, Package, Check } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
   InventoryItem,
-  getEnchantableItems,
-  getEnchantChance,
-  getEnchantCost,
-  getEnchantMultiplier,
-  isSafeEnchant,
-  applyEnchantToStats,
-  MAX_ENCHANT_LEVEL,
+  PlayerResources,
+  getRestoreCost,
+  getBrokenTimeRemaining,
+  formatBrokenTimer,
   RARITY_COLORS,
   RARITY_BG_COLORS,
-  RARITY_NAMES,
 } from '@/lib/craftingSystem';
 
 // ═══════════════════════════════════════════════════════════
-// TYPES v1.2
+// TYPES
 // ═══════════════════════════════════════════════════════════
 
 interface EnchantModalProps {
   isOpen: boolean;
   onClose: () => void;
-  inventory: InventoryItem[];
-  enchantCharges: number;      // v1.2: charges instead of scrolls
-  protectionCharges: number;   // v1.2: charges instead of scrolls
-  gold: number;
-  enchantDust: number;
 }
 
-type EnchantStep = 'select' | 'enchant' | 'result';
+interface EnchantState {
+  inventory: InventoryItem[];
+  brokenItems: InventoryItem[];
+  resources: PlayerResources;
+}
 
-interface EnchantResultData {
+type EnchantTab = 'enchant' | 'broken';
+
+// Enchant result from server
+interface EnchantResult {
   success: boolean;
-  itemBroken: boolean;        // v1.2: broken instead of destroyed
+  itemBroken: boolean;
   newEnchantLevel: number;
   itemName: string;
   itemIcon: string;
   brokenUntil?: string | null;
 }
 
+// Enchant chances by target level (from server)
+const ENCHANT_CHANCES: Record<number, number> = {
+  4: 0.66, 5: 0.60, 6: 0.55, 7: 0.50, 8: 0.45,
+  9: 0.40, 10: 0.35, 11: 0.30, 12: 0.27, 13: 0.24,
+  14: 0.21, 15: 0.18, 16: 0.15, 17: 0.12, 18: 0.10,
+  19: 0.08, 20: 0.05,
+};
+
 // ═══════════════════════════════════════════════════════════
-// ENCHANT MODAL v1.2
+// ENCHANT MODAL v2.0 - Risky/Emotional operations (Enchant + Broken)
 // ═══════════════════════════════════════════════════════════
 
-export default function EnchantModal({
-  isOpen,
-  onClose,
-  inventory,
-  enchantCharges,
-  protectionCharges,
-  gold,
-  enchantDust,
-}: EnchantModalProps) {
+export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
   const [lang] = useState<Language>(() => detectLanguage());
-  const [step, setStep] = useState<EnchantStep>('select');
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [useProtection, setUseProtection] = useState(false);
+  const [activeTab, setActiveTab] = useState<EnchantTab>('enchant');
+  const [enchantState, setEnchantState] = useState<EnchantState>({
+    inventory: [],
+    brokenItems: [],
+    resources: { enchantDust: 0, enchantCharges: 0, protectionCharges: 0, premiumCrystals: 0, gold: 0 },
+  });
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<EnchantResultData | null>(null);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setStep('select');
-      setSelectedItem(null);
-      setUseProtection(false);
-      setResult(null);
-    }
-  }, [isOpen]);
+  // Enchant state
+  const [selectedEnchantItem, setSelectedEnchantItem] = useState<InventoryItem | null>(null);
+  const [useProtection, setUseProtection] = useState(false);
+  const [enchantResult, setEnchantResult] = useState<EnchantResult | null>(null);
+  const [enchanting, setEnchanting] = useState(false);
 
-  // Socket listeners
+  // Timer update for broken items
+  const [, setTimerTick] = useState(0);
+
+  // ─────────────────────────────────────────────────────────
+  // DATA LOADING
+  // ─────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!isOpen) return;
 
     const socket = getSocket();
+    socket.emit('forge:get');
 
-    const handleEnchantResult = (data: EnchantResultData) => {
-      setResult(data);
-      setStep('result');
+    const handleForgeData = (data: EnchantState) => {
+      setEnchantState(data);
       setLoading(false);
     };
 
-    const handleEnchantError = (error: { message: string }) => {
+    const handleForgeError = (error: { message: string }) => {
       console.error('[Enchant] Error:', error.message);
       setLoading(false);
     };
 
+    // Enchant handlers
+    const handleEnchantResult = (data: EnchantResult) => {
+      setEnchantResult(data);
+      setEnchanting(false);
+      setSelectedEnchantItem(null);
+      // Refresh data
+      socket.emit('forge:get');
+    };
+
+    const handleEnchantError = () => {
+      setEnchanting(false);
+    };
+
+    socket.on('forge:data', handleForgeData);
+    socket.on('forge:error', handleForgeError);
     socket.on('enchant:result', handleEnchantResult);
     socket.on('enchant:error', handleEnchantError);
 
     return () => {
+      socket.off('forge:data', handleForgeData);
+      socket.off('forge:error', handleForgeError);
       socket.off('enchant:result', handleEnchantResult);
       socket.off('enchant:error', handleEnchantError);
     };
   }, [isOpen]);
 
-  // v1.2: Get all enchantable items (any slot)
-  const validItems = getEnchantableItems(inventory);
+  // Timer update every second for broken items
+  useEffect(() => {
+    if (!isOpen || enchantState.brokenItems.length === 0) return;
+    const interval = setInterval(() => setTimerTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, enchantState.brokenItems.length]);
 
   // ─────────────────────────────────────────────────────────
-  // HANDLERS
+  // ENCHANT HANDLERS
   // ─────────────────────────────────────────────────────────
-
-  const handleSelectItem = useCallback((item: InventoryItem) => {
-    setSelectedItem(item);
-    setStep('enchant');
-    setUseProtection(false);
-  }, []);
 
   const handleEnchant = useCallback(() => {
-    if (!selectedItem || loading) return;
-
-    const cost = getEnchantCost(selectedItem.enchantLevel);
-    if (gold < cost.gold || enchantDust < cost.dust) return;
-    if (enchantCharges < 1) return;
-
-    setLoading(true);
-    const socket = getSocket();
-    // v1.2: no scrollType needed, just itemId and useProtection
-    socket.emit('enchant:try', {
-      itemId: selectedItem.id,
+    if (!selectedEnchantItem || enchanting) return;
+    setEnchanting(true);
+    getSocket().emit('enchant:try', {
+      itemId: selectedEnchantItem.id,
       useProtection,
     });
-  }, [selectedItem, useProtection, gold, enchantDust, enchantCharges, loading]);
+  }, [selectedEnchantItem, enchanting, useProtection]);
 
-  const handleBack = useCallback(() => {
-    if (step === 'enchant') {
-      setStep('select');
-      setSelectedItem(null);
-    } else if (step === 'result') {
-      setStep('select');
-      setSelectedItem(null);
-      setResult(null);
-    }
-  }, [step]);
+  const closeEnchantResult = useCallback(() => {
+    setEnchantResult(null);
+  }, []);
 
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
+  // ─────────────────────────────────────────────────────────
+  // BROKEN ITEM HANDLERS
+  // ─────────────────────────────────────────────────────────
+
+  const handleRestore = useCallback((itemId: string) => {
+    if (loading) return;
+    setLoading(true);
+    const socket = getSocket();
+    socket.emit('forge:restore', { itemId });
+  }, [loading]);
+
+  const handleAbandon = useCallback((itemId: string) => {
+    if (loading) return;
+    setLoading(true);
+    const socket = getSocket();
+    socket.emit('forge:abandon', { itemId });
+  }, [loading]);
+
+  // Get enchantable items (equipped items only, not broken)
+  const enchantableItems = [
+    ...Object.values(enchantState.inventory).filter(item => item && !item.isBroken),
+  ];
 
   // ─────────────────────────────────────────────────────────
   // RENDER
@@ -149,428 +171,427 @@ export default function EnchantModal({
 
   if (!isOpen) return null;
 
+  const tabs: { id: EnchantTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'enchant', label: lang === 'ru' ? 'Заточка' : 'Enchant', icon: <Sparkles size={16} /> },
+    {
+      id: 'broken',
+      label: lang === 'ru' ? 'Сломано' : 'Broken',
+      icon: <AlertTriangle size={16} />,
+      badge: enchantState.brokenItems.length || undefined,
+    },
+  ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl w-full max-w-md max-h-[80vh] flex flex-col border border-cyan-500/30">
+      <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl w-full max-w-md max-h-[85vh] flex flex-col border border-purple-500/30">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <div className="flex items-center gap-2">
-            <Sparkles className="text-cyan-400" size={24} />
-            <h2 className="text-lg font-bold text-cyan-400">
+            <Sparkles className="text-purple-400" size={24} />
+            <h2 className="text-lg font-bold text-purple-400">
               {lang === 'ru' ? 'Заточка' : 'Enchant'}
             </h2>
           </div>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-700 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg">
             <X size={20} className="text-gray-400" />
           </button>
         </div>
 
-        {/* Resources bar v1.2 */}
-        <div className="px-4 py-2 bg-black/30 flex gap-4 text-xs">
+        {/* Resources Bar */}
+        <div className="px-4 py-2 bg-black/30 flex flex-wrap gap-3 text-xs">
           <span className="flex items-center gap-1">
             <span>⚡</span>
-            <span className={enchantCharges > 0 ? 'text-yellow-300' : 'text-red-400'}>
-              {enchantCharges}
-            </span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span>🛡️</span>
-            <span className="text-blue-300">{protectionCharges}</span>
+            <span className="text-yellow-300">{enchantState.resources.enchantCharges}</span>
           </span>
           <span className="flex items-center gap-1">
             <span>✨</span>
-            <span className="text-cyan-300">{enchantDust}</span>
+            <span className="text-cyan-300">{enchantState.resources.enchantDust}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span>🛡️</span>
+            <span className="text-blue-300">{enchantState.resources.protectionCharges}</span>
           </span>
           <span className="flex items-center gap-1 ml-auto">
-            <span>🪙</span>
-            <span className="text-amber-300">{gold.toLocaleString()}</span>
+            <span>💎</span>
+            <span className="text-purple-300">{enchantState.resources.premiumCrystals}</span>
           </span>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-700">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 text-sm transition-colors relative ${
+                activeTab === tab.id
+                  ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.badge && (
+                <span className="absolute top-1 right-2 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {step === 'select' && (
-            <ItemSelectStep
-              items={validItems}
-              onSelect={handleSelectItem}
-              lang={lang}
-            />
+          {activeTab === 'enchant' && (
+            <div className="space-y-4">
+              {/* Selected Item */}
+              {selectedEnchantItem ? (
+                <div className="bg-black/30 rounded-lg p-4">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className={`w-16 h-16 rounded-lg ${RARITY_BG_COLORS[selectedEnchantItem.rarity]} flex items-center justify-center text-3xl`}>
+                      {selectedEnchantItem.icon}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${RARITY_COLORS[selectedEnchantItem.rarity]}`}>
+                          {selectedEnchantItem.name}
+                        </span>
+                        {selectedEnchantItem.enchantLevel > 0 && (
+                          <span className="text-amber-400 font-bold">+{selectedEnchantItem.enchantLevel}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {lang === 'ru' ? 'Следующий уровень:' : 'Next level:'} +{(selectedEnchantItem.enchantLevel || 0) + 1}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedEnchantItem(null)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Enchant info */}
+                  {(() => {
+                    const currentLevel = selectedEnchantItem.enchantLevel || 0;
+                    const targetLevel = currentLevel + 1;
+                    const isSafe = currentLevel < 3;
+                    const chance = targetLevel <= 3 ? 100 : Math.floor((ENCHANT_CHANCES[targetLevel] || 0) * 100);
+                    const goldCost = 100 + currentLevel * 50;
+                    const dustCost = 5 + currentLevel * 2;
+                    const canAfford = enchantState.resources.gold >= goldCost && enchantState.resources.enchantDust >= dustCost;
+                    const hasCharges = enchantState.resources.enchantCharges > 0;
+                    const hasProtection = enchantState.resources.protectionCharges > 0;
+
+                    return (
+                      <>
+                        {/* Chance bar */}
+                        <div className="mb-4">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-400">{lang === 'ru' ? 'Шанс успеха' : 'Success chance'}</span>
+                            <span className={isSafe ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
+                              {chance}%
+                            </span>
+                          </div>
+                          <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${isSafe ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              style={{ width: `${chance}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cost */}
+                        <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${hasCharges ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">⚡</span>
+                            <p className={hasCharges ? 'text-yellow-400' : 'text-red-400'}>1</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Заряд' : 'Charge'}</p>
+                          </div>
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${enchantState.resources.gold >= goldCost ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">🪙</span>
+                            <p className={enchantState.resources.gold >= goldCost ? 'text-amber-400' : 'text-red-400'}>{goldCost}</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Золото' : 'Gold'}</p>
+                          </div>
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${enchantState.resources.enchantDust >= dustCost ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">✨</span>
+                            <p className={enchantState.resources.enchantDust >= dustCost ? 'text-cyan-400' : 'text-red-400'}>{dustCost}</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Пыль' : 'Dust'}</p>
+                          </div>
+                        </div>
+
+                        {/* Protection toggle (only for unsafe enchants) */}
+                        {!isSafe && (
+                          <button
+                            onClick={() => setUseProtection(!useProtection)}
+                            className={`w-full mb-4 p-3 rounded-lg flex items-center justify-between ${
+                              useProtection ? 'bg-blue-600/30 border border-blue-500' : 'bg-gray-800/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Shield size={18} className={useProtection ? 'text-blue-400' : 'text-gray-500'} />
+                              <span className={useProtection ? 'text-blue-400' : 'text-gray-400'}>
+                                {lang === 'ru' ? 'Защита' : 'Protection'}
+                              </span>
+                            </div>
+                            <span className={hasProtection ? 'text-blue-400' : 'text-red-400'}>
+                              🛡️ {enchantState.resources.protectionCharges}
+                            </span>
+                          </button>
+                        )}
+
+                        {/* Warning */}
+                        {!isSafe && !useProtection && (
+                          <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 mb-4">
+                            <p className="text-red-400 text-xs text-center">
+                              {lang === 'ru' ? 'Без защиты предмет СЛОМАЕТСЯ при неудаче!' : 'Without protection item will BREAK on failure!'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Enchant button */}
+                        <button
+                          onClick={handleEnchant}
+                          disabled={!canAfford || !hasCharges || enchanting || (useProtection && !hasProtection)}
+                          className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
+                            canAfford && hasCharges && !enchanting && (!useProtection || hasProtection)
+                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white'
+                              : 'bg-gray-700 text-gray-500'
+                          }`}
+                        >
+                          <Sparkles size={18} />
+                          {enchanting ? '...' : lang === 'ru' ? 'Заточить' : 'Enchant'}
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <Sparkles size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">{lang === 'ru' ? 'Выберите предмет для заточки' : 'Select an item to enchant'}</p>
+                </div>
+              )}
+
+              {/* Item picker */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">
+                    {lang === 'ru' ? 'Ваши предметы:' : 'Your items:'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    ⚡ {enchantState.resources.enchantCharges} | 🛡️ {enchantState.resources.protectionCharges}
+                  </span>
+                </div>
+                {enchantableItems.length > 0 ? (
+                  <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto">
+                    {enchantableItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedEnchantItem(item)}
+                        className={`relative w-12 h-12 rounded-lg ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-xl transition-all ${
+                          selectedEnchantItem?.id === item.id ? 'ring-2 ring-purple-400' : 'hover:brightness-125'
+                        }`}
+                      >
+                        <span>{item.icon}</span>
+                        {item.enchantLevel > 0 && (
+                          <span className="absolute -top-1 -right-1 text-[10px] bg-amber-500 text-black px-1 rounded font-bold">
+                            +{item.enchantLevel}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    <Package size={24} className="mx-auto mb-1 opacity-50" />
+                    <p className="text-xs">{lang === 'ru' ? 'Нет предметов' : 'No items'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
-          {step === 'enchant' && selectedItem && (
-            <EnchantStep
-              item={selectedItem}
-              useProtection={useProtection}
-              setUseProtection={setUseProtection}
-              enchantCharges={enchantCharges}
-              protectionCharges={protectionCharges}
-              gold={gold}
-              enchantDust={enchantDust}
-              onEnchant={handleEnchant}
-              onBack={handleBack}
+          {activeTab === 'broken' && (
+            <BrokenTab
+              brokenItems={enchantState.brokenItems}
+              crystals={enchantState.resources.premiumCrystals}
+              onRestore={handleRestore}
+              onAbandon={handleAbandon}
               loading={loading}
               lang={lang}
             />
           )}
-
-          {step === 'result' && result && (
-            <ResultStep
-              result={result}
-              onContinue={handleBack}
-              onClose={handleClose}
-              lang={lang}
-            />
-          )}
         </div>
+
+        {/* Enchant Result Modal */}
+        {enchantResult && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-10">
+            <div className={`rounded-xl p-6 max-w-sm w-full border-2 ${
+              enchantResult.success
+                ? 'bg-gradient-to-b from-green-900/90 to-gray-900 border-green-500'
+                : enchantResult.itemBroken
+                  ? 'bg-gradient-to-b from-red-900/90 to-gray-900 border-red-500'
+                  : 'bg-gradient-to-b from-orange-900/90 to-gray-900 border-orange-500'
+            }`}>
+              {/* Result icon */}
+              <div className="text-center mb-4">
+                <div className="text-6xl mb-2">{enchantResult.itemIcon}</div>
+                {enchantResult.success ? (
+                  <h3 className="text-xl font-bold text-green-400">
+                    +{enchantResult.newEnchantLevel} {lang === 'ru' ? 'Успех!' : 'Success!'}
+                  </h3>
+                ) : enchantResult.itemBroken ? (
+                  <h3 className="text-xl font-bold text-red-400">
+                    {lang === 'ru' ? 'Сломано!' : 'Broken!'}
+                  </h3>
+                ) : (
+                  <h3 className="text-xl font-bold text-orange-400">
+                    {lang === 'ru' ? 'Неудача' : 'Failed'}
+                  </h3>
+                )}
+              </div>
+
+              {/* Details */}
+              <div className="bg-black/30 rounded-lg p-3 mb-4 text-center">
+                <p className="text-gray-300">{enchantResult.itemName}</p>
+                {enchantResult.itemBroken && (
+                  <p className="text-red-400 text-sm mt-2">
+                    {lang === 'ru'
+                      ? 'Предмет можно восстановить во вкладке "Сломано"'
+                      : 'Item can be restored in "Broken" tab'}
+                  </p>
+                )}
+              </div>
+
+              {/* Close button */}
+              <button
+                onClick={closeEnchantResult}
+                className="w-full py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold"
+              >
+                {lang === 'ru' ? 'Закрыть' : 'Close'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 1: ITEM SELECT v1.2
+// BROKEN TAB
 // ═══════════════════════════════════════════════════════════
 
-interface ItemSelectStepProps {
-  items: InventoryItem[];
-  onSelect: (item: InventoryItem) => void;
+interface BrokenTabProps {
+  brokenItems: InventoryItem[];
+  crystals: number;
+  onRestore: (itemId: string) => void;
+  onAbandon: (itemId: string) => void;
+  loading: boolean;
   lang: Language;
 }
 
-function ItemSelectStep({ items, onSelect, lang }: ItemSelectStepProps) {
-  if (items.length === 0) {
+function BrokenTab({
+  brokenItems,
+  crystals,
+  onRestore,
+  onAbandon,
+  loading,
+  lang,
+}: BrokenTabProps) {
+  if (brokenItems.length === 0) {
     return (
       <div className="text-center text-gray-500 py-8">
-        <Sparkles size={48} className="mx-auto mb-2 opacity-50" />
-        <p>{lang === 'ru' ? 'Нет предметов для заточки' : 'No items to enchant'}</p>
+        <Check size={48} className="mx-auto mb-2 opacity-50 text-green-500" />
+        <p>{lang === 'ru' ? 'Нет сломанных предметов' : 'No broken items'}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-400">
-        {lang === 'ru' ? 'Выберите предмет для заточки:' : 'Select an item to enchant:'}
-      </p>
-
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        {items.map(item => (
-          <button
-            key={item.id}
-            onClick={() => onSelect(item)}
-            className={`w-full p-3 rounded-lg border ${RARITY_BG_COLORS[item.rarity]} hover:bg-white/5 transition-colors flex items-center gap-3`}
-          >
-            <div className="w-12 h-12 rounded-lg bg-black/30 flex items-center justify-center text-2xl relative">
-              <span>{item.icon}</span>
-              {item.enchantLevel > 0 && (
-                <span className="absolute -top-1 -right-1 text-xs bg-cyan-500 text-black px-1 rounded font-bold">
-                  +{item.enchantLevel}
-                </span>
-              )}
-            </div>
-            <div className="flex-1 text-left">
-              <div className={`font-medium ${RARITY_COLORS[item.rarity]}`}>
-                {item.enchantLevel > 0 ? `+${item.enchantLevel} ` : ''}{item.name}
-              </div>
-              <div className="text-xs text-gray-500">
-                {lang === 'ru' ? RARITY_NAMES[item.rarity].ru : RARITY_NAMES[item.rarity].en}
-              </div>
-            </div>
-            <div className="text-gray-400">
-              <Sparkles size={20} />
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// STEP 2: ENCHANT SCREEN v1.2
-// ═══════════════════════════════════════════════════════════
-
-interface EnchantStepProps {
-  item: InventoryItem;
-  useProtection: boolean;
-  setUseProtection: (v: boolean) => void;
-  enchantCharges: number;
-  protectionCharges: number;
-  gold: number;
-  enchantDust: number;
-  onEnchant: () => void;
-  onBack: () => void;
-  loading: boolean;
-  lang: Language;
-}
-
-function EnchantStep({
-  item,
-  useProtection,
-  setUseProtection,
-  enchantCharges,
-  protectionCharges,
-  gold,
-  enchantDust,
-  onEnchant,
-  onBack,
-  loading,
-  lang,
-}: EnchantStepProps) {
-  const chance = getEnchantChance(item.enchantLevel);
-  const cost = getEnchantCost(item.enchantLevel);
-  const isSafe = isSafeEnchant(item.enchantLevel);
-  const currentMult = getEnchantMultiplier(item.enchantLevel);
-  const nextMult = getEnchantMultiplier(item.enchantLevel + 1);
-  const canAfford = gold >= cost.gold && enchantDust >= cost.dust && enchantCharges >= 1;
-  const atMaxLevel = item.enchantLevel >= MAX_ENCHANT_LEVEL;
-
-  // Current and next stats
-  const currentStats = applyEnchantToStats(item.baseStats, item.enchantLevel);
-  const nextStats = applyEnchantToStats(item.baseStats, item.enchantLevel + 1);
-
-  return (
     <div className="space-y-4">
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1"
-      >
-        ← {lang === 'ru' ? 'Назад' : 'Back'}
-      </button>
-
-      {/* Item display */}
-      <div className={`p-4 rounded-lg ${RARITY_BG_COLORS[item.rarity]} text-center`}>
-        <div className="text-4xl mb-2">{item.icon}</div>
-        <div className={`font-bold text-lg ${RARITY_COLORS[item.rarity]}`}>
-          {item.enchantLevel > 0 ? `+${item.enchantLevel} ` : ''}{item.name}
-        </div>
-        <div className="text-sm text-gray-400 mt-1">
-          {lang === 'ru' ? 'Текущий бонус:' : 'Current bonus:'} +{((currentMult - 1) * 100).toFixed(0)}%
-        </div>
+      {/* Urgent warning */}
+      <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-3 animate-pulse">
+        <p className="text-red-400 text-sm font-bold text-center">
+          {lang === 'ru' ? 'ВОССТАНОВИТЕ ИЛИ ПОТЕРЯЕТЕ!' : 'RESTORE OR LOSE!'}
+        </p>
       </div>
 
-      {/* Enchant info */}
-      {atMaxLevel ? (
-        <div className="bg-amber-500/20 border border-amber-500/30 rounded-lg p-3 text-center">
-          <p className="text-amber-400">
-            {lang === 'ru' ? 'Максимальный уровень!' : 'Maximum level!'}
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Target level */}
-          <div className="bg-black/30 rounded-lg p-3">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-400">
-                +{item.enchantLevel} → +{item.enchantLevel + 1}
-              </span>
-              <span className="text-cyan-400 font-bold">
-                +{((nextMult - 1) * 100).toFixed(0)}%
-              </span>
-            </div>
+      {brokenItems.map(item => {
+        const timeRemaining = getBrokenTimeRemaining(item.brokenUntil || null);
+        const restoreCost = getRestoreCost(item.rarity, item.enchantOnBreak || 0);
+        const canAfford = crystals >= restoreCost;
+        const isUrgent = timeRemaining < 3600000; // Less than 1 hour
 
-            {/* Stats preview */}
-            <div className="mt-2 text-xs space-y-1">
-              {currentStats.pAtkFlat && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{lang === 'ru' ? 'Ф.Атк' : 'P.Atk'}</span>
-                  <span>
-                    <span className="text-gray-400">{currentStats.pAtkFlat}</span>
-                    <span className="text-green-400"> → {nextStats.pAtkFlat}</span>
-                  </span>
-                </div>
-              )}
-              {currentStats.pDefFlat && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{lang === 'ru' ? 'Ф.Защ' : 'P.Def'}</span>
-                  <span>
-                    <span className="text-gray-400">{currentStats.pDefFlat}</span>
-                    <span className="text-green-400"> → {nextStats.pDefFlat}</span>
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Success chance */}
-          <div className={`rounded-lg p-3 ${isSafe ? 'bg-green-500/20 border border-green-500/30' : 'bg-red-500/20 border border-red-500/30'}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {isSafe ? (
-                  <Shield className="text-green-400" size={20} />
-                ) : (
-                  <AlertTriangle className="text-red-400" size={20} />
-                )}
-                <span className={isSafe ? 'text-green-400' : 'text-red-400'}>
-                  {lang === 'ru' ? 'Шанс:' : 'Chance:'}
-                </span>
-              </div>
-              <span className={`font-bold text-lg ${isSafe ? 'text-green-400' : 'text-white'}`}>
-                {(chance * 100).toFixed(0)}%
-              </span>
-            </div>
-            {isSafe && (
-              <p className="text-xs text-green-400/70 mt-1">
-                {lang === 'ru' ? 'Безопасная заточка' : 'Safe enchant'}
-              </p>
-            )}
-            {!isSafe && !useProtection && (
-              <p className="text-xs text-red-400/70 mt-1">
-                {lang === 'ru' ? '⚠️ При провале предмет сломается!' : '⚠️ Item will break on failure!'}
-              </p>
-            )}
-          </div>
-
-          {/* Protection toggle (only for risky enchant) */}
-          {!isSafe && (
-            <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-3">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Shield className="text-purple-400" size={20} />
-                  <div>
-                    <div className="text-purple-400 font-medium">
-                      {lang === 'ru' ? 'Защита' : 'Protection'} 🛡️
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {lang === 'ru' ? `Есть: ${protectionCharges}` : `Owned: ${protectionCharges}`}
-                    </div>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={useProtection}
-                  onChange={(e) => setUseProtection(e.target.checked)}
-                  disabled={protectionCharges === 0}
-                  className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-500 focus:ring-purple-500"
-                />
-              </label>
-              {useProtection && (
-                <p className="text-xs text-purple-400/70 mt-2">
-                  {lang === 'ru' ? 'При провале: -1 уровень, не ломается' : 'On fail: -1 level, no break'}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Cost v1.2 */}
-          <div className="bg-black/30 rounded-lg p-3">
-            <div className="text-xs text-gray-400 mb-2">
-              {lang === 'ru' ? 'Стоимость:' : 'Cost:'}
-            </div>
-            <div className="flex gap-4">
-              <span className={enchantCharges >= 1 ? 'text-yellow-300' : 'text-red-400'}>
-                ⚡ 1
-              </span>
-              <span className={gold >= cost.gold ? 'text-amber-300' : 'text-red-400'}>
-                🪙 {cost.gold}
-              </span>
-              <span className={enchantDust >= cost.dust ? 'text-cyan-300' : 'text-red-400'}>
-                ✨ {cost.dust}
-              </span>
-            </div>
-          </div>
-
-          {/* Enchant button */}
-          <button
-            onClick={onEnchant}
-            disabled={!canAfford || loading}
-            className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
-              canAfford && !loading
-                ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                : 'bg-gray-700 text-gray-500'
+        return (
+          <div
+            key={item.id}
+            className={`rounded-xl p-4 border-2 ${
+              isUrgent
+                ? 'bg-red-900/40 border-red-500 animate-pulse'
+                : 'bg-red-900/20 border-red-500/30'
             }`}
           >
-            <Zap size={20} />
-            {loading ? '...' : lang === 'ru' ? 'Заточить!' : 'Enchant!'}
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// STEP 3: RESULT v1.2
-// ═══════════════════════════════════════════════════════════
-
-interface ResultStepProps {
-  result: EnchantResultData;
-  onContinue: () => void;
-  onClose: () => void;
-  lang: Language;
-}
-
-function ResultStep({ result, onContinue, onClose, lang }: ResultStepProps) {
-  return (
-    <div className="text-center space-y-4">
-      {result.success ? (
-        <>
-          <div className="text-6xl animate-bounce">✨</div>
-          <div className="text-2xl font-bold text-green-400">
-            {lang === 'ru' ? 'Успех!' : 'Success!'}
-          </div>
-          <div className="text-lg">
-            <span className="text-3xl">{result.itemIcon}</span>
-            <div className="text-cyan-400 font-bold mt-2">
-              +{result.newEnchantLevel} {result.itemName}
-            </div>
-          </div>
-        </>
-      ) : result.itemBroken ? (
-        // v1.2: Item BROKEN (not destroyed)
-        <>
-          <div className="text-6xl animate-pulse">💔</div>
-          <div className="text-2xl font-bold text-red-400">
-            {lang === 'ru' ? 'Сломано!' : 'Broken!'}
-          </div>
-          <div className="text-lg">
-            <span className="text-3xl opacity-50">{result.itemIcon}</span>
-            <div className="text-red-400 mt-2">
-              {result.itemName}
-            </div>
-            <div className="text-xs text-gray-400 mt-2 bg-red-900/30 p-2 rounded">
-              {lang === 'ru'
-                ? '⏳ Восстановите за 💎 в Кузнице или предмет удалится через 8 часов'
-                : '⏳ Restore for 💎 in Forge or item will be deleted in 8 hours'}
-            </div>
-          </div>
-        </>
-      ) : (
-        // Protected fail
-        <>
-          <div className="text-6xl">😓</div>
-          <div className="text-2xl font-bold text-yellow-400">
-            {lang === 'ru' ? 'Защита сработала!' : 'Protected!'}
-          </div>
-          <div className="text-lg">
-            <span className="text-3xl">{result.itemIcon}</span>
-            <div className="text-yellow-400 mt-2">
-              +{result.newEnchantLevel} {result.itemName}
-              <div className="text-xs text-gray-400">
-                {lang === 'ru' ? '(уровень понижен)' : '(level decreased)'}
+            {/* Large icon + name row */}
+            <div className="flex items-center gap-4 mb-3">
+              <div className={`relative w-16 h-16 rounded-xl ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-3xl opacity-70`}>
+                <span>{item.icon}</span>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
+                  <span className="text-red-500 text-3xl">💔</span>
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold text-lg ${RARITY_COLORS[item.rarity]}`}>
+                    {item.name}
+                  </span>
+                  {(item.enchantOnBreak || 0) > 0 && (
+                    <span className="text-amber-400 font-bold">+{item.enchantOnBreak}</span>
+                  )}
+                </div>
+                <p className="text-gray-500 text-xs mt-0.5">
+                  {lang === 'ru' ? 'Сломан при заточке' : 'Broken during enchant'}
+                </p>
               </div>
             </div>
-          </div>
-        </>
-      )}
 
-      <div className="flex gap-3 mt-6">
-        {!result.itemBroken && (
-          <button
-            onClick={onContinue}
-            className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold"
-          >
-            {lang === 'ru' ? 'Ещё раз' : 'Try Again'}
-          </button>
-        )}
-        <button
-          onClick={onClose}
-          className={`${result.itemBroken ? 'w-full' : 'flex-1'} py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold`}
-        >
-          {lang === 'ru' ? 'Закрыть' : 'Close'}
-        </button>
-      </div>
+            {/* BIG countdown timer */}
+            <div className={`text-center py-3 rounded-lg mb-3 ${isUrgent ? 'bg-red-600/30' : 'bg-black/30'}`}>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
+                {lang === 'ru' ? 'Удаление через' : 'Deleted in'}
+              </p>
+              <p className={`text-2xl font-bold font-mono ${isUrgent ? 'text-red-400' : 'text-orange-400'}`}>
+                {formatBrokenTimer(timeRemaining)}
+              </p>
+            </div>
+
+            {/* Action buttons - Restore is PRIMARY */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => onRestore(item.id)}
+                disabled={!canAfford || loading}
+                className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 text-sm transition-all ${
+                  canAfford && !loading
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-900/30'
+                    : 'bg-gray-700 text-gray-500'
+                }`}
+              >
+                <RefreshCw size={16} />
+                {lang === 'ru' ? 'Восстановить' : 'Restore'} 💎{restoreCost}
+              </button>
+              <button
+                onClick={() => onAbandon(item.id)}
+                disabled={loading}
+                className="px-4 py-3 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

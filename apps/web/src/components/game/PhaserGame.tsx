@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Phaser from 'phaser';
-import { Gem } from 'lucide-react';
+import { Gem, Hammer, Sparkles } from 'lucide-react';
 import { gameConfig } from '@/game/config';
 import { BattleScene } from '@/game/scenes/BattleScene';
 import { getSocket } from '@/lib/socket';
@@ -10,7 +10,7 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import { getTaskManager } from '@/lib/taskManager';
 import TasksModal from './TasksModal';
 import ForgeModal from './ForgeModal';
-import { Hammer } from 'lucide-react';
+import EnchantModal from './EnchantModal';
 
 // ═══════════════════════════════════════════════════════════
 // PHASER GAME + REACT UI
@@ -21,7 +21,7 @@ import { Hammer } from 'lucide-react';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 
 interface BossState {
   name: string;
@@ -300,6 +300,7 @@ export default function PhaserGame() {
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [showTasks, setShowTasks] = useState(false);
   const [showForge, setShowForge] = useState(false);
+  const [showEnchant, setShowEnchant] = useState(false);
   const [hasClaimable, setHasClaimable] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [serverUptime, setServerUptime] = useState<string>('');
@@ -1171,7 +1172,7 @@ export default function PhaserGame() {
       />
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* FORGE BUTTON - Left side, quick access to forge */}
+      {/* FORGE & ENCHANT BUTTONS - Left side, quick access */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <button
         onClick={() => setShowForge(true)}
@@ -1182,6 +1183,17 @@ export default function PhaserGame() {
         <Hammer className="text-amber-400" size={20} />
         <span className="text-[7px] text-amber-300 font-bold mt-0.5">
           {lang === 'ru' ? 'КОВКА' : 'FORGE'}
+        </span>
+      </button>
+      <button
+        onClick={() => setShowEnchant(true)}
+        className="absolute top-[16.5rem] left-2 z-10 w-12 h-12 bg-gradient-to-b from-purple-700/60 to-purple-900/80
+                   rounded-lg border border-purple-600/50 flex flex-col items-center justify-center
+                   active:scale-90 transition-all hover:border-purple-500/70 shadow-lg shadow-purple-900/30"
+      >
+        <Sparkles className="text-purple-400" size={20} />
+        <span className="text-[7px] text-purple-300 font-bold mt-0.5">
+          {lang === 'ru' ? 'ЗАТОЧКА' : 'ENCHANT'}
         </span>
       </button>
 
@@ -1931,6 +1943,11 @@ export default function PhaserGame() {
       {/* FORGE MODAL */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <ForgeModal isOpen={showForge} onClose={() => setShowForge(false)} />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ENCHANT MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <EnchantModal isOpen={showEnchant} onClose={() => setShowEnchant(false)} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* LOADING OVERLAY - Shows while data loading */}
