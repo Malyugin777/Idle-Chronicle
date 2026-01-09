@@ -5269,8 +5269,8 @@ app.prepare().then(async () => {
       } catch (err) {
         // Release mutex on error
         chestClaimLocks.delete(chestId);
-        console.error('[Chest] Use key error:', err.message);
-        socket.emit('chest:error', { message: 'Failed to use key' });
+        console.error('[Chest] Use key error:', err.message, err.stack);
+        socket.emit('chest:error', { message: `Failed to use key: ${err.message}` });
       }
     });
 
