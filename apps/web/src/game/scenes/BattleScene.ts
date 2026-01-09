@@ -61,8 +61,8 @@ export class BattleScene extends Phaser.Scene {
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
 
-    // Boss sprite - positioned LOWER (55% from top)
-    const bossY = height * 0.55;
+    // Boss sprite - positioned LOWER (60% from top) - closer to skill bar
+    const bossY = height * 0.60;
     this.bossSprite = this.add.sprite(width / 2, bossY, 'boss');
     this.bossSprite.setInteractive();
     this.originalBossX = width / 2;
@@ -791,8 +791,8 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const imgWidth = this.bossSprite.width;
     const imgHeight = this.bossSprite.height;
-    // Slightly smaller scale to fit better
-    const scaleFit = Math.min((width * 0.55) / imgWidth, (height * 0.40) / imgHeight);
+    // BIGGER boss: 70% width, 50% height (was 55%, 40%)
+    const scaleFit = Math.min((width * 0.70) / imgWidth, (height * 0.50) / imgHeight);
     this.bossSprite.setScale(scaleFit);
     this.originalBossScale = scaleFit;
     this.originalBossX = this.bossSprite.x;
@@ -801,9 +801,9 @@ export class BattleScene extends Phaser.Scene {
 
   private handleResize(gameSize: Phaser.Structs.Size) {
     const { width, height } = gameSize;
-    // Keep boss at 55% from top
+    // Keep boss at 60% from top (lowered)
     this.originalBossX = width / 2;
-    this.originalBossY = height * 0.55;
+    this.originalBossY = height * 0.60;
     this.bossSprite?.setPosition(this.originalBossX, this.originalBossY);
     this.updateBossScale();
   }

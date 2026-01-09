@@ -21,7 +21,7 @@ import { Hammer } from 'lucide-react';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.121';
+const APP_VERSION = 'v1.1.0';
 
 interface BossState {
   name: string;
@@ -272,6 +272,10 @@ export default function PhaserGame() {
   // Session
   const [sessionDamage, setSessionDamage] = useState(0);
 
+  // Resource feedback flash (for insufficient resources)
+  const [staminaFlash, setStaminaFlash] = useState(false);
+  const [manaFlash, setManaFlash] = useState(false);
+
   // Debug: triple tap counter
   const tapCountRef = useRef(0);
   const lastTapTimeRef = useRef(0);
@@ -348,7 +352,12 @@ export default function PhaserGame() {
   const useSkill = useCallback((skill: Skill) => {
     const now = Date.now();
     if (now - skill.lastUsed < skill.cooldown) return;
-    if (playerState.mana < skill.manaCost) return;
+    if (playerState.mana < skill.manaCost) {
+      // Flash mana bar when insufficient
+      setManaFlash(true);
+      setTimeout(() => setManaFlash(false), 300);
+      return;
+    }
     if (bossState.hp <= 0) return;
 
     // Trigger press animation
@@ -981,15 +990,19 @@ export default function PhaserGame() {
               </span>
             </div>
 
-            {/* Mana Bar (Blue, bottom) */}
-            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-blue-500/30 shadow-inner">
+            {/* Mana Bar (Blue, bottom) - with flash on insufficient */}
+            <div className={`h-4 bg-gray-900/80 rounded-md overflow-hidden relative border shadow-inner transition-all ${
+              manaFlash ? 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]' : 'border-blue-500/30'
+            }`}>
               <div
-                className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-200"
+                className={`h-full transition-all duration-200 ${
+                  manaFlash ? 'bg-gradient-to-r from-red-600 to-red-400' : 'bg-gradient-to-r from-blue-600 to-blue-400'
+                }`}
                 style={{ width: `${manaPercent}%` }}
               />
               <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white font-bold drop-shadow-lg">
                 <span className="mr-1">💧</span>
-                <span className="text-blue-200">MP</span>
+                <span className={manaFlash ? 'text-red-200' : 'text-blue-200'}>MP</span>
                 <span className="ml-auto">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
               </span>
             </div>
@@ -1087,16 +1100,18 @@ export default function PhaserGame() {
                 <div className="absolute -bottom-1 -left-1 w-2 h-2 border-l-2 border-b-2 border-amber-600/60" />
                 <div className="absolute -bottom-1 -right-1 w-2 h-2 border-r-2 border-b-2 border-amber-600/60" />
 
-                {/* Main HP bar */}
-                <div className="h-6 bg-gradient-to-b from-gray-900 to-black rounded-md overflow-hidden relative border border-gray-700/50 shadow-inner">
+                {/* Main HP bar - THICKER (h-7) */}
+                <div className={`h-7 bg-gradient-to-b from-gray-900 to-black rounded-md overflow-hidden relative border shadow-inner ${
+                  hpPercent < 20 ? 'border-red-500/70 animate-pulse' : 'border-gray-700/50'
+                }`}>
                   {/* HP fill with gradient */}
                   <div
                     className={`h-full transition-all duration-150 relative ${
-                      hpPercent < 25 ? 'hp-critical' : ''
+                      hpPercent < 20 ? 'hp-critical' : ''
                     }`}
                     style={{
                       width: `${hpPercent}%`,
-                      background: hpPercent < 25
+                      background: hpPercent < 20
                         ? 'linear-gradient(to bottom, #dc2626, #991b1b)'
                         : hpPercent < 50
                           ? 'linear-gradient(to bottom, #ea580c, #c2410c)'
@@ -1109,9 +1124,14 @@ export default function PhaserGame() {
                     <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent" />
                   </div>
 
+                  {/* Low HP danger glow */}
+                  {hpPercent < 20 && (
+                    <div className="absolute inset-0 bg-red-500/20 animate-pulse pointer-events-none" />
+                  )}
+
                   {/* HP numbers - full format for clarity */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[10px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    <span className="text-[11px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                       {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
                     </span>
                   </div>
@@ -1175,24 +1195,33 @@ export default function PhaserGame() {
               <span className="text-[7px] text-gray-500 uppercase">Log</span>
             </div>
             <div className="px-1 py-1 space-y-0.5 max-h-28 overflow-hidden">
-              {damageFeed.map((item, i) => (
-                <div
-                  key={item.timestamp}
-                  className={`text-[9px] px-1 py-0.5 rounded ${
-                    item.isCrit
-                      ? 'bg-red-900/40 text-red-400'
-                      : 'text-gray-400'
-                  }`}
-                  style={{ opacity: 1 - i * 0.15 }}
-                >
-                  <div className="truncate">
-                    <span className="text-gray-500">{item.playerName.slice(0, 6)}</span>
-                    <span className={item.isCrit ? 'text-red-400 font-bold' : 'text-gray-300'}>
-                      {' '}-{formatCompact(item.damage)}
-                    </span>
+              {damageFeed.map((item, i) => {
+                const isFirst = i === 0;
+                const isFirstCrit = isFirst && item.isCrit;
+                return (
+                  <div
+                    key={item.timestamp}
+                    className={`text-[9px] px-1.5 py-0.5 rounded transition-all ${
+                      isFirstCrit
+                        ? 'bg-red-600/50 text-red-300 scale-105 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+                        : isFirst
+                          ? 'bg-amber-900/50 text-amber-300 scale-105'
+                          : item.isCrit
+                            ? 'bg-red-900/40 text-red-400'
+                            : 'text-gray-400'
+                    }`}
+                    style={{ opacity: isFirst ? 1 : 1 - i * 0.18 }}
+                  >
+                    <div className="truncate">
+                      <span className={isFirst ? 'text-white/70' : 'text-gray-500'}>{item.playerName.slice(0, 6)}</span>
+                      <span className={`${isFirstCrit ? 'text-red-200 font-bold' : isFirst ? 'text-amber-200 font-bold' : item.isCrit ? 'text-red-400 font-bold' : 'text-gray-300'}`}>
+                        {' '}-{formatCompact(item.damage)}
+                      </span>
+                      {isFirstCrit && <span className="ml-1 text-red-300">💥</span>}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1231,17 +1260,21 @@ export default function PhaserGame() {
           <button
             onClick={toggleAutoAttack}
             className={`
-              relative w-12 h-14 rounded-lg
+              relative w-14 h-16 rounded-lg
               ${autoAttack
-                ? 'bg-gradient-to-b from-green-600 to-green-800 border-2 border-green-400 shadow-[0_0_16px_rgba(34,197,94,0.5)] animate-auto-pulse'
+                ? 'bg-gradient-to-b from-green-600 to-green-800 border-2 border-green-400 shadow-[0_0_20px_rgba(34,197,94,0.6)] animate-auto-pulse'
                 : 'bg-gradient-to-b from-gray-700/50 to-gray-900/80 border-2 border-gray-600/50'}
               flex flex-col items-center justify-center
               transition-all active:scale-95
             `}
           >
             <span className="text-lg drop-shadow-md">{autoAttack ? '⚡' : '▶️'}</span>
-            <span className={`text-[7px] font-bold uppercase tracking-wider ${autoAttack ? 'text-green-200' : 'text-gray-400'}`}>
+            <span className={`text-[8px] font-bold uppercase tracking-wider ${autoAttack ? 'text-green-200' : 'text-gray-400'}`}>
               {autoAttack ? (lang === 'ru' ? 'АВТО' : 'ON') : 'AUTO'}
+            </span>
+            {/* Stamina cost display */}
+            <span className={`text-[7px] ${autoAttack ? 'text-green-300/80' : 'text-gray-500'}`}>
+              -1 SP/s
             </span>
             {autoAttack && (
               <>
@@ -1294,18 +1327,26 @@ export default function PhaserGame() {
                 onClick={() => useSkill(skill)}
                 disabled={!canUse}
                 className={`
-                  relative w-14 h-14 rounded-lg ${skill.color}
+                  relative w-14 h-16 rounded-lg ${skill.color}
                   ${!isUnlocked
                     ? 'bg-gradient-to-b from-gray-900/80 to-black/90 opacity-40'
                     : canUse
                       ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
                       : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
-                  flex flex-col items-center justify-center
+                  flex flex-col items-center justify-center gap-0.5
                   transition-all
                   ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
                 `}
               >
-                <span className="text-2xl drop-shadow-lg">{skill.icon}</span>
+                <span className="text-xl drop-shadow-lg">{skill.icon}</span>
+                {/* MP Cost - always visible when unlocked */}
+                {isUnlocked && (
+                  <span className={`text-[8px] font-bold ${
+                    playerState.mana >= skill.manaCost ? 'text-blue-300' : 'text-red-400'
+                  }`}>
+                    MP:{skill.manaCost}
+                  </span>
+                )}
                 {/* Locked overlay */}
                 {!isUnlocked && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
