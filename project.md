@@ -8,7 +8,7 @@ Multiplayer World Boss Clicker для Telegram Mini App в стиле Lineage 2.
 |---|---|
 | **Genre** | Multiplayer Idle Clicker RPG |
 | **Platform** | Telegram Mini App (TMA) |
-| **Version** | 1.0.49 |
+| **Version** | 1.0.111 |
 | **GitHub** | https://github.com/Malyugin777/Idle-Chronicle |
 | **Deploy** | Railway |
 
@@ -227,10 +227,17 @@ pnpm dev
 - [x] Graceful shutdown
 - [x] onlineUsers cleanup
 - [x] Buff scroll usage from inventory
+- [x] Enchanting system (Enchant Charges + Protection)
+- [x] MERGE system (item fusion)
+- [x] SALVAGE system (item disassembly)
+- [x] Chest Keys (instant open)
+- [x] SSOT architecture for resources
+- [x] Auto-attack with buff support
+- [x] Forge UI (enchant, merge, salvage)
 
 ### Pending
 - [ ] Offline progress (code exists but not connected)
 - [ ] Boss Spine animations
 - [ ] Persistent all-time leaderboard
-- [ ] Enchanting system
 - [ ] TON wallet integration
+- [ ] Source of premium crystals (dailies/achievements)
