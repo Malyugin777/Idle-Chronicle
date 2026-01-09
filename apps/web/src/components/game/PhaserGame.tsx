@@ -21,7 +21,7 @@ import { Hammer } from 'lucide-react';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.118';
+const APP_VERSION = 'v1.0.119';
 
 interface BossState {
   name: string;
@@ -918,23 +918,29 @@ export default function PhaserGame() {
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
         {/* Row 1: Avatar + Level + Currency */}
         <div className="flex items-center justify-between mb-2">
-          {/* Left: Avatar with Level badge */}
-          <div className="relative">
-            {playerState.photoUrl ? (
-              <img
-                src={playerState.photoUrl}
-                alt=""
-                className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                <span className="text-lg">👤</span>
+          {/* Left: Avatar + Nickname with Level badge */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              {playerState.photoUrl ? (
+                <img
+                  src={playerState.photoUrl}
+                  alt=""
+                  className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  <span className="text-lg">👤</span>
+                </div>
+              )}
+              {/* Level badge */}
+              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
+                {playerState.level}
               </div>
-            )}
-            {/* Level badge */}
-            <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
-              {playerState.level}
             </div>
+            {/* Nickname */}
+            <span className="text-sm font-bold text-white/90 max-w-[100px] truncate">
+              {playerState.firstName || 'Player'}
+            </span>
           </div>
 
           {/* Right: Gold + Crystals */}
@@ -952,14 +958,11 @@ export default function PhaserGame() {
           </div>
         </div>
 
-        {/* Row 2: Resource Bars */}
+        {/* Row 2: Resource Bars - стамина сверху, MP снизу */}
         <div className="flex gap-2">
-          {/* Stamina Bar (Yellow, first) */}
-          <div className="flex-1">
-            <div className="flex items-center gap-1 mb-0.5">
-              <span className="text-[10px]">⚡</span>
-              <span className="text-[9px] text-yellow-300 font-medium">{lang === 'ru' ? 'Стамина' : 'Stamina'}</span>
-            </div>
+          {/* Bars Column */}
+          <div className="flex-1 flex flex-col gap-1">
+            {/* Stamina Bar (Yellow, top) */}
             <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-yellow-500/30 shadow-inner">
               <div
                 className={`h-full transition-all duration-200 ${
@@ -971,25 +974,23 @@ export default function PhaserGame() {
                 }`}
                 style={{ width: `${staminaPercent}%` }}
               />
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
-                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+              <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white font-bold drop-shadow-lg">
+                <span className="mr-1">⚡</span>
+                <span className="text-yellow-200">{lang === 'ru' ? 'Стамина' : 'Stamina'}</span>
+                <span className="ml-auto">{Math.floor(playerState.stamina)}/{playerState.maxStamina}</span>
               </span>
             </div>
-          </div>
 
-          {/* Mana Bar */}
-          <div className="flex-1">
-            <div className="flex items-center gap-1 mb-0.5">
-              <span className="text-[10px]">💧</span>
-              <span className="text-[9px] text-blue-300 font-medium">MP</span>
-            </div>
+            {/* Mana Bar (Blue, bottom) */}
             <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-blue-500/30 shadow-inner">
               <div
                 className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-200"
                 style={{ width: `${manaPercent}%` }}
               />
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
-                {Math.floor(playerState.mana)}/{playerState.maxMana}
+              <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white font-bold drop-shadow-lg">
+                <span className="mr-1">💧</span>
+                <span className="text-blue-200">MP</span>
+                <span className="ml-auto">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
               </span>
             </div>
           </div>

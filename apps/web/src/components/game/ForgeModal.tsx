@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Hammer, Package, Check, AlertTriangle, RefreshCw, Trash2, Zap, Plus } from 'lucide-react';
+import { X, Hammer, Package, Check, AlertTriangle, RefreshCw, Trash2, Zap, Plus, Sparkles, Shield } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
@@ -33,7 +33,7 @@ interface ForgeState {
   resources: PlayerResources;
 }
 
-type ForgeTab = 'salvage' | 'broken' | 'merge' | 'craft';
+type ForgeTab = 'enchant' | 'salvage' | 'broken' | 'merge' | 'craft';
 
 // Merge preview response from server
 interface MergePreview {
@@ -56,9 +56,27 @@ interface MergeResult {
 // FORGE MODAL v1.2
 // ═══════════════════════════════════════════════════════════
 
+// Enchant result from server
+interface EnchantResult {
+  success: boolean;
+  itemBroken: boolean;
+  newEnchantLevel: number;
+  itemName: string;
+  itemIcon: string;
+  brokenUntil?: string | null;
+}
+
+// Enchant chances by target level (from server)
+const ENCHANT_CHANCES: Record<number, number> = {
+  4: 0.66, 5: 0.60, 6: 0.55, 7: 0.50, 8: 0.45,
+  9: 0.40, 10: 0.35, 11: 0.30, 12: 0.27, 13: 0.24,
+  14: 0.21, 15: 0.18, 16: 0.15, 17: 0.12, 18: 0.10,
+  19: 0.08, 20: 0.05,
+};
+
 export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   const [lang] = useState<Language>(() => detectLanguage());
-  const [activeTab, setActiveTab] = useState<ForgeTab>('salvage');
+  const [activeTab, setActiveTab] = useState<ForgeTab>('enchant');
   const [forgeState, setForgeState] = useState<ForgeState>({
     inventory: [],
     brokenItems: [],
@@ -79,6 +97,12 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   // Ether craft state
   const [etherState, setEtherState] = useState({ ether: 0, etherDust: 0, gold: 0 });
   const [craftBuying, setCraftBuying] = useState(false);
+
+  // Enchant state
+  const [selectedEnchantItem, setSelectedEnchantItem] = useState<InventoryItem | null>(null);
+  const [useProtection, setUseProtection] = useState(false);
+  const [enchantResult, setEnchantResult] = useState<EnchantResult | null>(null);
+  const [enchanting, setEnchanting] = useState(false);
 
   // Timer update for broken items
   const [, setTimerTick] = useState(0);
@@ -146,6 +170,19 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       setCraftBuying(false);
     };
 
+    // Enchant handlers
+    const handleEnchantResult = (data: EnchantResult) => {
+      setEnchantResult(data);
+      setEnchanting(false);
+      setSelectedEnchantItem(null);
+      // Refresh forge data
+      socket.emit('forge:get');
+    };
+
+    const handleEnchantError = () => {
+      setEnchanting(false);
+    };
+
     socket.on('forge:data', handleForgeData);
     socket.on('forge:error', handleForgeError);
     socket.on('merge:preview', handleMergePreview);
@@ -154,6 +191,8 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
     socket.on('player:data', handlePlayerData);
     socket.on('ether:craft:success', handleEtherCraftSuccess);
     socket.on('ether:craft:error', handleEtherCraftError);
+    socket.on('enchant:result', handleEnchantResult);
+    socket.on('enchant:error', handleEnchantError);
 
     return () => {
       socket.off('forge:data', handleForgeData);
@@ -164,6 +203,8 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       socket.off('player:data', handlePlayerData);
       socket.off('ether:craft:success', handleEtherCraftSuccess);
       socket.off('ether:craft:error', handleEtherCraftError);
+      socket.off('enchant:result', handleEnchantResult);
+      socket.off('enchant:error', handleEnchantError);
     };
   }, [isOpen]);
 
@@ -250,6 +291,31 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   }, [craftBuying, etherState.etherDust, etherState.gold]);
 
   // ─────────────────────────────────────────────────────────
+  // ENCHANT HANDLERS
+  // ─────────────────────────────────────────────────────────
+
+  const handleEnchant = useCallback(() => {
+    if (!selectedEnchantItem || enchanting) return;
+    setEnchanting(true);
+    getSocket().emit('enchant:try', {
+      itemId: selectedEnchantItem.id,
+      useProtection,
+    });
+  }, [selectedEnchantItem, enchanting, useProtection]);
+
+  const closeEnchantResult = useCallback(() => {
+    setEnchantResult(null);
+  }, []);
+
+  // Get enchantable items (equipped items only, not broken)
+  const enchantableItems = [
+    ...Object.values(forgeState.inventory).filter(item => item && !item.isBroken),
+  ];
+
+  // Get equipped items from resources (we need to fetch them separately)
+  // For now, let's include inventory items that could be enchanted
+
+  // ─────────────────────────────────────────────────────────
   // MERGE HANDLERS
   // ─────────────────────────────────────────────────────────
 
@@ -317,6 +383,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   const canCraft = Math.floor(etherState.etherDust / 5) > 0 && Math.floor(etherState.gold / 5) > 0;
 
   const tabs: { id: ForgeTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'enchant', label: lang === 'ru' ? 'Заточка' : 'Enchant', icon: <Sparkles size={16} /> },
     { id: 'salvage', label: lang === 'ru' ? 'Разбор' : 'Salvage', icon: <Hammer size={16} /> },
     {
       id: 'broken',
@@ -393,6 +460,177 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'enchant' && (
+            <div className="space-y-4">
+              {/* Selected Item */}
+              {selectedEnchantItem ? (
+                <div className="bg-black/30 rounded-lg p-4">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className={`w-16 h-16 rounded-lg ${RARITY_BG_COLORS[selectedEnchantItem.rarity]} flex items-center justify-center text-3xl`}>
+                      {selectedEnchantItem.icon}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${RARITY_COLORS[selectedEnchantItem.rarity]}`}>
+                          {selectedEnchantItem.name}
+                        </span>
+                        {selectedEnchantItem.enchantLevel > 0 && (
+                          <span className="text-amber-400 font-bold">+{selectedEnchantItem.enchantLevel}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {lang === 'ru' ? 'Следующий уровень:' : 'Next level:'} +{(selectedEnchantItem.enchantLevel || 0) + 1}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedEnchantItem(null)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Enchant info */}
+                  {(() => {
+                    const currentLevel = selectedEnchantItem.enchantLevel || 0;
+                    const targetLevel = currentLevel + 1;
+                    const isSafe = currentLevel < 3;
+                    const chance = targetLevel <= 3 ? 100 : Math.floor((ENCHANT_CHANCES[targetLevel] || 0) * 100);
+                    const goldCost = 100 + currentLevel * 50;
+                    const dustCost = 5 + currentLevel * 2;
+                    const canAfford = forgeState.resources.gold >= goldCost && forgeState.resources.enchantDust >= dustCost;
+                    const hasCharges = forgeState.resources.enchantCharges > 0;
+                    const hasProtection = forgeState.resources.protectionCharges > 0;
+
+                    return (
+                      <>
+                        {/* Chance bar */}
+                        <div className="mb-4">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-400">{lang === 'ru' ? 'Шанс успеха' : 'Success chance'}</span>
+                            <span className={isSafe ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
+                              {chance}%
+                            </span>
+                          </div>
+                          <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${isSafe ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              style={{ width: `${chance}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cost */}
+                        <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${hasCharges ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">⚡</span>
+                            <p className={hasCharges ? 'text-yellow-400' : 'text-red-400'}>1</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Заряд' : 'Charge'}</p>
+                          </div>
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${forgeState.resources.gold >= goldCost ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">🪙</span>
+                            <p className={forgeState.resources.gold >= goldCost ? 'text-amber-400' : 'text-red-400'}>{goldCost}</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Золото' : 'Gold'}</p>
+                          </div>
+                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${forgeState.resources.enchantDust >= dustCost ? '' : 'border border-red-500/50'}`}>
+                            <span className="text-lg">✨</span>
+                            <p className={forgeState.resources.enchantDust >= dustCost ? 'text-cyan-400' : 'text-red-400'}>{dustCost}</p>
+                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Пыль' : 'Dust'}</p>
+                          </div>
+                        </div>
+
+                        {/* Protection toggle (only for unsafe enchants) */}
+                        {!isSafe && (
+                          <button
+                            onClick={() => setUseProtection(!useProtection)}
+                            className={`w-full mb-4 p-3 rounded-lg flex items-center justify-between ${
+                              useProtection ? 'bg-blue-600/30 border border-blue-500' : 'bg-gray-800/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Shield size={18} className={useProtection ? 'text-blue-400' : 'text-gray-500'} />
+                              <span className={useProtection ? 'text-blue-400' : 'text-gray-400'}>
+                                {lang === 'ru' ? 'Защита' : 'Protection'}
+                              </span>
+                            </div>
+                            <span className={hasProtection ? 'text-blue-400' : 'text-red-400'}>
+                              🛡️ {forgeState.resources.protectionCharges}
+                            </span>
+                          </button>
+                        )}
+
+                        {/* Warning */}
+                        {!isSafe && !useProtection && (
+                          <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 mb-4">
+                            <p className="text-red-400 text-xs text-center">
+                              ⚠️ {lang === 'ru' ? 'Без защиты предмет СЛОМАЕТСЯ при неудаче!' : 'Without protection item will BREAK on failure!'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Enchant button */}
+                        <button
+                          onClick={handleEnchant}
+                          disabled={!canAfford || !hasCharges || enchanting || (useProtection && !hasProtection)}
+                          className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
+                            canAfford && hasCharges && !enchanting && (!useProtection || hasProtection)
+                              ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white'
+                              : 'bg-gray-700 text-gray-500'
+                          }`}
+                        >
+                          <Sparkles size={18} />
+                          {enchanting ? '...' : lang === 'ru' ? 'Заточить' : 'Enchant'}
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <Sparkles size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">{lang === 'ru' ? 'Выберите предмет для заточки' : 'Select an item to enchant'}</p>
+                </div>
+              )}
+
+              {/* Item picker */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">
+                    {lang === 'ru' ? 'Ваши предметы:' : 'Your items:'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    ⚡ {forgeState.resources.enchantCharges} | 🛡️ {forgeState.resources.protectionCharges}
+                  </span>
+                </div>
+                {enchantableItems.length > 0 ? (
+                  <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto">
+                    {enchantableItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedEnchantItem(item)}
+                        className={`relative w-12 h-12 rounded-lg ${RARITY_BG_COLORS[item.rarity]} flex items-center justify-center text-xl transition-all ${
+                          selectedEnchantItem?.id === item.id ? 'ring-2 ring-amber-400' : 'hover:brightness-125'
+                        }`}
+                      >
+                        <span>{item.icon}</span>
+                        {item.enchantLevel > 0 && (
+                          <span className="absolute -top-1 -right-1 text-[10px] bg-amber-500 text-black px-1 rounded font-bold">
+                            +{item.enchantLevel}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    <Package size={24} className="mx-auto mb-1 opacity-50" />
+                    <p className="text-xs">{lang === 'ru' ? 'Нет предметов' : 'No items'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'salvage' && (
             <SalvageTab
               inventory={forgeState.inventory}
@@ -530,6 +768,57 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
             onClose={closeMergeResult}
             lang={lang}
           />
+        )}
+
+        {/* Enchant Result Modal */}
+        {enchantResult && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-10">
+            <div className={`rounded-xl p-6 max-w-sm w-full border-2 ${
+              enchantResult.success
+                ? 'bg-gradient-to-b from-green-900/90 to-gray-900 border-green-500'
+                : enchantResult.itemBroken
+                  ? 'bg-gradient-to-b from-red-900/90 to-gray-900 border-red-500'
+                  : 'bg-gradient-to-b from-orange-900/90 to-gray-900 border-orange-500'
+            }`}>
+              {/* Result icon */}
+              <div className="text-center mb-4">
+                <div className="text-6xl mb-2">{enchantResult.itemIcon}</div>
+                {enchantResult.success ? (
+                  <h3 className="text-xl font-bold text-green-400">
+                    +{enchantResult.newEnchantLevel} {lang === 'ru' ? 'Успех!' : 'Success!'}
+                  </h3>
+                ) : enchantResult.itemBroken ? (
+                  <h3 className="text-xl font-bold text-red-400">
+                    💔 {lang === 'ru' ? 'Сломано!' : 'Broken!'}
+                  </h3>
+                ) : (
+                  <h3 className="text-xl font-bold text-orange-400">
+                    {lang === 'ru' ? 'Неудача' : 'Failed'}
+                  </h3>
+                )}
+              </div>
+
+              {/* Details */}
+              <div className="bg-black/30 rounded-lg p-3 mb-4 text-center">
+                <p className="text-gray-300">{enchantResult.itemName}</p>
+                {enchantResult.itemBroken && (
+                  <p className="text-red-400 text-sm mt-2">
+                    {lang === 'ru'
+                      ? 'Предмет можно восстановить во вкладке "Сломано"'
+                      : 'Item can be restored in "Broken" tab'}
+                  </p>
+                )}
+              </div>
+
+              {/* Close button */}
+              <button
+                onClick={closeEnchantResult}
+                className="w-full py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold"
+              >
+                {lang === 'ru' ? 'Закрыть' : 'Close'}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Salvage Confirm Modal */}

@@ -4961,6 +4961,71 @@ app.prepare().then(async () => {
               rarity: DEBUG_EQUIPMENT.rarity,
             },
           });
+        } else if (data.type === 'key') {
+          // Buy chest key
+          const KEY_COSTS = {
+            wooden: 500,
+            bronze: 1000,
+            silver: 2000,
+            gold: 4000,
+          };
+
+          const keyType = data.keyType;
+          const cost = KEY_COSTS[keyType];
+          if (!cost) {
+            socket.emit('shop:error', { message: 'Invalid key type' });
+            return;
+          }
+
+          if (player.gold < cost) {
+            socket.emit('shop:error', { message: 'Not enough gold' });
+            return;
+          }
+
+          const keyField = `key${keyType.charAt(0).toUpperCase() + keyType.slice(1)}`;
+          player.gold -= cost;
+          player[keyField] = (player[keyField] || 0) + 1;
+
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: {
+              gold: BigInt(player.gold),
+              [keyField]: player[keyField],
+            },
+          });
+
+          console.log(`[Shop] ${player.telegramId} bought ${keyType} key for ${cost} gold`);
+
+          socket.emit('shop:success', {
+            gold: player.gold,
+            [keyField]: player[keyField],
+          });
+        } else if (data.type === 'enchant') {
+          // Buy enchant charge
+          const ENCHANT_COST = 3000;
+
+          if (player.gold < ENCHANT_COST) {
+            socket.emit('shop:error', { message: 'Not enough gold' });
+            return;
+          }
+
+          player.gold -= ENCHANT_COST;
+          player.enchantCharges = (player.enchantCharges || 0) + 1;
+
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: {
+              gold: BigInt(player.gold),
+              enchantCharges: player.enchantCharges,
+            },
+          });
+
+          console.log(`[Shop] ${player.telegramId} bought enchant charge for ${ENCHANT_COST} gold`);
+
+          socket.emit('shop:success', {
+            gold: player.gold,
+            enchantCharges: player.enchantCharges,
+          });
         }
       } catch (err) {
         console.error('[Shop] Error:', err.message);

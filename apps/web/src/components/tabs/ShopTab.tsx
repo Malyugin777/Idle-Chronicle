@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Flame, Zap, Clover, Coins, Sparkles } from 'lucide-react';
+import { Flame, Zap, Clover, Coins, Sparkles, Key } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
@@ -11,6 +11,13 @@ interface ShopState {
   potionHaste: number;
   potionAcumen: number;
   potionLuck: number;
+  // Keys
+  keyWooden: number;
+  keyBronze: number;
+  keySilver: number;
+  keyGold: number;
+  // Enchant
+  enchantCharges: number;
 }
 
 export default function ShopTab() {
@@ -29,6 +36,11 @@ export default function ShopTab() {
     potionHaste: 0,
     potionAcumen: 0,
     potionLuck: 0,
+    keyWooden: 0,
+    keyBronze: 0,
+    keySilver: 0,
+    keyGold: 0,
+    enchantCharges: 0,
   });
   const [buying, setBuying] = useState<string | null>(null);
 
@@ -46,6 +58,11 @@ export default function ShopTab() {
         potionHaste: data.potionHaste || 0,
         potionAcumen: data.potionAcumen || 0,
         potionLuck: data.potionLuck || 0,
+        keyWooden: data.keyWooden || 0,
+        keyBronze: data.keyBronze || 0,
+        keySilver: data.keySilver || 0,
+        keyGold: data.keyGold || 0,
+        enchantCharges: data.enchantCharges || 0,
       });
     };
 
@@ -106,8 +123,30 @@ export default function ShopTab() {
     getSocket().emit('shop:buy', { type: 'buff', buffId });
   };
 
+  const handleBuyKey = (keyType: string, cost: number) => {
+    if (buying) return;
+    setBuying(`key-${keyType}`);
+    getSocket().emit('shop:buy', { type: 'key', keyType });
+  };
+
+  const handleBuyEnchantCharge = () => {
+    if (buying) return;
+    setBuying('enchant');
+    getSocket().emit('shop:buy', { type: 'enchant' });
+  };
+
   const etherCost = 200; // 200 gold per 100 ether
   const canAffordEther = shopState.gold >= etherCost;
+
+  // Keys pricing (based on chest open time: 5min, 30min, 4h, 8h)
+  const KEYS = [
+    { id: 'wooden', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🔑', cost: 500, color: 'amber' },
+    { id: 'bronze', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🗝️', cost: 1000, color: 'orange' },
+    { id: 'silver', name: lang === 'ru' ? 'Серебряный' : 'Silver', icon: '🔐', cost: 2000, color: 'gray' },
+    { id: 'gold', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🏆', cost: 4000, color: 'yellow' },
+  ];
+
+  const ENCHANT_COST = 3000;
 
   return (
     <div className="flex-1 overflow-auto bg-l2-dark p-4">
@@ -210,6 +249,81 @@ export default function ShopTab() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Keys Section */}
+      <div className="bg-l2-panel rounded-lg p-4 mb-4">
+        <h3 className="text-sm text-gray-400 mb-3">
+          <Key size={14} className="inline mr-1" />
+          {lang === 'ru' ? 'Ключи' : 'Keys'}
+        </h3>
+        <p className="text-xs text-gray-500 mb-3">
+          {lang === 'ru' ? 'Мгновенно открывают сундуки' : 'Instantly open chests'}
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          {KEYS.map((key) => {
+            const ownedKey = `key${key.id.charAt(0).toUpperCase() + key.id.slice(1)}` as keyof ShopState;
+            const owned = shopState[ownedKey] as number || 0;
+            const canAfford = shopState.gold >= key.cost;
+
+            return (
+              <div
+                key={key.id}
+                className="flex flex-col items-center gap-2 p-3 bg-black/30 rounded-lg"
+              >
+                <span className="text-2xl">{key.icon}</span>
+                <span className="text-xs font-bold text-white">{key.name}</span>
+                <span className="text-[10px] text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {owned}</span>
+                <button
+                  onClick={() => handleBuyKey(key.id, key.cost)}
+                  disabled={!canAfford || buying === `key-${key.id}`}
+                  className={`w-full px-2 py-1.5 rounded text-xs font-bold ${
+                    canAfford
+                      ? 'bg-l2-gold text-black hover:bg-l2-gold/80'
+                      : 'bg-gray-700 text-gray-500'
+                  }`}
+                >
+                  {buying === `key-${key.id}` ? '...' : `🪙 ${key.cost}`}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Enchant Charges Section */}
+      <div className="bg-l2-panel rounded-lg p-4 mb-4">
+        <h3 className="text-sm text-gray-400 mb-3">
+          ⚡ {lang === 'ru' ? 'Заряды заточки' : 'Enchant Charges'}
+        </h3>
+        <p className="text-xs text-gray-500 mb-3">
+          {lang === 'ru' ? 'Для заточки предметов в Кузнице' : 'For enchanting items in Forge'}
+        </p>
+
+        <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg">
+          <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+            <span className="text-xl">⚡</span>
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white">{lang === 'ru' ? 'Заряд заточки' : 'Enchant Charge'}</span>
+            </div>
+            <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {shopState.enchantCharges}</p>
+          </div>
+
+          <button
+            onClick={handleBuyEnchantCharge}
+            disabled={shopState.gold < ENCHANT_COST || buying === 'enchant'}
+            className={`px-3 py-2 rounded-lg text-xs font-bold ${
+              shopState.gold >= ENCHANT_COST
+                ? 'bg-l2-gold text-black hover:bg-l2-gold/80'
+                : 'bg-gray-700 text-gray-500'
+            }`}
+          >
+            {buying === 'enchant' ? '...' : `🪙 ${ENCHANT_COST}`}
+          </button>
         </div>
       </div>
 
