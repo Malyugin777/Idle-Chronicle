@@ -188,6 +188,7 @@ export default function TreasuryTab() {
     };
 
     const handleRewardsClaimed = (data: { rewardId: string; chestsCreated: number; badgeAwarded: string | null }) => {
+      console.log('[Rewards] Claimed successfully:', data);
       setPendingRewards(prev => prev.filter(r => r.id !== data.rewardId));
       setClaimingRewardId(null);
       socket.emit('chest:get');
@@ -195,7 +196,7 @@ export default function TreasuryTab() {
     };
 
     const handleRewardsError = (data: { message: string }) => {
-      console.error('[Rewards] Error:', data.message);
+      console.error('[Rewards] Server error:', data.message);
       setClaimingRewardId(null);
     };
 
@@ -322,23 +323,35 @@ export default function TreasuryTab() {
 
   // TZ Этап 2: Claim pending reward
   const claimReward = (reward: PendingReward) => {
-    if (claimingRewardId) return;
+    console.log('[Rewards] Claim clicked:', { rewardId: reward.id, claimingRewardId, reward });
+
+    if (claimingRewardId) {
+      console.log('[Rewards] Already claiming, skip');
+      return;
+    }
 
     // Check free slots
     const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
     const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
+    console.log('[Rewards] Slots check:', { totalChests, freeSlots, chestSlots: lootStats.chestSlots, chestsLen: chests.length });
 
     if (totalChests > 0 && freeSlots === 0) {
-      // No slots - show error but don't lock button
       console.warn('[Rewards] No free chest slots');
       return;
     }
 
     setClaimingRewardId(reward.id);
+    console.log('[Rewards] Sending rewards:claim...');
 
     // Safety timeout - reset after 10s if no response
     setTimeout(() => {
-      setClaimingRewardId(prev => prev === reward.id ? null : prev);
+      setClaimingRewardId(prev => {
+        if (prev === reward.id) {
+          console.warn('[Rewards] Timeout - resetting claimingRewardId');
+          return null;
+        }
+        return prev;
+      });
     }, 10000);
 
     // Send take request with all available chests
