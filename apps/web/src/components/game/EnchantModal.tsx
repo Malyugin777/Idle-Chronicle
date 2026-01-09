@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Sparkles, AlertTriangle, RefreshCw, Trash2, Shield, Package, Check } from 'lucide-react';
+import { X, Sparkles, AlertTriangle, RefreshCw, Trash2, Package, Check } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { detectLanguage, Language } from '@/lib/i18n';
 import {
@@ -41,12 +41,12 @@ interface EnchantResult {
   brokenUntil?: string | null;
 }
 
-// Enchant chances by target level (from server)
+// Enchant chances by target level (synced with server)
 const ENCHANT_CHANCES: Record<number, number> = {
-  4: 0.66, 5: 0.60, 6: 0.55, 7: 0.50, 8: 0.45,
-  9: 0.40, 10: 0.35, 11: 0.30, 12: 0.27, 13: 0.24,
-  14: 0.21, 15: 0.18, 16: 0.15, 17: 0.12, 18: 0.10,
-  19: 0.08, 20: 0.05,
+  4: 0.70, 5: 0.60, 6: 0.50, 7: 0.42, 8: 0.35,
+  9: 0.28, 10: 0.22, 11: 0.18, 12: 0.15, 13: 0.12,
+  14: 0.10, 15: 0.08, 16: 0.06, 17: 0.05, 18: 0.04,
+  19: 0.03, 20: 0.02,
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -65,7 +65,7 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
 
   // Enchant state
   const [selectedEnchantItem, setSelectedEnchantItem] = useState<InventoryItem | null>(null);
-  const [useProtection, setUseProtection] = useState(false);
+  const [useSafe, setUseSafe] = useState(false); // Safe mode toggle
   const [enchantResult, setEnchantResult] = useState<EnchantResult | null>(null);
   const [enchanting, setEnchanting] = useState(false);
 
@@ -134,9 +134,9 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
     setEnchanting(true);
     getSocket().emit('enchant:try', {
       itemId: selectedEnchantItem.id,
-      useProtection,
+      useSafe,
     });
-  }, [selectedEnchantItem, enchanting, useProtection]);
+  }, [selectedEnchantItem, enchanting, useSafe]);
 
   const closeEnchantResult = useCallback(() => {
     setEnchantResult(null);
@@ -197,19 +197,17 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
           </button>
         </div>
 
-        {/* Resources Bar */}
-        <div className="px-4 py-2 bg-black/30 flex flex-wrap gap-3 text-xs">
+        {/* Resources Bar - Simplified */}
+        <div className="px-4 py-2 bg-black/30 flex flex-wrap gap-4 text-xs">
           <span className="flex items-center gap-1">
             <span>⚡</span>
-            <span className="text-yellow-300">{enchantState.resources.enchantCharges}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span>✨</span>
-            <span className="text-cyan-300">{enchantState.resources.enchantDust}</span>
+            <span className="text-yellow-300 font-bold">{enchantState.resources.enchantCharges}</span>
+            <span className="text-gray-500">{lang === 'ru' ? 'заряды' : 'charges'}</span>
           </span>
           <span className="flex items-center gap-1">
             <span>🛡️</span>
-            <span className="text-blue-300">{enchantState.resources.protectionCharges}</span>
+            <span className="text-blue-300 font-bold">{enchantState.resources.protectionCharges}</span>
+            <span className="text-gray-500">{lang === 'ru' ? 'защита' : 'safe'}</span>
           </span>
           <span className="flex items-center gap-1 ml-auto">
             <span>💎</span>
@@ -276,13 +274,14 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
                   {(() => {
                     const currentLevel = selectedEnchantItem.enchantLevel || 0;
                     const targetLevel = currentLevel + 1;
-                    const isSafe = currentLevel < 3;
-                    const chance = targetLevel <= 3 ? 100 : Math.floor((ENCHANT_CHANCES[targetLevel] || 0) * 100);
-                    const goldCost = 100 + currentLevel * 50;
-                    const dustCost = 5 + currentLevel * 2;
-                    const canAfford = enchantState.resources.gold >= goldCost && enchantState.resources.enchantDust >= dustCost;
+                    const isInSafeZone = targetLevel <= 3; // +0→+3 = 100%
+                    const chance = isInSafeZone ? 100 : Math.floor((ENCHANT_CHANCES[targetLevel] || 0) * 100);
                     const hasCharges = enchantState.resources.enchantCharges > 0;
                     const hasProtection = enchantState.resources.protectionCharges > 0;
+
+                    // Safe mode only matters outside safe zone
+                    const effectiveSafe = !isInSafeZone && useSafe;
+                    const canEnchant = hasCharges && (!effectiveSafe || hasProtection);
 
                     return (
                       <>
@@ -290,78 +289,83 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
                         <div className="mb-4">
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-gray-400">{lang === 'ru' ? 'Шанс успеха' : 'Success chance'}</span>
-                            <span className={isSafe ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
+                            <span className={isInSafeZone ? 'text-green-400' : chance >= 50 ? 'text-yellow-400' : 'text-red-400'}>
                               {chance}%
                             </span>
                           </div>
                           <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
                             <div
-                              className={`h-full transition-all ${isSafe ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              className={`h-full transition-all ${isInSafeZone ? 'bg-green-500' : chance >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
                               style={{ width: `${chance}%` }}
                             />
                           </div>
                         </div>
 
-                        {/* Cost */}
-                        <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
-                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${hasCharges ? '' : 'border border-red-500/50'}`}>
-                            <span className="text-lg">⚡</span>
-                            <p className={hasCharges ? 'text-yellow-400' : 'text-red-400'}>1</p>
-                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Заряд' : 'Charge'}</p>
+                        {/* Mode toggle (only outside safe zone) */}
+                        {!isInSafeZone && (
+                          <div className="mb-4">
+                            <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                              <button
+                                onClick={() => setUseSafe(false)}
+                                className={`flex-1 py-2.5 px-3 text-xs font-bold transition-all ${
+                                  !useSafe
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                }`}
+                              >
+                                {lang === 'ru' ? 'Обычная' : 'Normal'}
+                              </button>
+                              <button
+                                onClick={() => hasProtection && setUseSafe(true)}
+                                disabled={!hasProtection}
+                                className={`flex-1 py-2.5 px-3 text-xs font-bold transition-all ${
+                                  useSafe
+                                    ? 'bg-blue-600 text-white'
+                                    : hasProtection
+                                      ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                      : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                                }`}
+                              >
+                                {lang === 'ru' ? 'Безопасная' : 'Safe'} 🛡️{enchantState.resources.protectionCharges}
+                              </button>
+                            </div>
                           </div>
-                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${enchantState.resources.gold >= goldCost ? '' : 'border border-red-500/50'}`}>
-                            <span className="text-lg">🪙</span>
-                            <p className={enchantState.resources.gold >= goldCost ? 'text-amber-400' : 'text-red-400'}>{goldCost}</p>
-                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Золото' : 'Gold'}</p>
-                          </div>
-                          <div className={`bg-gray-800/50 rounded-lg p-2 text-center ${enchantState.resources.enchantDust >= dustCost ? '' : 'border border-red-500/50'}`}>
-                            <span className="text-lg">✨</span>
-                            <p className={enchantState.resources.enchantDust >= dustCost ? 'text-cyan-400' : 'text-red-400'}>{dustCost}</p>
-                            <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Пыль' : 'Dust'}</p>
-                          </div>
+                        )}
+
+                        {/* Outcome text */}
+                        <div className={`mb-4 p-2 rounded-lg text-center text-xs ${
+                          isInSafeZone
+                            ? 'bg-green-900/30 border border-green-500/30'
+                            : effectiveSafe
+                              ? 'bg-blue-900/30 border border-blue-500/30'
+                              : 'bg-red-900/30 border border-red-500/30'
+                        }`}>
+                          <span className={isInSafeZone ? 'text-green-400' : effectiveSafe ? 'text-blue-400' : 'text-red-400'}>
+                            {isInSafeZone
+                              ? (lang === 'ru' ? '✓ Безопасная зона (+0→+3)' : '✓ Safe zone (+0→+3)')
+                              : effectiveSafe
+                                ? (lang === 'ru' ? '🛡️ При неудаче: предмет сохраняется' : '🛡️ On fail: item preserved')
+                                : (lang === 'ru' ? '⚠️ При неудаче: предмет ЛОМАЕТСЯ' : '⚠️ On fail: item BREAKS')}
+                          </span>
                         </div>
 
-                        {/* Protection toggle (only for unsafe enchants) */}
-                        {!isSafe && (
-                          <button
-                            onClick={() => setUseProtection(!useProtection)}
-                            className={`w-full mb-4 p-3 rounded-lg flex items-center justify-between ${
-                              useProtection ? 'bg-blue-600/30 border border-blue-500' : 'bg-gray-800/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Shield size={18} className={useProtection ? 'text-blue-400' : 'text-gray-500'} />
-                              <span className={useProtection ? 'text-blue-400' : 'text-gray-400'}>
-                                {lang === 'ru' ? 'Защита' : 'Protection'}
-                              </span>
-                            </div>
-                            <span className={hasProtection ? 'text-blue-400' : 'text-red-400'}>
-                              🛡️ {enchantState.resources.protectionCharges}
-                            </span>
-                          </button>
-                        )}
-
-                        {/* Warning */}
-                        {!isSafe && !useProtection && (
-                          <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 mb-4">
-                            <p className="text-red-400 text-xs text-center">
-                              {lang === 'ru' ? 'Без защиты предмет СЛОМАЕТСЯ при неудаче!' : 'Without protection item will BREAK on failure!'}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Enchant button */}
+                        {/* Enchant button with cost */}
                         <button
                           onClick={handleEnchant}
-                          disabled={!canAfford || !hasCharges || enchanting || (useProtection && !hasProtection)}
+                          disabled={!canEnchant || enchanting}
                           className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
-                            canAfford && hasCharges && !enchanting && (!useProtection || hasProtection)
+                            canEnchant && !enchanting
                               ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white'
                               : 'bg-gray-700 text-gray-500'
                           }`}
                         >
                           <Sparkles size={18} />
-                          {enchanting ? '...' : lang === 'ru' ? 'Заточить' : 'Enchant'}
+                          {enchanting
+                            ? '...'
+                            : (lang === 'ru' ? 'Заточить' : 'Enchant')}
+                          <span className="ml-1 text-sm opacity-80">
+                            ⚡1{effectiveSafe && ' + 🛡️1'}
+                          </span>
                         </button>
                       </>
                     );

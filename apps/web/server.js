@@ -7208,10 +7208,15 @@ app.prepare().then(async () => {
       }
     });
 
-    // ENCHANT:TRY - Attempt to enchant an item (v1.2: charges + broken items)
+    // ═══════════════════════════════════════════════════════════
+    // ENCHANT:TRY v2.0 - Simplified Normal/Safe modes
+    // Normal: 1 enchantCharge, item breaks on fail
+    // Safe: 1 enchantCharge + 1 protectionCharge, item survives on fail
+    // Safe zone: +0→+3 = 100% success
+    // ═══════════════════════════════════════════════════════════
     socket.on('enchant:try', async (data) => {
       if (!player.odamage) return;
-      const { itemId, useProtection } = data;
+      const { itemId, useSafe } = data; // renamed from useProtection to useSafe
 
       if (!itemId) {
         socket.emit('enchant:error', { message: 'Item ID required' });
@@ -7219,7 +7224,7 @@ app.prepare().then(async () => {
       }
 
       try {
-        // Get item (v1.2: check not broken)
+        // Get item (check not broken)
         const item = await prisma.userEquipment.findFirst({
           where: { id: itemId, userId: player.odamage, isBroken: false },
           include: { equipment: true },
@@ -7236,62 +7241,41 @@ app.prepare().then(async () => {
           return;
         }
 
-        // Get user data (v1.2: charges instead of scrolls)
+        // Get user charges
         const user = await prisma.user.findUnique({
           where: { id: player.odamage },
-          select: {
-            gold: true,
-            matEnchantDust: true,
-            enchantCharges: true,
-            protectionCharges: true,
-          },
+          select: { enchantCharges: true, protectionCharges: true },
         });
 
-        // v1.2: Check enchant charges
+        // Check enchant charges (always required)
         if ((user?.enchantCharges || 0) < 1) {
           socket.emit('enchant:error', { message: 'No enchant charges' });
           return;
         }
 
-        // Check protection if needed
+        // Check protection charges (if safe mode)
         const currentLevel = item.enchant;
-        const isSafe = currentLevel < 3;
-        const needsProtection = !isSafe && useProtection;
+        const targetLevel = currentLevel + 1;
+        const isInSafeZone = targetLevel <= 3; // +0→+3 = 100%
 
-        if (needsProtection && (user?.protectionCharges || 0) < 1) {
+        // useSafe only matters outside safe zone
+        const effectiveSafe = !isInSafeZone && useSafe;
+
+        if (effectiveSafe && (user?.protectionCharges || 0) < 1) {
           socket.emit('enchant:error', { message: 'No protection charges' });
           return;
         }
 
-        // Check gold and dust cost
-        const goldCost = 100 + currentLevel * 50;
-        const dustCost = 5 + currentLevel * 2;
-
-        if (Number(user?.gold || 0) < goldCost) {
-          socket.emit('enchant:error', { message: 'Not enough gold' });
-          return;
-        }
-        if ((user?.matEnchantDust || 0) < dustCost) {
-          socket.emit('enchant:error', { message: 'Not enough enchant dust' });
-          return;
-        }
-
-        // Calculate success
-        const targetLevel = currentLevel + 1;
-        const chance = targetLevel <= 3 ? 1.0 : (ENCHANT_CHANCES[targetLevel] || 0);
+        // Calculate success chance
+        const chance = isInSafeZone ? 1.0 : (ENCHANT_CHANCES[targetLevel] || 0);
         const roll = Math.random();
         const success = roll < chance;
 
-        console.log(`[Enchant] ${player.odamage} trying +${currentLevel}->+${targetLevel}, chance=${(chance*100).toFixed(0)}%, roll=${roll.toFixed(3)}, success=${success}`);
+        console.log(`[Enchant] ${player.odamage} +${currentLevel}→+${targetLevel}, safe=${effectiveSafe}, chance=${(chance*100).toFixed(0)}%, roll=${roll.toFixed(3)}, success=${success}`);
 
-        // Prepare user update (v1.2: charges)
-        const userUpdate = {
-          gold: { decrement: goldCost },
-          matEnchantDust: { decrement: dustCost },
-          enchantCharges: { decrement: 1 },
-        };
-
-        if (needsProtection) {
+        // Prepare charges deduction
+        const userUpdate = { enchantCharges: { decrement: 1 } };
+        if (effectiveSafe) {
           userUpdate.protectionCharges = { decrement: 1 };
         }
 
@@ -7299,8 +7283,8 @@ app.prepare().then(async () => {
         let newEnchantLevel = currentLevel;
 
         if (success) {
-          newEnchantLevel = currentLevel + 1;
-          // Update item enchant level
+          // SUCCESS: +1 level
+          newEnchantLevel = targetLevel;
           await prisma.$transaction([
             prisma.user.update({ where: { id: player.odamage }, data: userUpdate }),
             prisma.userEquipment.update({
@@ -7308,16 +7292,15 @@ app.prepare().then(async () => {
               data: { enchant: newEnchantLevel },
             }),
           ]);
-        } else if (isSafe) {
-          // Safe enchant fail (shouldn't happen with 100% chance, but just in case)
+        } else if (isInSafeZone) {
+          // FAIL in safe zone (shouldn't happen with 100%, but safety)
           await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
-        } else if (useProtection) {
-          // Protected fail - item survives, level stays UNCHANGED
-          // Protection simply prevents item from breaking
-          newEnchantLevel = currentLevel; // Level stays the same!
+        } else if (effectiveSafe) {
+          // FAIL with Safe mode: item survives, level unchanged
+          newEnchantLevel = currentLevel;
           await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
         } else {
-          // v1.2: Unprotected fail - item BROKEN (not deleted!)
+          // FAIL Normal mode: item BREAKS
           itemBroken = true;
           const brokenUntil = new Date(Date.now() + BROKEN_TIMER_MS);
 
@@ -7329,22 +7312,22 @@ app.prepare().then(async () => {
                 isBroken: true,
                 brokenUntil: brokenUntil,
                 enchantOnBreak: currentLevel,
-                isEquipped: false, // Unequip if was equipped
+                isEquipped: false,
               },
             }),
           ]);
 
-          console.log(`[Enchant] Item BROKEN: ${item.equipment.name} +${currentLevel}, expires: ${brokenUntil.toISOString()}`);
+          console.log(`[Enchant] BROKEN: ${item.equipment.name} +${currentLevel}, expires: ${brokenUntil.toISOString()}`);
         }
 
         socket.emit('enchant:result', {
           success,
-          itemBroken, // v1.2: broken instead of destroyed
+          itemBroken,
           newEnchantLevel,
           itemName: item.equipment.nameRu || item.equipment.name,
           itemIcon: item.equipment.icon,
-          // v1.2: Additional info for broken items
           brokenUntil: itemBroken ? new Date(Date.now() + BROKEN_TIMER_MS).toISOString() : null,
+          usedSafe: effectiveSafe, // tell client if safe was used
         });
 
         // Refresh forge data
