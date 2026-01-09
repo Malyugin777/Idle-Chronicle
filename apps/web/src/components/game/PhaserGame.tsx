@@ -621,6 +621,8 @@ export default function PhaserGame() {
         skillFireball: data.skillFireball ?? 1,
         skillIceball: data.skillIceball ?? 0,
         skillLightning: data.skillLightning ?? 0,
+        ps: data.ps ?? 0,
+        psCap: data.psCap ?? 24,
       });
       // Set auto-attack state from server
       setAutoAttack(data.autoAttack || false);
