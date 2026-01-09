@@ -1450,10 +1450,10 @@ app.prepare().then(async () => {
     console.log(`[Startup] Boss loaded from DB: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp}`);
   }
 
-  // Periodic boss state save (every 10 seconds)
+  // Periodic boss state save (every 3 seconds - frequent saves prevent data loss on deploy)
   setInterval(() => {
     saveBossState(prisma);
-  }, 10000);
+  }, 3000);
 
   const server = createServer(async (req, res) => {
     try {
@@ -6725,9 +6725,12 @@ app.prepare().then(async () => {
       await saveBossState(prisma);
       console.log('[Shutdown] Boss state saved');
 
-      // Сохраняем данные онлайн игроков
+      // Сохраняем данные онлайн игроков (только delta с прошлого auto-save)
       for (const [socketId, player] of onlineUsers.entries()) {
-        if (player.odamage && player.sessionDamage > 0) {
+        const damageDelta = player.sessionDamage - (player.savedSessionDamage || 0);
+        const clicksDelta = player.sessionClicks - (player.savedSessionClicks || 0);
+
+        if (player.odamage && damageDelta > 0) {
           try {
             await prisma.user.update({
               where: { id: player.odamage },
@@ -6735,11 +6738,11 @@ app.prepare().then(async () => {
                 gold: BigInt(player.gold),
                 stamina: Math.floor(player.stamina),
                 mana: Math.floor(player.mana),
-                totalDamage: { increment: BigInt(player.sessionDamage) },
-                totalClicks: { increment: BigInt(player.sessionClicks) },
+                totalDamage: { increment: BigInt(damageDelta) },
+                totalClicks: { increment: BigInt(clicksDelta) },
               },
             });
-            console.log(`[Shutdown] Saved user ${player.odamageN}`);
+            console.log(`[Shutdown] Saved user ${player.odamageN}: delta=${damageDelta}`);
           } catch (e) {
             console.error(`[Shutdown] Error saving ${player.odamage}:`, e.message);
           }
