@@ -3835,6 +3835,9 @@ app.prepare().then(async () => {
         });
       }
 
+      // Get player's PS from leaderboard
+      const playerPsData = sessionLeaderboard.get(player.odamage);
+
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
@@ -3849,6 +3852,9 @@ app.prepare().then(async () => {
         etherUsed,
         autoEther: player.autoEther,
         ether: player.ether,
+        // Participation Score
+        ps: playerPsData?.ps || 0,
+        psCap: PS_CAP_PER_BOSS,
       });
 
       io.emit('damage:feed', {
@@ -3989,9 +3995,9 @@ app.prepare().then(async () => {
       }
     });
 
-    // LEADERBOARD - Current Boss (with % and photos)
+    // LEADERBOARD - Current Boss (with % and photos and PS)
     socket.on('leaderboard:get', () => {
-      // sessionLeaderboard keyed by userId, data = { damage, visitorName, photoUrl, isEligible }
+      // sessionLeaderboard keyed by userId, data = { damage, visitorName, photoUrl, isEligible, ps }
       const totalDamage = Array.from(sessionLeaderboard.values()).reduce((sum, d) => sum + (d.damage || 0), 0);
       const leaderboard = Array.from(sessionLeaderboard.entries())
         .map(([userId, data]) => ({
@@ -3999,6 +4005,7 @@ app.prepare().then(async () => {
           visitorName: data.visitorName || 'Unknown',
           photoUrl: data.photoUrl,
           damage: data.damage || 0,
+          ps: data.ps || 0, // Participation Score
         }))
         .map(entry => ({
           ...entry,

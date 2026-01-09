@@ -13,6 +13,7 @@ interface LeaderboardEntry {
   damagePercent?: number;
   isFinalBlow?: boolean;
   isTopDamage?: boolean;
+  ps?: number; // Participation Score
 }
 
 interface PrizePool {
@@ -245,6 +246,18 @@ export default function LeaderboardTab() {
               {entry.isTopDamage && <Trophy className="text-l2-gold" size={12} />}
             </div>
           </div>
+          {/* PS indicator */}
+          {entry.ps !== undefined && (
+            <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+              entry.ps >= 6
+                ? 'bg-green-900/60 text-green-300'
+                : entry.ps > 0
+                  ? 'bg-purple-900/60 text-purple-300'
+                  : 'bg-gray-800/60 text-gray-500'
+            }`}>
+              ⭐{entry.ps}
+            </div>
+          )}
           <div className="text-right">
             <p className="font-bold text-l2-gold text-sm">
               {formatNumber(entry.damage)}

@@ -21,7 +21,7 @@ import EnchantModal from './EnchantModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.1';
 
 interface BossState {
   name: string;
@@ -59,6 +59,9 @@ interface PlayerState {
   skillFireball: number;
   skillIceball: number;
   skillLightning: number;
+  // Participation Score
+  ps: number;
+  psCap: number;
 }
 
 interface MeditationData {
@@ -235,6 +238,8 @@ export default function PhaserGame() {
     skillFireball: 1,
     skillIceball: 0,
     skillLightning: 0,
+    ps: 0,
+    psCap: 24,
   });
 
   // Ether auto-use toggle (persisted in localStorage)
@@ -538,6 +543,8 @@ export default function PhaserGame() {
         maxStamina: data.maxStamina ?? p.maxStamina,
         gold: data.gold ?? p.gold,
         ether: data.ether ?? p.ether,
+        ps: data.ps ?? p.ps,
+        psCap: data.psCap ?? p.psCap,
       }));
       // Track for tasks
       if (data.damage > 0) {
@@ -1033,8 +1040,20 @@ export default function PhaserGame() {
             </div>
           </div>
 
-          {/* Buffs (right of bars, expands to fill) */}
-          <div className="flex-1 flex flex-wrap gap-1 justify-end items-center">
+          {/* PS indicator + Buffs (right of bars) */}
+          <div className="flex-1 flex flex-wrap gap-1.5 justify-end items-center">
+            {/* Participation Score indicator */}
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold ${
+              playerState.ps >= playerState.psCap
+                ? 'bg-green-900/60 border border-green-500/50 text-green-300'
+                : playerState.ps > 0
+                  ? 'bg-purple-900/60 border border-purple-500/50 text-purple-300'
+                  : 'bg-gray-800/60 border border-gray-600/50 text-gray-400'
+            }`}>
+              <span>⭐</span>
+              <span>PS: {playerState.ps}/{playerState.psCap}</span>
+            </div>
+            {/* Active Buffs */}
             {activeBuffs.map(buff => (
               <BuffIcon key={buff.type} buff={buff} />
             ))}
