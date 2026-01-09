@@ -266,41 +266,6 @@ export default function ShopTab() {
         </div>
       </div>
 
-      {/* DEBUG Section */}
-      <div className="bg-red-900/30 rounded-lg p-4 border border-red-500/30">
-        <h3 className="text-sm text-red-400 mb-3">[DEBUG] {lang === 'ru' ? 'Тестовые инструменты' : 'Test Tools'}</h3>
-        <p className="text-xs text-red-300/60 mb-3">
-          {lang === 'ru' ? 'Только для разработки! Удалить перед релизом.' : 'Development only! Remove before release.'}
-        </p>
-
-        <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg">
-          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-            <span className="text-xl">⚔️</span>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-orange-400">{lang === 'ru' ? 'Меч разработчика' : 'Developer Sword'}</span>
-              <span className="text-xs px-1 py-0.5 bg-orange-500/30 text-orange-300 rounded">1500 P.Atk</span>
-            </div>
-            <p className="text-xs text-gray-500">
-              {lang === 'ru' ? 'Эпический меч для тестирования урона' : 'Epic sword for damage testing'}
-            </p>
-          </div>
-
-          <button
-            onClick={() => {
-              if (buying) return;
-              setBuying('debug-sword');
-              getSocket().emit('shop:buy', { type: 'debug-sword' });
-              setTimeout(() => setBuying(null), 2000);
-            }}
-            disabled={buying === 'debug-sword'}
-            className="px-3 py-2 rounded-lg text-xs font-bold bg-orange-600 text-white hover:bg-orange-500"
-          >
-            {buying === 'debug-sword' ? '...' : (lang === 'ru' ? 'Бесплатно' : 'Free')}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
