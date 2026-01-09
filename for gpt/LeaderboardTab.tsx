@@ -13,6 +13,7 @@ interface LeaderboardEntry {
   damagePercent?: number;
   isFinalBlow?: boolean;
   isTopDamage?: boolean;
+  ps?: number; // Participation Score
 }
 
 interface PrizePool {
@@ -66,40 +67,51 @@ export default function LeaderboardTab() {
     // Request current leaderboard
     socket.emit('leaderboard:get');
 
-    // Current boss leaderboard (real-time from leaderboard:get)
-    socket.on('leaderboard:data', (data: CurrentBossData) => {
-      setCurrentData(data);
+    // Define all handlers as named functions for proper cleanup
+    const handleLeaderboardData = (data: any) => {
+      setCurrentData({
+        ...data,
+        bossName: lang === 'ru' ? (data.bossNameRu || data.bossName) : data.bossName,
+      });
       setLoading(false);
-    });
+    };
 
-    // Also update from boss:state for real-time HP updates
-    socket.on('boss:state', (data: any) => {
+    const handleBossState = (data: any) => {
       setCurrentData(prev => prev ? {
         ...prev,
         bossHp: data.hp,
         bossMaxHp: data.maxHp,
-        bossName: data.name,
+        bossName: lang === 'ru' ? (data.nameRu || data.name) : data.name,
         bossIcon: data.icon,
-        // Keep existing prizePool - boss:state doesn't include it
       } : null);
-    });
+    };
 
-    // Previous boss
-    socket.on('leaderboard:previous', (data: PreviousBossData | null) => {
-      setPreviousData(data);
-    });
+    const handlePreviousData = (data: any | null) => {
+      if (data) {
+        setPreviousData({
+          ...data,
+          bossName: lang === 'ru' ? (data.bossNameRu || data.bossName) : data.bossName,
+        });
+      } else {
+        setPreviousData(null);
+      }
+    };
 
-    // Legend (all-time)
-    socket.on('leaderboard:alltime', (data: LeaderboardEntry[]) => {
+    const handleAlltimeData = (data: LeaderboardEntry[]) => {
       setLegendBoard(data);
-    });
+    };
 
-    // Update on boss kill
-    socket.on('boss:killed', (data: any) => {
-      // Refresh all data
+    const handleBossKilled = () => {
       socket.emit('leaderboard:get');
       socket.emit('leaderboard:previous:get');
-    });
+    };
+
+    // Register listeners
+    socket.on('leaderboard:data', handleLeaderboardData);
+    socket.on('boss:state', handleBossState);
+    socket.on('leaderboard:previous', handlePreviousData);
+    socket.on('leaderboard:alltime', handleAlltimeData);
+    socket.on('boss:killed', handleBossKilled);
 
     // Refresh current leaderboard periodically for real-time updates
     const interval = setInterval(() => {
@@ -109,11 +121,12 @@ export default function LeaderboardTab() {
     }, 2000);
 
     return () => {
-      socket.off('leaderboard:data');
-      socket.off('boss:state');
-      socket.off('leaderboard:previous');
-      socket.off('leaderboard:alltime');
-      socket.off('boss:killed');
+      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
+      socket.off('leaderboard:data', handleLeaderboardData);
+      socket.off('boss:state', handleBossState);
+      socket.off('leaderboard:previous', handlePreviousData);
+      socket.off('leaderboard:alltime', handleAlltimeData);
+      socket.off('boss:killed', handleBossKilled);
       clearInterval(interval);
     };
   }, [activeTab]);
@@ -233,6 +246,18 @@ export default function LeaderboardTab() {
               {entry.isTopDamage && <Trophy className="text-l2-gold" size={12} />}
             </div>
           </div>
+          {/* PS indicator */}
+          {entry.ps !== undefined && (
+            <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+              entry.ps >= 6
+                ? 'bg-green-900/60 text-green-300'
+                : entry.ps > 0
+                  ? 'bg-purple-900/60 text-purple-300'
+                  : 'bg-gray-800/60 text-gray-500'
+            }`}>
+              ⭐{entry.ps}
+            </div>
+          )}
           <div className="text-right">
             <p className="font-bold text-l2-gold text-sm">
               {formatNumber(entry.damage)}

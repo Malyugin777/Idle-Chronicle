@@ -84,8 +84,8 @@ const SKILLS_DATA: SkillInfo[] = [
     id: 'fireball',
     nameRu: 'Огненный шар',
     nameEn: 'Fireball',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '🔥',
     gradient: 'from-orange-700/70 to-red-900/90',
     glow: 'shadow-[0_0_12px_rgba(249,115,22,0.4)]',
@@ -97,8 +97,8 @@ const SKILLS_DATA: SkillInfo[] = [
     id: 'iceball',
     nameRu: 'Ледяная стрела',
     nameEn: 'Ice Arrow',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '❄️',
     gradient: 'from-cyan-700/70 to-blue-900/90',
     glow: 'shadow-[0_0_12px_rgba(34,211,238,0.4)]',
@@ -110,8 +110,8 @@ const SKILLS_DATA: SkillInfo[] = [
     id: 'lightning',
     nameRu: 'Молния',
     nameEn: 'Lightning',
-    descRu: '100 + P.Atk × 3',
-    descEn: '100 + P.Atk × 3',
+    descRu: '100 + P.Atk × 3 (+2%/ур)',
+    descEn: '100 + P.Atk × 3 (+2%/lv)',
     icon: '⚡',
     gradient: 'from-yellow-600/70 to-amber-900/90',
     glow: 'shadow-[0_0_12px_rgba(250,204,21,0.4)]',
@@ -120,35 +120,6 @@ const SKILLS_DATA: SkillInfo[] = [
     unlockLevel: 3,
   },
 ];
-
-// ═══════════════════════════════════════════════════════════
-// MASTERY CONSTANTS (mirror of server)
-// ═══════════════════════════════════════════════════════════
-
-const MASTERY_MAX_RANK = 10;
-const MASTERY_COSTS = {
-  gold: [5000, 8000, 12000, 18000, 26000, 38000, 55000, 80000, 120000, 180000],
-  sp:   [80, 120, 180, 260, 380, 540, 760, 1050, 1450, 2000],
-};
-
-const TIER_THRESHOLDS = [50, 200, 500, 1000];
-const TIER_BONUSES = [3, 7, 15, 25]; // Display as percentages
-
-const SKILL_LEVEL_CAPS: Record<number, { activeMastery: number }> = {
-  1:  { activeMastery: 3 },
-  5:  { activeMastery: 5 },
-  10: { activeMastery: 7 },
-  15: { activeMastery: 9 },
-  20: { activeMastery: 10 },
-};
-
-function getSkillLevelCaps(level: number) {
-  if (level >= 20) return SKILL_LEVEL_CAPS[20];
-  if (level >= 15) return SKILL_LEVEL_CAPS[15];
-  if (level >= 10) return SKILL_LEVEL_CAPS[10];
-  if (level >= 5) return SKILL_LEVEL_CAPS[5];
-  return SKILL_LEVEL_CAPS[1];
-}
 
 interface PlayerStats {
   id: string;
@@ -179,22 +150,10 @@ interface PlayerStats {
   potionLuck?: number;
   enchantCharges?: number;
   protectionCharges?: number;
-  // Skill levels (legacy)
+  // Skill levels (0 = locked, 1+ = level)
   skillFireball?: number;
   skillIceball?: number;
   skillLightning?: number;
-  // ═══ SKILLS v1.4 ═══
-  skillFireballMastery?: number;
-  skillIceballMastery?: number;
-  skillLightningMastery?: number;
-  skillFireballCasts?: number;
-  skillIceballCasts?: number;
-  skillLightningCasts?: number;
-  skillFireballTiers?: number;
-  skillIceballTiers?: number;
-  skillLightningTiers?: number;
-  // SP for skill upgrades
-  sp?: number;
 }
 
 interface HeroState {
@@ -765,212 +724,76 @@ function StatsPopup({ stats, derived, equipBonus, heroState, onClose, lang }: St
 }
 
 // ═══════════════════════════════════════════════════════════
-// SKILLS POPUP v1.4 - Mastery System
+// SKILLS POPUP
 // ═══════════════════════════════════════════════════════════
 
 interface SkillsPopupProps {
   level: number;
   skillLevels: { fireball: number; iceball: number; lightning: number };
-  skillMastery: { fireball: number; iceball: number; lightning: number };
-  skillCasts: { fireball: number; iceball: number; lightning: number };
-  skillTiers: { fireball: number; iceball: number; lightning: number };
-  gold: number;
-  sp: number;
   onClose: () => void;
-  onUpgrade: (skillId: string) => void;
   lang: Language;
 }
 
-function SkillsPopup({ level, skillLevels, skillMastery, skillCasts, skillTiers, gold, sp, onClose, onUpgrade, lang }: SkillsPopupProps) {
-  const getMastery = (skillId: string): number => {
-    if (skillId === 'fireball') return skillMastery.fireball;
-    if (skillId === 'iceball') return skillMastery.iceball;
-    if (skillId === 'lightning') return skillMastery.lightning;
+function SkillsPopup({ level, skillLevels, onClose, lang }: SkillsPopupProps) {
+  const getSkillLevel = (skillId: string): number => {
+    if (skillId === 'fireball') return skillLevels.fireball;
+    if (skillId === 'iceball') return skillLevels.iceball;
+    if (skillId === 'lightning') return skillLevels.lightning;
     return 0;
   };
-
-  const getCasts = (skillId: string): number => {
-    if (skillId === 'fireball') return skillCasts.fireball;
-    if (skillId === 'iceball') return skillCasts.iceball;
-    if (skillId === 'lightning') return skillCasts.lightning;
-    return 0;
-  };
-
-  const getTiers = (skillId: string): number => {
-    if (skillId === 'fireball') return skillTiers.fireball;
-    if (skillId === 'iceball') return skillTiers.iceball;
-    if (skillId === 'lightning') return skillTiers.lightning;
-    return 0;
-  };
-
-  const caps = getSkillLevelCaps(level);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div
-        className="bg-l2-panel rounded-lg w-full max-w-md overflow-hidden"
+        className="bg-l2-panel rounded-lg w-full max-w-sm overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm text-gray-400">⚡ {lang === 'ru' ? 'Навыки' : 'Skills'}</h3>
-            <div className="flex items-center gap-3 text-xs mt-1">
-              <span className="text-l2-gold">🪙 {gold.toLocaleString()}</span>
-              <span className="text-blue-400">SP: {sp}</span>
-            </div>
-          </div>
+          <h3 className="text-sm text-gray-400">⚡ {lang === 'ru' ? 'Навыки' : 'Skills'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+        <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
           {SKILLS_DATA.map((skill) => {
             const isLocked = level < skill.unlockLevel;
-            const mastery = getMastery(skill.id);
-            const casts = getCasts(skill.id);
-            const tiers = getTiers(skill.id);
-
-            // Mastery upgrade cost
-            const canUpgradeMastery = mastery < MASTERY_MAX_RANK && mastery < caps.activeMastery;
-            const masteryCost = mastery < MASTERY_MAX_RANK ? {
-              gold: MASTERY_COSTS.gold[mastery],
-              sp: MASTERY_COSTS.sp[mastery],
-            } : null;
-            const canAffordMastery = masteryCost && gold >= masteryCost.gold && sp >= masteryCost.sp;
-
-            // Calculate total mastery bonus
-            const masteryBonus = mastery * 3; // +3% per rank
-
-            // Calculate tier bonuses unlocked
-            let tierUnlocked = 0;
-            for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
-              if (casts >= TIER_THRESHOLDS[i]) {
-                tierUnlocked = i + 1;
-                break;
-              }
-            }
-
-            // Calculate active tier bonus
-            let tierBonus = 0;
-            for (let i = 0; i < 4; i++) {
-              if (tiers & (1 << i)) {
-                tierBonus += TIER_BONUSES[i];
-              }
-            }
+            const skillLevel = getSkillLevel(skill.id);
 
             return (
               <div
                 key={skill.id}
-                className={`p-3 bg-black/30 rounded-lg ${isLocked ? 'opacity-50' : ''}`}
+                className={`flex items-center gap-3 p-3 bg-black/30 rounded-lg ${isLocked ? 'opacity-50' : ''}`}
               >
-                {/* Skill Header */}
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-black/50 flex items-center justify-center relative">
-                    <span className="text-2xl">{skill.icon}</span>
-                    {!isLocked && mastery > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-purple-600 px-1.5 py-0.5 rounded text-[9px] font-bold text-white">
-                        M{mastery}
-                      </span>
+                <div className="w-10 h-10 rounded-lg bg-black/30 flex items-center justify-center relative">
+                  <span className="text-xl">{skill.icon}</span>
+                  {!isLocked && skillLevel > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-600 px-1 py-0.5 rounded text-[8px] font-bold text-white">
+                      {skillLevel}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'}`}>
+                      {lang === 'ru' ? skill.nameRu : skill.nameEn}
+                    </span>
+                    {isLocked && (
+                      <span className="text-[9px] text-red-400">Lv.{skill.unlockLevel}</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-bold ${isLocked ? 'text-gray-400' : 'text-white'}`}>
-                        {lang === 'ru' ? skill.nameRu : skill.nameEn}
-                      </span>
-                      {isLocked && (
-                        <span className="text-[9px] text-red-400 bg-red-900/30 px-1.5 py-0.5 rounded">Lv.{skill.unlockLevel}</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      {lang === 'ru' ? skill.descRu : skill.descEn}
-                    </p>
-                    <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1">
-                      <span>💧 {skill.manaCost}</span>
-                      <span>⏱️ {skill.cooldown / 1000}s</span>
-                      {(masteryBonus > 0 || tierBonus > 0) && (
-                        <span className="text-green-400">+{masteryBonus + tierBonus}% {lang === 'ru' ? 'урон' : 'dmg'}</span>
-                      )}
-                    </div>
+                  <p className="text-xs text-gray-500">
+                    {lang === 'ru' ? skill.descRu : skill.descEn}
+                  </p>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                    <span>💧 {skill.manaCost}</span>
+                    <span>⏱️ {skill.cooldown / 1000}s</span>
                   </div>
                 </div>
-
-                {/* Mastery & Upgrade Section */}
-                {!isLocked && (
-                  <div className="mt-3 pt-3 border-t border-gray-700/30">
-                    {/* Mastery Row */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-purple-400">{lang === 'ru' ? 'Мастерство' : 'Mastery'}</span>
-                        <span className="text-xs text-white">{mastery}/{caps.activeMastery}</span>
-                        {mastery >= caps.activeMastery && mastery < MASTERY_MAX_RANK && (
-                          <span className="text-[9px] text-yellow-500">Lv.{level < 20 ? (level < 15 ? (level < 10 ? (level < 5 ? 5 : 10) : 15) : 20) : 20}+</span>
-                        )}
-                      </div>
-                      {canUpgradeMastery && masteryCost && (
-                        <button
-                          onClick={() => onUpgrade(skill.id)}
-                          disabled={!canAffordMastery}
-                          className={`px-2 py-1 rounded text-[10px] font-bold ${
-                            canAffordMastery
-                              ? 'bg-purple-600 text-white hover:bg-purple-500'
-                              : 'bg-gray-700 text-gray-500'
-                          }`}
-                        >
-                          +3% • {masteryCost.gold.toLocaleString()}🪙 {masteryCost.sp}SP
-                        </button>
-                      )}
-                      {mastery >= MASTERY_MAX_RANK && (
-                        <span className="text-[10px] text-yellow-500">MAX</span>
-                      )}
-                    </div>
-
-                    {/* Proficiency (Casts) Progress */}
-                    <div className="flex items-center gap-2 text-[10px]">
-                      <span className="text-gray-500">{lang === 'ru' ? 'Каст' : 'Casts'}:</span>
-                      <span className="text-cyan-400">{casts}</span>
-                      {tierUnlocked < 4 && (
-                        <span className="text-gray-600">→ {TIER_THRESHOLDS[tierUnlocked]}</span>
-                      )}
-                      {/* Tier indicators */}
-                      <div className="flex gap-1 ml-auto">
-                        {[1, 2, 3, 4].map(t => {
-                          const isUnlocked = tierUnlocked >= t;
-                          const isActivated = (tiers & (1 << (t - 1))) !== 0;
-                          return (
-                            <span
-                              key={t}
-                              className={`w-5 h-5 flex items-center justify-center rounded text-[8px] font-bold ${
-                                isActivated
-                                  ? 'bg-green-600 text-white'
-                                  : isUnlocked
-                                  ? 'bg-yellow-600/50 text-yellow-300'
-                                  : 'bg-gray-700 text-gray-500'
-                              }`}
-                              title={`T${t}: +${TIER_BONUSES[t - 1]}%`}
-                            >
-                              T{t}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
-        </div>
-
-        {/* Footer hint */}
-        <div className="p-3 border-t border-gray-700/30 text-center">
-          <p className="text-[10px] text-gray-500">
-            {lang === 'ru'
-              ? '💡 Мастерство: +3% урона/ранг • Касты открывают тиры'
-              : '💡 Mastery: +3% dmg/rank • Casts unlock tiers'}
-          </p>
         </div>
       </div>
     </div>
@@ -1100,29 +923,6 @@ export default function CharacterTab() {
       });
     };
 
-    // Handle skill mastery upgrade
-    const handleSkillUpgrade = (data: { skillId: string; newRank: number; gold: number; sp: number; [key: string]: any }) => {
-      setHeroState(prev => {
-        if (!prev.baseStats) return prev;
-        const updates: Partial<PlayerStats> = {
-          gold: data.gold,
-          sp: data.sp,
-        };
-        // Update the specific mastery field
-        if (data.skillFireballMastery !== undefined) updates.skillFireballMastery = data.skillFireballMastery;
-        if (data.skillIceballMastery !== undefined) updates.skillIceballMastery = data.skillIceballMastery;
-        if (data.skillLightningMastery !== undefined) updates.skillLightningMastery = data.skillLightningMastery;
-
-        return {
-          ...prev,
-          baseStats: {
-            ...prev.baseStats,
-            ...updates,
-          },
-        };
-      });
-    };
-
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
@@ -1131,7 +931,6 @@ export default function CharacterTab() {
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('player:state', handlePlayerState);
     socket.on('level:up', handleLevelUp);
-    socket.on('skill:upgrade-success', handleSkillUpgrade);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -1143,7 +942,6 @@ export default function CharacterTab() {
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('player:state', handlePlayerState);
       socket.off('level:up', handleLevelUp);
-      socket.off('skill:upgrade-success', handleSkillUpgrade);
     };
   }, []);
 
@@ -1464,27 +1262,7 @@ export default function CharacterTab() {
             iceball: stats.skillIceball ?? 0,
             lightning: stats.skillLightning ?? 0,
           }}
-          skillMastery={{
-            fireball: stats.skillFireballMastery ?? 0,
-            iceball: stats.skillIceballMastery ?? 0,
-            lightning: stats.skillLightningMastery ?? 0,
-          }}
-          skillCasts={{
-            fireball: stats.skillFireballCasts ?? 0,
-            iceball: stats.skillIceballCasts ?? 0,
-            lightning: stats.skillLightningCasts ?? 0,
-          }}
-          skillTiers={{
-            fireball: stats.skillFireballTiers ?? 0,
-            iceball: stats.skillIceballTiers ?? 0,
-            lightning: stats.skillLightningTiers ?? 0,
-          }}
-          gold={stats.gold}
-          sp={stats.sp ?? 0}
           onClose={() => setShowSkillsPopup(false)}
-          onUpgrade={(skillId) => {
-            getSocket().emit('skill:upgrade', { skillId });
-          }}
           lang={lang}
         />
       )}

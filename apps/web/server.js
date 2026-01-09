@@ -718,6 +718,95 @@ const LEVEL_THRESHOLDS = [
 ];
 const MAX_LEVEL = 20;
 
+// ═══════════════════════════════════════════════════════════
+// SKILLS PROGRESSION SYSTEM v1.4
+// ═══════════════════════════════════════════════════════════
+
+// MASTERY SYSTEM (ranks 0-10, +3% skill dmg per rank)
+const MASTERY_MAX_RANK = 10;
+const MASTERY_BONUS_PER_RANK = 0.03; // +3% dmg per rank
+const MASTERY_COSTS = {
+  gold: [5000, 8000, 12000, 18000, 26000, 38000, 55000, 80000, 120000, 180000],
+  sp:   [80, 120, 180, 260, 380, 540, 760, 1050, 1450, 2000],
+};
+
+// PROFICIENCY TIERS (unlock by casts, activate with Gold+SP)
+const TIER_COUNT = 4;
+const TIER_THRESHOLDS = [50, 200, 500, 1000]; // Casts to UNLOCK tier
+const TIER_BONUSES = [0.03, 0.07, 0.15, 0.25]; // +3%, +7%, +15%, +25%
+const TIER_ACTIVATION_COSTS = {
+  gold: [8000, 18000, 45000, 120000],
+  sp:   [120, 280, 700, 1800],
+};
+
+// PASSIVE SKILLS costs (ranks 1-10)
+const PASSIVE_COSTS = {
+  gold: [4000, 6000, 9000, 13000, 19000, 28000, 41000, 60000, 90000, 135000],
+  sp:   [60, 90, 130, 190, 280, 400, 560, 780, 1100, 1550],
+};
+const ETHER_EFFICIENCY_COSTS = {
+  gold: [12000, 20000, 32000, 50000, 80000],
+  sp:   [200, 320, 520, 820, 1300],
+};
+
+// PASSIVE EFFECTS
+const PASSIVE_EFFECTS = {
+  arcanePower: { effectPerRank: 0.02, maxRank: 10 },      // +2% final P.Atk
+  critFocus: { effectPerRank: 0.006, maxRank: 10, cap: 0.6 }, // +0.6% crit chance (cap 60%)
+  critPower: { effectPerRank: 0.06, maxRank: 10 },        // +6% crit damage
+  staminaTraining: { effectPerRank: 50, maxRank: 10 },    // +50 max stamina
+  manaFlow: { effectPerRank: 30, maxRank: 10 },           // +30 max mana
+  etherEfficiency: { effectPerRank: 0.06, maxRank: 5 },   // -6% ether cost (max 5 ranks)
+};
+
+// LEVEL CAPS (restrict upgrades by hero level)
+const SKILL_LEVEL_CAPS = {
+  1:  { activeMastery: 3, passiveRank: 0, tierMax: 1, etherMax: 0 },
+  5:  { activeMastery: 5, passiveRank: 3, tierMax: 1, etherMax: 0 },
+  10: { activeMastery: 7, passiveRank: 6, tierMax: 2, etherMax: 0 },
+  15: { activeMastery: 9, passiveRank: 8, tierMax: 3, etherMax: 3 },
+  20: { activeMastery: 10, passiveRank: 10, tierMax: 4, etherMax: 5 },
+};
+
+function getSkillLevelCaps(level) {
+  if (level >= 20) return SKILL_LEVEL_CAPS[20];
+  if (level >= 15) return SKILL_LEVEL_CAPS[15];
+  if (level >= 10) return SKILL_LEVEL_CAPS[10];
+  if (level >= 5) return SKILL_LEVEL_CAPS[5];
+  return SKILL_LEVEL_CAPS[1];
+}
+
+function getMasteryMultiplier(rank) {
+  return 1 + rank * MASTERY_BONUS_PER_RANK;
+}
+
+function getUnlockedTierByCasts(casts) {
+  for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (casts >= TIER_THRESHOLDS[i]) return i + 1; // tier 1-4
+  }
+  return 0;
+}
+
+function isTierActivated(tierBitmask, tier) {
+  if (tier < 1 || tier > 4) return false;
+  return (tierBitmask & (1 << (tier - 1))) !== 0;
+}
+
+function activateTier(tierBitmask, tier) {
+  if (tier < 1 || tier > 4) return tierBitmask;
+  return tierBitmask | (1 << (tier - 1));
+}
+
+function getTierBonusMultiplier(tierBitmask) {
+  let bonus = 0;
+  for (let i = 0; i < TIER_COUNT; i++) {
+    if (tierBitmask & (1 << i)) {
+      bonus += TIER_BONUSES[i];
+    }
+  }
+  return 1 + bonus;
+}
+
 // Получить уровень по cumulative XP
 function getLevelFromXp(totalXp) {
   for (let lvl = MAX_LEVEL; lvl >= 1; lvl--) {
@@ -3015,6 +3104,10 @@ app.prepare().then(async () => {
           potionLuck: player.potionLuck ?? 0,
           autoEther: player.autoEther ?? false,
           autoAttack: player.autoAttack ?? false,
+          // ═══ SKILLS v1.4: Save casts ═══
+          skillFireballCasts: player.skillFireballCasts ?? 0,
+          skillIceballCasts: player.skillIceballCasts ?? 0,
+          skillLightningCasts: player.skillLightningCasts ?? 0,
         },
       });
       player.dirty = false;
@@ -3695,6 +3788,24 @@ app.prepare().then(async () => {
         player.skillIceball = user.skillIceball ?? 0;
         player.skillLightning = user.skillLightning ?? 0;
 
+        // ═══ SKILLS v1.4: Mastery, Casts, Tiers ═══
+        player.skillFireballMastery = user.skillFireballMastery ?? 0;
+        player.skillIceballMastery = user.skillIceballMastery ?? 0;
+        player.skillLightningMastery = user.skillLightningMastery ?? 0;
+        player.skillFireballCasts = user.skillFireballCasts ?? 0;
+        player.skillIceballCasts = user.skillIceballCasts ?? 0;
+        player.skillLightningCasts = user.skillLightningCasts ?? 0;
+        player.skillFireballTiers = user.skillFireballTiers ?? 0;
+        player.skillIceballTiers = user.skillIceballTiers ?? 0;
+        player.skillLightningTiers = user.skillLightningTiers ?? 0;
+        // Passive skills
+        player.passiveArcanePower = user.passiveArcanePower ?? 0;
+        player.passiveCritFocus = user.passiveCritFocus ?? 0;
+        player.passiveCritPower = user.passiveCritPower ?? 0;
+        player.passiveStaminaTraining = user.passiveStaminaTraining ?? 0;
+        player.passiveManaFlow = user.passiveManaFlow ?? 0;
+        player.passiveEtherEfficiency = user.passiveEtherEfficiency ?? 0;
+
         // Calculate offline meditation dust
         // Check if user was recently online (heartbeat within last 2 minutes)
         const now = Date.now();
@@ -3836,10 +3947,27 @@ app.prepare().then(async () => {
           potionAcumen: player.potionAcumen,
           potionLuck: player.potionLuck,
           activeBuffs: player.activeBuffs,
-          // Skill levels
+          // Skill levels (legacy)
           skillFireball: player.skillFireball,
           skillIceball: player.skillIceball,
           skillLightning: player.skillLightning,
+          // ═══ SKILLS v1.4 ═══
+          skillFireballMastery: player.skillFireballMastery,
+          skillIceballMastery: player.skillIceballMastery,
+          skillLightningMastery: player.skillLightningMastery,
+          skillFireballCasts: player.skillFireballCasts,
+          skillIceballCasts: player.skillIceballCasts,
+          skillLightningCasts: player.skillLightningCasts,
+          skillFireballTiers: player.skillFireballTiers,
+          skillIceballTiers: player.skillIceballTiers,
+          skillLightningTiers: player.skillLightningTiers,
+          // Passive skills
+          passiveArcanePower: player.passiveArcanePower,
+          passiveCritFocus: player.passiveCritFocus,
+          passiveCritPower: player.passiveCritPower,
+          passiveStaminaTraining: player.passiveStaminaTraining,
+          passiveManaFlow: player.passiveManaFlow,
+          passiveEtherEfficiency: player.passiveEtherEfficiency,
         });
       } catch (err) {
         console.error('[Auth] Error:', err.message);
@@ -4055,23 +4183,45 @@ app.prepare().then(async () => {
       player.mana -= skill.manaCost;
       player.dirty = true;  // SSOT: mark for flush
 
-      // Get skill level for this player
-      const skillLevelMap = {
-        fireball: player.skillFireball || 1,
-        iceball: player.skillIceball || 0,
-        lightning: player.skillLightning || 0,
+      // ═══ SKILLS v1.4: Get mastery, tiers, casts ═══
+      const masteryMap = {
+        fireball: player.skillFireballMastery ?? 0,
+        iceball: player.skillIceballMastery ?? 0,
+        lightning: player.skillLightningMastery ?? 0,
       };
-      const skillLevel = skillLevelMap[skillId] || 1;
+      const tiersMap = {
+        fireball: player.skillFireballTiers ?? 0,
+        iceball: player.skillIceballTiers ?? 0,
+        lightning: player.skillLightningTiers ?? 0,
+      };
+      const castsFieldMap = {
+        fireball: 'skillFireballCasts',
+        iceball: 'skillIceballCasts',
+        lightning: 'skillLightningCasts',
+      };
+
+      const masteryRank = masteryMap[skillId];
+      const tierBitmask = tiersMap[skillId];
+
+      // Increment casts (for proficiency tracking)
+      const castsField = castsFieldMap[skillId];
+      player[castsField] = (player[castsField] ?? 0) + 1;
 
       // Level multiplier: +2% per hero level
       const levelMultiplier = Math.pow(1.02, playerLevel - 1);
 
-      // Skill level multiplier: +2% per skill level
-      const skillMultiplier = Math.pow(1.02, skillLevel - 1);
+      // Mastery multiplier: +3% per rank (replaces old skill level)
+      const masteryMultiplier = getMasteryMultiplier(masteryRank);
 
-      // Calculate damage: (baseDamage + pAtk * multiplier) * levelMult * skillMult
+      // Tier bonus multiplier: sum of activated tier bonuses
+      const tierMultiplier = getTierBonusMultiplier(tierBitmask);
+
+      // Arcane Power passive: +2% per rank to final damage
+      const arcanePowerBonus = 1 + (player.passiveArcanePower ?? 0) * 0.02;
+
+      // Calculate damage: (baseDamage + pAtk * multiplier) * levelMult * masteryMult * tierMult * arcanePower
       const baseDmg = skill.baseDamage + (player.pAtk * skill.multiplier);
-      const rawDamage = Math.floor(baseDmg * levelMultiplier * skillMultiplier);
+      const rawDamage = Math.floor(baseDmg * levelMultiplier * masteryMultiplier * tierMultiplier * arcanePowerBonus);
       // Apply dampening multiplier for 24h boss duration
       const damage = Math.floor(rawDamage * bossState.bossDamageMultiplier);
       const actualDamage = Math.min(damage, bossState.currentHp);
@@ -4124,6 +4274,317 @@ app.prepare().then(async () => {
         // Trigger same kill logic as tap:batch
         // (simplified - in production you'd refactor to shared function)
         console.log(`[Boss] ${bossState.name} killed by ${player.odamageN} using ${skillId}!`);
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // SKILL UPGRADE - Mastery ranks (Gold + SP)
+    // ═══════════════════════════════════════════════════════════
+    socket.on('skill:upgrade', async (data) => {
+      const { skillId } = data;
+
+      if (!player.odamage) {
+        socket.emit('skill:upgrade-error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const masteryFieldMap = {
+        fireball: 'skillFireballMastery',
+        iceball: 'skillIceballMastery',
+        lightning: 'skillLightningMastery',
+      };
+
+      const masteryField = masteryFieldMap[skillId];
+      if (!masteryField) {
+        socket.emit('skill:upgrade-error', { message: 'Unknown skill' });
+        return;
+      }
+
+      const currentRank = player[masteryField] ?? 0;
+      const playerLevel = player.level ?? 1;
+      const caps = getSkillLevelCaps(playerLevel);
+
+      // Check level cap
+      if (currentRank >= caps.activeMastery) {
+        socket.emit('skill:upgrade-error', { message: `Level ${playerLevel} cap reached (max: ${caps.activeMastery})` });
+        return;
+      }
+
+      // Check max rank
+      if (currentRank >= MASTERY_MAX_RANK) {
+        socket.emit('skill:upgrade-error', { message: 'Max rank reached' });
+        return;
+      }
+
+      // Get cost for next rank
+      const goldCost = MASTERY_COSTS.gold[currentRank];
+      const spCost = MASTERY_COSTS.sp[currentRank];
+
+      // Check resources
+      if (player.gold < goldCost) {
+        socket.emit('skill:upgrade-error', { message: `Not enough gold (need: ${goldCost})` });
+        return;
+      }
+
+      // Need to get SP from DB
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { sp: true, gold: true },
+        });
+
+        if (!user || user.sp < spCost) {
+          socket.emit('skill:upgrade-error', { message: `Not enough SP (need: ${spCost})` });
+          return;
+        }
+
+        if (user.gold < goldCost) {
+          socket.emit('skill:upgrade-error', { message: `Not enough gold (need: ${goldCost})` });
+          return;
+        }
+
+        // Deduct and upgrade
+        const updateData = {
+          gold: { decrement: goldCost },
+          sp: { decrement: spCost },
+          [masteryField]: currentRank + 1,
+        };
+
+        const updatedUser = await prisma.user.update({
+          where: { id: player.odamage },
+          data: updateData,
+        });
+
+        // Update in-memory
+        player[masteryField] = currentRank + 1;
+        player.gold = Number(updatedUser.gold);
+
+        socket.emit('skill:upgrade-success', {
+          skillId,
+          newRank: currentRank + 1,
+          gold: Number(updatedUser.gold),
+          sp: updatedUser.sp,
+          [masteryField]: currentRank + 1,
+        });
+
+        console.log(`[Skill] ${player.odamageN} upgraded ${skillId} mastery to rank ${currentRank + 1}`);
+      } catch (err) {
+        console.error('[Skill:upgrade] Error:', err.message);
+        socket.emit('skill:upgrade-error', { message: 'Upgrade failed' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // SKILL TIER ACTIVATE - Proficiency tiers (Gold + SP)
+    // ═══════════════════════════════════════════════════════════
+    socket.on('skill:tier-activate', async (data) => {
+      const { skillId, tier } = data;
+
+      if (!player.odamage) {
+        socket.emit('skill:tier-error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const tiersFieldMap = {
+        fireball: 'skillFireballTiers',
+        iceball: 'skillIceballTiers',
+        lightning: 'skillLightningTiers',
+      };
+      const castsFieldMap = {
+        fireball: 'skillFireballCasts',
+        iceball: 'skillIceballCasts',
+        lightning: 'skillLightningCasts',
+      };
+
+      const tiersField = tiersFieldMap[skillId];
+      const castsField = castsFieldMap[skillId];
+      if (!tiersField) {
+        socket.emit('skill:tier-error', { message: 'Unknown skill' });
+        return;
+      }
+
+      // Validate tier (1-4)
+      if (tier < 1 || tier > 4) {
+        socket.emit('skill:tier-error', { message: 'Invalid tier' });
+        return;
+      }
+
+      const currentTiers = player[tiersField] ?? 0;
+      const currentCasts = player[castsField] ?? 0;
+      const playerLevel = player.level ?? 1;
+      const caps = getSkillLevelCaps(playerLevel);
+
+      // Check level cap for tier
+      if (tier > caps.tierMax) {
+        socket.emit('skill:tier-error', { message: `Level ${playerLevel} cap (max tier: ${caps.tierMax})` });
+        return;
+      }
+
+      // Check if already activated
+      if (isTierActivated(currentTiers, tier)) {
+        socket.emit('skill:tier-error', { message: 'Tier already activated' });
+        return;
+      }
+
+      // Check if unlocked by casts
+      const unlockedTier = getUnlockedTierByCasts(currentCasts);
+      if (tier > unlockedTier) {
+        const required = TIER_THRESHOLDS[tier - 1];
+        socket.emit('skill:tier-error', { message: `Need ${required} casts (have: ${currentCasts})` });
+        return;
+      }
+
+      // Get activation cost
+      const goldCost = TIER_ACTIVATION_COSTS.gold[tier - 1];
+      const spCost = TIER_ACTIVATION_COSTS.sp[tier - 1];
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { sp: true, gold: true },
+        });
+
+        if (!user || user.sp < spCost) {
+          socket.emit('skill:tier-error', { message: `Not enough SP (need: ${spCost})` });
+          return;
+        }
+
+        if (user.gold < goldCost) {
+          socket.emit('skill:tier-error', { message: `Not enough gold (need: ${goldCost})` });
+          return;
+        }
+
+        // Activate tier
+        const newTiers = activateTier(currentTiers, tier);
+
+        const updateData = {
+          gold: { decrement: goldCost },
+          sp: { decrement: spCost },
+          [tiersField]: newTiers,
+        };
+
+        const updatedUser = await prisma.user.update({
+          where: { id: player.odamage },
+          data: updateData,
+        });
+
+        // Update in-memory
+        player[tiersField] = newTiers;
+        player.gold = Number(updatedUser.gold);
+
+        socket.emit('skill:tier-success', {
+          skillId,
+          tier,
+          newTiers,
+          gold: Number(updatedUser.gold),
+          sp: updatedUser.sp,
+        });
+
+        console.log(`[Skill] ${player.odamageN} activated ${skillId} tier ${tier}`);
+      } catch (err) {
+        console.error('[Skill:tier] Error:', err.message);
+        socket.emit('skill:tier-error', { message: 'Activation failed' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // PASSIVE SKILL UPGRADE (Gold + SP)
+    // ═══════════════════════════════════════════════════════════
+    socket.on('skill:passive-upgrade', async (data) => {
+      const { passiveId } = data;
+
+      if (!player.odamage) {
+        socket.emit('skill:passive-error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const passiveFieldMap = {
+        arcanePower: 'passiveArcanePower',
+        critFocus: 'passiveCritFocus',
+        critPower: 'passiveCritPower',
+        staminaTraining: 'passiveStaminaTraining',
+        manaFlow: 'passiveManaFlow',
+        etherEfficiency: 'passiveEtherEfficiency',
+      };
+
+      const passiveField = passiveFieldMap[passiveId];
+      if (!passiveField) {
+        socket.emit('skill:passive-error', { message: 'Unknown passive' });
+        return;
+      }
+
+      const passiveConfig = PASSIVE_EFFECTS[passiveId];
+      const currentRank = player[passiveField] ?? 0;
+      const playerLevel = player.level ?? 1;
+      const caps = getSkillLevelCaps(playerLevel);
+
+      // Check max rank
+      if (currentRank >= passiveConfig.maxRank) {
+        socket.emit('skill:passive-error', { message: 'Max rank reached' });
+        return;
+      }
+
+      // Check level cap (ether efficiency uses etherMax, others use passiveRank)
+      const capToCheck = passiveId === 'etherEfficiency' ? caps.etherMax : caps.passiveRank;
+      if (currentRank >= capToCheck) {
+        socket.emit('skill:passive-error', { message: `Level ${playerLevel} cap reached (max: ${capToCheck})` });
+        return;
+      }
+
+      // Get cost (ether efficiency has special costs)
+      let goldCost, spCost;
+      if (passiveId === 'etherEfficiency') {
+        goldCost = ETHER_EFFICIENCY_COSTS.gold[currentRank];
+        spCost = ETHER_EFFICIENCY_COSTS.sp[currentRank];
+      } else {
+        goldCost = PASSIVE_COSTS.gold[currentRank];
+        spCost = PASSIVE_COSTS.sp[currentRank];
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { sp: true, gold: true },
+        });
+
+        if (!user || user.sp < spCost) {
+          socket.emit('skill:passive-error', { message: `Not enough SP (need: ${spCost})` });
+          return;
+        }
+
+        if (user.gold < goldCost) {
+          socket.emit('skill:passive-error', { message: `Not enough gold (need: ${goldCost})` });
+          return;
+        }
+
+        // Upgrade passive
+        const updateData = {
+          gold: { decrement: goldCost },
+          sp: { decrement: spCost },
+          [passiveField]: currentRank + 1,
+        };
+
+        const updatedUser = await prisma.user.update({
+          where: { id: player.odamage },
+          data: updateData,
+        });
+
+        // Update in-memory
+        player[passiveField] = currentRank + 1;
+        player.gold = Number(updatedUser.gold);
+
+        socket.emit('skill:passive-success', {
+          passiveId,
+          newRank: currentRank + 1,
+          gold: Number(updatedUser.gold),
+          sp: updatedUser.sp,
+          [passiveField]: currentRank + 1,
+        });
+
+        console.log(`[Skill] ${player.odamageN} upgraded ${passiveId} to rank ${currentRank + 1}`);
+      } catch (err) {
+        console.error('[Skill:passive] Error:', err.message);
+        socket.emit('skill:passive-error', { message: 'Upgrade failed' });
       }
     });
 

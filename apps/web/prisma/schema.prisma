@@ -120,12 +120,36 @@ model User {
   keySilver       Int      @default(0)
   keyGold         Int      @default(0)
 
-  // Skill Levels (0 = locked, 1+ = level)
-  // Unlock: Fireball@Lv1, IceArrow@Lv2, Lightning@Lv3
-  // +1 level per use in boss fight
+  // ═══ ACTIVE SKILLS SYSTEM v1.4 ═══
+  // Legacy skill levels (kept for backward compat, will migrate to mastery)
   skillFireball   Int      @default(1)   // Unlocked from start
   skillIceball    Int      @default(0)   // Unlocks at hero Lv.2
   skillLightning  Int      @default(0)   // Unlocks at hero Lv.3
+
+  // Mastery Ranks (0-10): +3% dmg per rank, upgraded with Gold+SP
+  skillFireballMastery    Int @default(0)
+  skillIceballMastery     Int @default(0)
+  skillLightningMastery   Int @default(0)
+
+  // Cumulative cast counters (for tier unlocks)
+  skillFireballCasts      Int @default(0)
+  skillIceballCasts       Int @default(0)
+  skillLightningCasts     Int @default(0)
+
+  // Activated tiers bitmask (0=none, 1=T1, 3=T1+T2, 7=T1-T3, 15=all)
+  // Tiers unlock at: 50, 200, 500, 1000 casts
+  // Tier bonuses after activation: +3%, +7%, +15%, +25% dmg
+  skillFireballTiers      Int @default(0)
+  skillIceballTiers       Int @default(0)
+  skillLightningTiers     Int @default(0)
+
+  // ═══ PASSIVE SKILLS (0-10 ranks each) ═══
+  passiveArcanePower      Int @default(0)  // +2% pAtk final per rank
+  passiveCritFocus        Int @default(0)  // +0.6% crit chance per rank (cap 60%)
+  passiveCritPower        Int @default(0)  // +6% crit damage per rank
+  passiveStaminaTraining  Int @default(0)  // +50 maxStamina per rank
+  passiveManaFlow         Int @default(0)  // +30 maxMana per rank
+  passiveEtherEfficiency  Int @default(0)  // -6% ether cost per rank (max 5 = -30%)
 
   // Equipment (legacy weapon)
   weaponId        String?
