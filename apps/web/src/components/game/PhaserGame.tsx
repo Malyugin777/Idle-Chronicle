@@ -21,7 +21,7 @@ import EnchantModal from './EnchantModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.4.1';
 
 interface BossState {
   name: string;

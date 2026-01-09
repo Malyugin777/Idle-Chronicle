@@ -133,13 +133,35 @@ const MASTERY_COSTS = {
 
 const TIER_THRESHOLDS = [50, 200, 500, 1000];
 const TIER_BONUSES = [3, 7, 15, 25]; // Display as percentages
+const TIER_ACTIVATION_COSTS = {
+  gold: [8000, 18000, 45000, 120000],
+  sp:   [120, 280, 700, 1800],
+};
 
-const SKILL_LEVEL_CAPS: Record<number, { activeMastery: number }> = {
-  1:  { activeMastery: 3 },
-  5:  { activeMastery: 5 },
-  10: { activeMastery: 7 },
-  15: { activeMastery: 9 },
-  20: { activeMastery: 10 },
+// PASSIVE SKILLS
+const PASSIVE_SKILLS = [
+  { id: 'arcanePower', nameRu: 'Тайная сила', nameEn: 'Arcane Power', icon: '⚔️', descRu: '+2% к P.Atk/ранг', descEn: '+2% P.Atk/rank', maxRank: 10 },
+  { id: 'critFocus', nameRu: 'Фокус крита', nameEn: 'Crit Focus', icon: '🎯', descRu: '+0.6% крит шанс/ранг', descEn: '+0.6% crit/rank', maxRank: 10 },
+  { id: 'critPower', nameRu: 'Мощь крита', nameEn: 'Crit Power', icon: '💥', descRu: '+6% крит урон/ранг', descEn: '+6% crit dmg/rank', maxRank: 10 },
+  { id: 'staminaTraining', nameRu: 'Выносливость', nameEn: 'Stamina', icon: '💪', descRu: '+50 макс стамины/ранг', descEn: '+50 max stam/rank', maxRank: 10 },
+  { id: 'manaFlow', nameRu: 'Поток маны', nameEn: 'Mana Flow', icon: '🔮', descRu: '+30 макс маны/ранг', descEn: '+30 max mana/rank', maxRank: 10 },
+  { id: 'etherEfficiency', nameRu: 'Эфир', nameEn: 'Ether Eff.', icon: '✨', descRu: '-6% расхода эфира/ранг', descEn: '-6% ether cost/rank', maxRank: 5 },
+];
+const PASSIVE_COSTS = {
+  gold: [4000, 6000, 9000, 13000, 19000, 28000, 41000, 60000, 90000, 135000],
+  sp:   [60, 90, 130, 190, 280, 400, 560, 780, 1100, 1550],
+};
+const ETHER_EFFICIENCY_COSTS = {
+  gold: [12000, 20000, 32000, 50000, 80000],
+  sp:   [200, 320, 520, 820, 1300],
+};
+
+const SKILL_LEVEL_CAPS: Record<number, { activeMastery: number; tierMax: number; passiveRank: number; etherMax: number }> = {
+  1:  { activeMastery: 3, tierMax: 1, passiveRank: 0, etherMax: 0 },
+  5:  { activeMastery: 5, tierMax: 1, passiveRank: 3, etherMax: 0 },
+  10: { activeMastery: 7, tierMax: 2, passiveRank: 6, etherMax: 0 },
+  15: { activeMastery: 9, tierMax: 3, passiveRank: 8, etherMax: 3 },
+  20: { activeMastery: 10, tierMax: 4, passiveRank: 10, etherMax: 5 },
 };
 
 function getSkillLevelCaps(level: number) {
@@ -193,6 +215,13 @@ interface PlayerStats {
   skillFireballTiers?: number;
   skillIceballTiers?: number;
   skillLightningTiers?: number;
+  // Passive skills
+  passiveArcanePower?: number;
+  passiveCritFocus?: number;
+  passiveCritPower?: number;
+  passiveStaminaTraining?: number;
+  passiveManaFlow?: number;
+  passiveEtherEfficiency?: number;
   // SP for skill upgrades
   sp?: number;
 }
@@ -768,20 +797,33 @@ function StatsPopup({ stats, derived, equipBonus, heroState, onClose, lang }: St
 // SKILLS POPUP v1.4 - Mastery System
 // ═══════════════════════════════════════════════════════════
 
+interface PassiveRanks {
+  arcanePower: number;
+  critFocus: number;
+  critPower: number;
+  staminaTraining: number;
+  manaFlow: number;
+  etherEfficiency: number;
+}
+
 interface SkillsPopupProps {
   level: number;
   skillLevels: { fireball: number; iceball: number; lightning: number };
   skillMastery: { fireball: number; iceball: number; lightning: number };
   skillCasts: { fireball: number; iceball: number; lightning: number };
   skillTiers: { fireball: number; iceball: number; lightning: number };
+  passiveRanks: PassiveRanks;
   gold: number;
   sp: number;
   onClose: () => void;
   onUpgrade: (skillId: string) => void;
+  onTierActivate: (skillId: string, tier: number) => void;
+  onPassiveUpgrade: (passiveId: string) => void;
   lang: Language;
 }
 
-function SkillsPopup({ level, skillLevels, skillMastery, skillCasts, skillTiers, gold, sp, onClose, onUpgrade, lang }: SkillsPopupProps) {
+function SkillsPopup({ level, skillLevels, skillMastery, skillCasts, skillTiers, passiveRanks, gold, sp, onClose, onUpgrade, onTierActivate, onPassiveUpgrade, lang }: SkillsPopupProps) {
+  const [activeTab, setActiveTab] = useState<'active' | 'passive'>('active');
   const getMastery = (skillId: string): number => {
     if (skillId === 'fireball') return skillMastery.fireball;
     if (skillId === 'iceball') return skillMastery.iceball;
@@ -811,21 +853,47 @@ function SkillsPopup({ level, skillLevels, skillMastery, skillCasts, skillTiers,
         className="bg-l2-panel rounded-lg w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm text-gray-400">⚡ {lang === 'ru' ? 'Навыки' : 'Skills'}</h3>
-            <div className="flex items-center gap-3 text-xs mt-1">
-              <span className="text-l2-gold">🪙 {gold.toLocaleString()}</span>
-              <span className="text-blue-400">SP: {sp}</span>
+        {/* Header with tabs */}
+        <div className="p-4 border-b border-gray-700/30">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm text-gray-400">⚡ {lang === 'ru' ? 'Навыки' : 'Skills'}</h3>
+              <div className="flex items-center gap-3 text-xs mt-1">
+                <span className="text-l2-gold">🪙 {gold.toLocaleString()}</span>
+                <span className="text-blue-400">SP: {sp}</span>
+              </div>
             </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+              <X size={20} />
+            </button>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
-            <X size={20} />
-          </button>
+          {/* Tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`flex-1 py-2 px-3 rounded text-xs font-bold transition-all ${
+                activeTab === 'active'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              {lang === 'ru' ? 'Активные' : 'Active'}
+            </button>
+            <button
+              onClick={() => setActiveTab('passive')}
+              className={`flex-1 py-2 px-3 rounded text-xs font-bold transition-all ${
+                activeTab === 'passive'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              {lang === 'ru' ? 'Пассивные' : 'Passive'}
+            </button>
+          </div>
         </div>
 
-        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+        {activeTab === 'active' && (<>
           {SKILLS_DATA.map((skill) => {
             const isLocked = level < skill.unlockLevel;
             const mastery = getMastery(skill.id);
@@ -934,42 +1002,146 @@ function SkillsPopup({ level, skillLevels, skillMastery, skillCasts, skillTiers,
                       {tierUnlocked < 4 && (
                         <span className="text-gray-600">→ {TIER_THRESHOLDS[tierUnlocked]}</span>
                       )}
-                      {/* Tier indicators */}
-                      <div className="flex gap-1 ml-auto">
-                        {[1, 2, 3, 4].map(t => {
-                          const isUnlocked = tierUnlocked >= t;
-                          const isActivated = (tiers & (1 << (t - 1))) !== 0;
-                          return (
-                            <span
-                              key={t}
-                              className={`w-5 h-5 flex items-center justify-center rounded text-[8px] font-bold ${
-                                isActivated
-                                  ? 'bg-green-600 text-white'
-                                  : isUnlocked
-                                  ? 'bg-yellow-600/50 text-yellow-300'
-                                  : 'bg-gray-700 text-gray-500'
-                              }`}
-                              title={`T${t}: +${TIER_BONUSES[t - 1]}%`}
-                            >
-                              T{t}
-                            </span>
-                          );
-                        })}
-                      </div>
+                    </div>
+
+                    {/* Tier activation buttons */}
+                    <div className="flex gap-1 mt-2">
+                      {[1, 2, 3, 4].map(t => {
+                        const isUnlocked = tierUnlocked >= t;
+                        const isActivated = (tiers & (1 << (t - 1))) !== 0;
+                        const canActivate = isUnlocked && !isActivated && t <= caps.tierMax;
+                        const tierCost = {
+                          gold: TIER_ACTIVATION_COSTS.gold[t - 1],
+                          sp: TIER_ACTIVATION_COSTS.sp[t - 1],
+                        };
+                        const canAfford = gold >= tierCost.gold && sp >= tierCost.sp;
+                        const isLevelLocked = t > caps.tierMax;
+
+                        return (
+                          <div key={t} className="flex-1 text-center">
+                            {isActivated ? (
+                              <div className="bg-green-600/30 border border-green-500/50 rounded p-1.5">
+                                <div className="text-green-400 font-bold text-[10px]">T{t} ✓</div>
+                                <div className="text-green-300 text-[8px]">+{TIER_BONUSES[t - 1]}%</div>
+                              </div>
+                            ) : canActivate ? (
+                              <button
+                                onClick={() => onTierActivate(skill.id, t)}
+                                disabled={!canAfford}
+                                className={`w-full rounded p-1.5 ${
+                                  canAfford
+                                    ? 'bg-yellow-600/30 border border-yellow-500/50 hover:bg-yellow-600/50'
+                                    : 'bg-gray-700/30 border border-gray-600/50'
+                                }`}
+                              >
+                                <div className={`font-bold text-[10px] ${canAfford ? 'text-yellow-400' : 'text-gray-500'}`}>
+                                  T{t}
+                                </div>
+                                <div className={`text-[8px] ${canAfford ? 'text-yellow-300' : 'text-gray-500'}`}>
+                                  +{TIER_BONUSES[t - 1]}%
+                                </div>
+                                <div className={`text-[7px] mt-0.5 ${canAfford ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  {(tierCost.gold / 1000).toFixed(0)}k🪙
+                                </div>
+                              </button>
+                            ) : isLevelLocked ? (
+                              <div className="bg-gray-800/30 border border-gray-700/50 rounded p-1.5">
+                                <div className="text-gray-500 font-bold text-[10px]">T{t}</div>
+                                <div className="text-gray-600 text-[8px]">Lv.{t === 2 ? 10 : t === 3 ? 15 : 20}+</div>
+                              </div>
+                            ) : (
+                              <div className="bg-gray-800/30 border border-gray-700/50 rounded p-1.5">
+                                <div className="text-gray-500 font-bold text-[10px]">T{t}</div>
+                                <div className="text-gray-600 text-[8px]">{TIER_THRESHOLDS[t - 1]}</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
             );
           })}
+        </>)}
+
+        {/* PASSIVE SKILLS TAB */}
+        {activeTab === 'passive' && (
+          <div className="space-y-2">
+            {PASSIVE_SKILLS.map((passive) => {
+              const rank = passiveRanks[passive.id as keyof PassiveRanks] ?? 0;
+              const isEther = passive.id === 'etherEfficiency';
+              const maxRank = passive.maxRank;
+              const capRank = isEther ? caps.etherMax : caps.passiveRank;
+              const canUpgrade = rank < maxRank && rank < capRank;
+
+              // Get cost for next rank
+              const costs = isEther ? ETHER_EFFICIENCY_COSTS : PASSIVE_COSTS;
+              const cost = rank < maxRank ? { gold: costs.gold[rank], sp: costs.sp[rank] } : null;
+              const canAfford = cost && gold >= cost.gold && sp >= cost.sp;
+
+              return (
+                <div key={passive.id} className="p-3 bg-black/30 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-black/50 flex items-center justify-center">
+                      <span className="text-xl">{passive.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-sm">
+                          {lang === 'ru' ? passive.nameRu : passive.nameEn}
+                        </span>
+                        <span className={`text-xs ${rank > 0 ? 'text-green-400' : 'text-gray-500'}`}>
+                          {rank}/{capRank}
+                          {capRank < maxRank && <span className="text-yellow-500 ml-1">(max {maxRank})</span>}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400">
+                        {lang === 'ru' ? passive.descRu : passive.descEn}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Upgrade button */}
+                  {canUpgrade && cost && (
+                    <button
+                      onClick={() => onPassiveUpgrade(passive.id)}
+                      disabled={!canAfford}
+                      className={`w-full mt-2 py-1.5 rounded text-xs font-bold ${
+                        canAfford
+                          ? 'bg-green-600 text-white hover:bg-green-500'
+                          : 'bg-gray-700 text-gray-500'
+                      }`}
+                    >
+                      {lang === 'ru' ? 'Улучшить' : 'Upgrade'} • {cost.gold.toLocaleString()}🪙 {cost.sp}SP
+                    </button>
+                  )}
+                  {rank >= capRank && rank < maxRank && (
+                    <div className="mt-2 text-center text-[10px] text-yellow-500">
+                      {lang === 'ru' ? `Требуется уровень ${capRank < 3 ? 5 : capRank < 6 ? 10 : capRank < 8 ? 15 : 20}+` : `Requires level ${capRank < 3 ? 5 : capRank < 6 ? 10 : capRank < 8 ? 15 : 20}+`}
+                    </div>
+                  )}
+                  {rank >= maxRank && (
+                    <div className="mt-2 text-center text-[10px] text-yellow-500">MAX</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         </div>
 
         {/* Footer hint */}
         <div className="p-3 border-t border-gray-700/30 text-center">
           <p className="text-[10px] text-gray-500">
-            {lang === 'ru'
-              ? '💡 Мастерство: +3% урона/ранг • Касты открывают тиры'
-              : '💡 Mastery: +3% dmg/rank • Casts unlock tiers'}
+            {activeTab === 'active'
+              ? (lang === 'ru'
+                ? '💡 Мастерство: +3% урона/ранг • Касты открывают тиры'
+                : '💡 Mastery: +3% dmg/rank • Casts unlock tiers')
+              : (lang === 'ru'
+                ? '💡 Пассивки усиливают героя постоянно'
+                : '💡 Passives boost your hero permanently')}
           </p>
         </div>
       </div>
@@ -1123,6 +1295,55 @@ export default function CharacterTab() {
       });
     };
 
+    // Handle skill tier activation
+    const handleTierActivate = (data: { skillId: string; tier: number; newTiers: number; gold: number; sp: number }) => {
+      setHeroState(prev => {
+        if (!prev.baseStats) return prev;
+        const updates: Partial<PlayerStats> = {
+          gold: data.gold,
+          sp: data.sp,
+        };
+        // Update the specific tiers field
+        if (data.skillId === 'fireball') updates.skillFireballTiers = data.newTiers;
+        if (data.skillId === 'iceball') updates.skillIceballTiers = data.newTiers;
+        if (data.skillId === 'lightning') updates.skillLightningTiers = data.newTiers;
+
+        return {
+          ...prev,
+          baseStats: {
+            ...prev.baseStats,
+            ...updates,
+          },
+        };
+      });
+    };
+
+    // Handle passive skill upgrade
+    const handlePassiveUpgrade = (data: { passiveId: string; newRank: number; gold: number; sp: number }) => {
+      setHeroState(prev => {
+        if (!prev.baseStats) return prev;
+        const updates: Partial<PlayerStats> = {
+          gold: data.gold,
+          sp: data.sp,
+        };
+        // Update the specific passive field
+        if (data.passiveId === 'arcanePower') updates.passiveArcanePower = data.newRank;
+        if (data.passiveId === 'critFocus') updates.passiveCritFocus = data.newRank;
+        if (data.passiveId === 'critPower') updates.passiveCritPower = data.newRank;
+        if (data.passiveId === 'staminaTraining') updates.passiveStaminaTraining = data.newRank;
+        if (data.passiveId === 'manaFlow') updates.passiveManaFlow = data.newRank;
+        if (data.passiveId === 'etherEfficiency') updates.passiveEtherEfficiency = data.newRank;
+
+        return {
+          ...prev,
+          baseStats: {
+            ...prev.baseStats,
+            ...updates,
+          },
+        };
+      });
+    };
+
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
@@ -1132,6 +1353,8 @@ export default function CharacterTab() {
     socket.on('player:state', handlePlayerState);
     socket.on('level:up', handleLevelUp);
     socket.on('skill:upgrade-success', handleSkillUpgrade);
+    socket.on('skill:tier-success', handleTierActivate);
+    socket.on('skill:passive-success', handlePassiveUpgrade);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -1144,6 +1367,8 @@ export default function CharacterTab() {
       socket.off('player:state', handlePlayerState);
       socket.off('level:up', handleLevelUp);
       socket.off('skill:upgrade-success', handleSkillUpgrade);
+      socket.off('skill:tier-success', handleTierActivate);
+      socket.off('skill:passive-success', handlePassiveUpgrade);
     };
   }, []);
 
@@ -1479,11 +1704,25 @@ export default function CharacterTab() {
             iceball: stats.skillIceballTiers ?? 0,
             lightning: stats.skillLightningTiers ?? 0,
           }}
+          passiveRanks={{
+            arcanePower: stats.passiveArcanePower ?? 0,
+            critFocus: stats.passiveCritFocus ?? 0,
+            critPower: stats.passiveCritPower ?? 0,
+            staminaTraining: stats.passiveStaminaTraining ?? 0,
+            manaFlow: stats.passiveManaFlow ?? 0,
+            etherEfficiency: stats.passiveEtherEfficiency ?? 0,
+          }}
           gold={stats.gold}
           sp={stats.sp ?? 0}
           onClose={() => setShowSkillsPopup(false)}
           onUpgrade={(skillId) => {
             getSocket().emit('skill:upgrade', { skillId });
+          }}
+          onTierActivate={(skillId, tier) => {
+            getSocket().emit('skill:tier-activate', { skillId, tier });
+          }}
+          onPassiveUpgrade={(passiveId) => {
+            getSocket().emit('skill:passive-upgrade', { passiveId });
           }}
           lang={lang}
         />
