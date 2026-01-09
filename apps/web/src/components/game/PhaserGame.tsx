@@ -21,7 +21,7 @@ import EnchantModal from './EnchantModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.2';
 
 interface BossState {
   name: string;
@@ -968,10 +968,34 @@ export default function PhaserGame() {
           </div>
         </div>
 
-        {/* Row 2: Resource Bars - стамина сверху, MP снизу */}
-        <div className="flex gap-2">
-          {/* Bars Column */}
-          <div className="flex-1 flex flex-col gap-1">
+        {/* Row 2: Boss Progress + Online + Version (compact info line) */}
+        <div className="flex items-center justify-between px-1 mb-1.5 text-[9px]">
+          <div className="flex items-center gap-1.5">
+            <span className="text-amber-500/80">⚔️</span>
+            <span className="text-gray-400">
+              {lang === 'ru' ? 'Босс' : 'Boss'} #{bossState.bossIndex}/{bossState.totalBosses}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-gray-500">
+                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+              </span>
+            </div>
+            <span
+              className="text-gray-600 cursor-pointer hover:text-gray-400"
+              onClick={() => setShowDebug(true)}
+            >
+              {APP_VERSION}
+            </span>
+          </div>
+        </div>
+
+        {/* Row 3: Resource Bars (70%) + Buffs + Tasks Button */}
+        <div className="flex items-center gap-2">
+          {/* Bars Column (narrowed to ~70%) */}
+          <div className="w-[65%] flex flex-col gap-1">
             {/* Stamina Bar (Yellow, top) */}
             <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-yellow-500/30 shadow-inner">
               <div
@@ -1009,12 +1033,19 @@ export default function PhaserGame() {
             </div>
           </div>
 
+          {/* Buffs (right of bars, expands to fill) */}
+          <div className="flex-1 flex flex-wrap gap-1 justify-end items-center">
+            {activeBuffs.map(buff => (
+              <BuffIcon key={buff.type} buff={buff} />
+            ))}
+          </div>
+
           {/* Tasks Button */}
           <button
             onClick={() => setShowTasks(true)}
             className="relative w-10 h-10 bg-gray-900/80 rounded-lg border-2 border-gray-600
                        flex items-center justify-center active:scale-90 transition-all
-                       hover:border-amber-500/50 hover:bg-gray-800/80"
+                       hover:border-amber-500/50 hover:bg-gray-800/80 flex-shrink-0"
           >
             <span className="text-lg">🎯</span>
             {hasClaimable && (
@@ -1022,15 +1053,6 @@ export default function PhaserGame() {
             )}
           </button>
         </div>
-
-        {/* Buffs Row */}
-        {activeBuffs.length > 0 && (
-          <div className="flex gap-1.5 mt-2">
-            {activeBuffs.map(buff => (
-              <BuffIcon key={buff.type} buff={buff} />
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -1076,17 +1098,7 @@ export default function PhaserGame() {
         ) : (
           /* Boss alive - show HP bar with premium styling */
           <div className="w-[90%] max-w-sm">
-            {/* Boss name plate (centered, no icon) */}
-            <div className="flex flex-col items-center mb-2">
-              <span className="text-l2-gold font-bold text-sm drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
-                {bossDisplayName}
-              </span>
-              <span className="text-gray-500 text-[9px]">
-                #{bossState.bossIndex} / {bossState.totalBosses}
-              </span>
-            </div>
-
-            {/* HP Bar Row: [Boss icon] [HP bar] [Drop icon] */}
+            {/* HP Bar Row: [Boss icon] [HP bar] [Drop icon] - name inside bar */}
             <div className="flex items-center gap-2">
               {/* Boss icon (left) */}
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-800/60 to-amber-950/80 border border-amber-600/40 flex items-center justify-center shadow-lg shadow-amber-900/30 flex-shrink-0">
@@ -1130,9 +1142,12 @@ export default function PhaserGame() {
                     <div className="absolute inset-0 bg-red-500/20 animate-pulse pointer-events-none" />
                   )}
 
-                  {/* HP numbers - full format for clarity */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[11px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                  {/* Boss name (left) + HP numbers (right) inside bar */}
+                  <div className="absolute inset-0 flex items-center justify-between px-2">
+                    <span className="text-[10px] text-l2-gold/90 font-bold truncate max-w-[80px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      {bossDisplayName}
+                    </span>
+                    <span className="text-[10px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                       {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
                     </span>
                   </div>
@@ -1242,51 +1257,24 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) - Premium Design */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pb-2 pt-6 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
-        {/* Footer Row: Nickname + Version + Online */}
-        <div className="flex items-center justify-between px-2 mb-2">
-          {/* Nickname (left) */}
-          <span className="text-[10px] text-gray-400 truncate max-w-[100px]">
-            {playerState.firstName || 'Player'}
-          </span>
-          {/* Version + Online (right) */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-[9px] text-gray-500">
-                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-              </span>
-            </div>
-            <span
-              className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
-              onClick={() => setShowDebug(true)}
-            >
-              {APP_VERSION}
-            </span>
-          </div>
-        </div>
-
+      <div className="absolute bottom-0 left-0 right-0 z-10 pb-2 pt-4 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
         {/* Action Bar Container */}
         <div className="flex justify-center items-center gap-1.5 bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl p-2 border border-gray-700/30 shadow-lg">
           {/* AUTO Button (Smart Auto-Hunt) - Premium with pulse when ON */}
           <button
             onClick={toggleAutoAttack}
             className={`
-              relative w-14 h-16 rounded-lg
+              relative w-14 h-14 rounded-lg
               ${autoAttack
                 ? 'bg-gradient-to-b from-green-600 to-green-800 border-2 border-green-400 shadow-[0_0_20px_rgba(34,197,94,0.6)] animate-auto-pulse'
                 : 'bg-gradient-to-b from-gray-700/50 to-gray-900/80 border-2 border-gray-600/50'}
-              flex flex-col items-center justify-center
+              flex flex-col items-center justify-center gap-0
               transition-all active:scale-95
             `}
           >
-            <span className="text-lg drop-shadow-md">{autoAttack ? '⚡' : '▶️'}</span>
+            <span className="text-base drop-shadow-md">{autoAttack ? '⚡' : '▶️'}</span>
             <span className={`text-[8px] font-bold uppercase tracking-wider ${autoAttack ? 'text-green-200' : 'text-gray-400'}`}>
               {autoAttack ? (lang === 'ru' ? 'АВТО' : 'ON') : 'AUTO'}
-            </span>
-            {/* Stamina cost display */}
-            <span className={`text-[7px] ${autoAttack ? 'text-green-300/80' : 'text-gray-500'}`}>
-              -1 SP/s
             </span>
             {autoAttack && (
               <>
@@ -1297,7 +1285,7 @@ export default function PhaserGame() {
           </button>
 
           {/* Separator */}
-          <div className="w-px h-12 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
+          <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
 
           {skills.map(skill => {
             const now = Date.now();
@@ -1339,18 +1327,18 @@ export default function PhaserGame() {
                 onClick={() => useSkill(skill)}
                 disabled={!canUse}
                 className={`
-                  relative w-14 h-16 rounded-lg ${skill.color}
+                  relative w-14 h-14 rounded-lg ${skill.color}
                   ${!isUnlocked
                     ? 'bg-gradient-to-b from-gray-900/80 to-black/90 opacity-40'
                     : canUse
                       ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
                       : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
-                  flex flex-col items-center justify-center gap-0.5
+                  flex flex-col items-center justify-center gap-0
                   transition-all
                   ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
                 `}
               >
-                <span className="text-xl drop-shadow-lg">{skill.icon}</span>
+                <span className="text-lg drop-shadow-lg">{skill.icon}</span>
                 {/* MP Cost - always visible when unlocked */}
                 {isUnlocked && (
                   <span className={`text-[8px] font-bold ${
@@ -1391,7 +1379,7 @@ export default function PhaserGame() {
           })}
 
           {/* Separator */}
-          <div className="w-px h-12 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
+          <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
 
           {/* Ether Slot (x2 damage) - Premium */}
           <button
