@@ -373,7 +373,7 @@ export default function TreasuryTab() {
   };
 
   // Use key to instantly open chest
-  const useKey = (chestId: string) => {
+  const openWithKey = (chestId: string) => {
     if (usingKey) return; // Prevent double-click
     setUsingKey(chestId);
     getSocket().emit('chest:use-key', { chestId });
@@ -821,7 +821,7 @@ export default function TreasuryTab() {
                         const isLoading = usingKey === selectedChest.id;
                         return (
                           <button
-                            onClick={() => useKey(selectedChest.id)}
+                            onClick={() => openWithKey(selectedChest.id)}
                             disabled={keyCount < 1 || isLoading}
                             className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
                               isLoading
@@ -874,7 +874,7 @@ export default function TreasuryTab() {
                         const isLoading = usingKey === selectedChest.id;
                         return (
                           <button
-                            onClick={() => useKey(selectedChest.id)}
+                            onClick={() => openWithKey(selectedChest.id)}
                             disabled={keyCount < 1 || isLoading}
                             className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
                               isLoading
