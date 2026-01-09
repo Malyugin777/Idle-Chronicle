@@ -1152,12 +1152,14 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       if (skillsUsed.has('iceball') && newSkillIceball > 0) newSkillIceball++;
       if (skillsUsed.has('lightning') && newSkillLightning > 0) newSkillLightning++;
 
+      // NOTE: totalDamage НЕ добавляем здесь - auto-save уже считает урон через damageDelta
+      // Если добавить здесь entry.damage - будет двойной подсчёт!
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(expReward) },
-          totalDamage: { increment: BigInt(entry.damage) },
+          // totalDamage: убрано - auto-save/disconnect уже сохраняют урон
           bossesKilled: { increment: entry.isEligible ? 1 : 0 },
           // Level-up system
           level: newLevel,
@@ -6457,9 +6459,12 @@ app.prepare().then(async () => {
             lastOnline: new Date(),
           };
 
-          if (player.sessionDamage > 0) {
-            updateData.totalDamage = { increment: BigInt(player.sessionDamage) };
-            updateData.totalClicks = { increment: BigInt(player.sessionClicks) };
+          // Сохраняем только дельту (то, что ещё не сохранено auto-save)
+          const damageDelta = player.sessionDamage - (player.savedSessionDamage || 0);
+          const clicksDelta = player.sessionClicks - (player.savedSessionClicks || 0);
+          if (damageDelta > 0) {
+            updateData.totalDamage = { increment: BigInt(damageDelta) };
+            updateData.totalClicks = { increment: BigInt(clicksDelta) };
           }
 
           await prisma.user.update({
