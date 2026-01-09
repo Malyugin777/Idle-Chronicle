@@ -101,6 +101,8 @@ export default function TreasuryTab() {
   const [selectedLockedSlot, setSelectedLockedSlot] = useState<number | null>(null);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [selectedReward, setSelectedReward] = useState<PendingReward | null>(null); // For selection popup
+  const [rewardSelection, setRewardSelection] = useState<{ wooden: number; bronze: number; silver: number; gold: number }>({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
   const [showForge, setShowForge] = useState(false);
   const [chestKeys, setChestKeys] = useState<ChestKeys>({
     keyWooden: 0,
@@ -321,49 +323,49 @@ export default function TreasuryTab() {
     getSocket().emit('slot:unlock');
   };
 
-  // TZ Этап 2: Claim pending reward
-  const claimReward = (reward: PendingReward) => {
-    console.log('[Rewards] Claim clicked:', { rewardId: reward.id, claimingRewardId, reward });
+  // TZ Этап 2: Open reward selection popup
+  const openRewardSelection = (reward: PendingReward) => {
+    if (claimingRewardId) return;
+    setSelectedReward(reward);
+    // Pre-select all available (user can deselect)
+    setRewardSelection({
+      wooden: reward.chestsWooden,
+      bronze: reward.chestsBronze,
+      silver: reward.chestsSilver,
+      gold: reward.chestsGold,
+    });
+  };
 
-    if (claimingRewardId) {
-      console.log('[Rewards] Already claiming, skip');
+  // Actually claim the selected chests
+  const confirmRewardClaim = () => {
+    if (!selectedReward || claimingRewardId) return;
+
+    const totalToTake = rewardSelection.wooden + rewardSelection.bronze + rewardSelection.silver + rewardSelection.gold;
+    if (totalToTake === 0) {
+      setSelectedReward(null);
       return;
     }
 
-    // Check free slots
-    const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
-    const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
-    console.log('[Rewards] Slots check:', { totalChests, freeSlots, chestSlots: lootStats.chestSlots, chestsLen: chests.length });
+    setClaimingRewardId(selectedReward.id);
 
-    if (totalChests > 0 && freeSlots === 0) {
-      console.warn('[Rewards] No free chest slots');
-      return;
-    }
-
-    setClaimingRewardId(reward.id);
-    console.log('[Rewards] Sending rewards:claim...');
-
-    // Safety timeout - reset after 10s if no response
+    // Safety timeout
     setTimeout(() => {
-      setClaimingRewardId(prev => {
-        if (prev === reward.id) {
-          console.warn('[Rewards] Timeout - resetting claimingRewardId');
-          return null;
-        }
-        return prev;
-      });
+      setClaimingRewardId(prev => prev === selectedReward.id ? null : prev);
     }, 10000);
 
-    // Send take request with all available chests
     getSocket().emit('rewards:claim', {
-      rewardId: reward.id,
-      take: {
-        wooden: reward.chestsWooden,
-        bronze: reward.chestsBronze,
-        silver: reward.chestsSilver,
-        gold: reward.chestsGold,
-      },
+      rewardId: selectedReward.id,
+      take: rewardSelection,
     });
+
+    setSelectedReward(null);
+  };
+
+  // Discard remaining chests (take 0)
+  const discardRemainingReward = () => {
+    if (!selectedReward) return;
+    // Just close popup - remaining stay for later
+    setSelectedReward(null);
   };
 
   // Use key to instantly open chest
@@ -512,10 +514,9 @@ export default function TreasuryTab() {
 
           <div className="space-y-2">
             {pendingRewards.map((reward) => {
-              const totalChests = reward.chestsWooden + reward.chestsBronze + reward.chestsSilver + reward.chestsGold;
               const isClaiming = claimingRewardId === reward.id;
               const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
-              const noSlots = totalChests > 0 && freeSlots === 0;
+              const noSlots = freeSlots === 0;
 
               return (
                 <div
@@ -538,7 +539,7 @@ export default function TreasuryTab() {
                       </div>
                     </div>
                     <button
-                      onClick={() => claimReward(reward)}
+                      onClick={() => openRewardSelection(reward)}
                       disabled={isClaiming || noSlots}
                       className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
                         isClaiming || noSlots
@@ -928,6 +929,101 @@ export default function TreasuryTab() {
                 ? (lang === 'ru' ? '🔓 Разблокировать' : '🔓 Unlock')
                 : (lang === 'ru' ? '❌ Недостаточно кристаллов' : '❌ Not enough crystals')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* REWARD SELECTION POPUP */}
+      {selectedReward && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl w-full max-w-sm border border-l2-gold/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{selectedReward.bossIcon}</span>
+                <span className="font-bold text-l2-gold">{lang === 'ru' ? 'Выбор наград' : 'Select Rewards'}</span>
+              </div>
+              <button onClick={() => setSelectedReward(null)} className="p-1 hover:bg-gray-700 rounded">
+                <X size={20} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Free slots info */}
+            <div className="px-4 py-2 bg-black/30 text-center text-sm">
+              <span className="text-gray-400">{lang === 'ru' ? 'Свободных слотов:' : 'Free slots:'}</span>
+              <span className="ml-2 text-l2-gold font-bold">{Math.max(0, lootStats.chestSlots - chests.length)}</span>
+            </div>
+
+            {/* Chest selection */}
+            <div className="p-4 space-y-3">
+              {[
+                { key: 'gold' as const, icon: '🎁', label: 'Gold', color: 'text-yellow-400', max: selectedReward.chestsGold },
+                { key: 'silver' as const, icon: '📦', label: 'Silver', color: 'text-gray-300', max: selectedReward.chestsSilver },
+                { key: 'bronze' as const, icon: '📦', label: 'Bronze', color: 'text-orange-400', max: selectedReward.chestsBronze },
+                { key: 'wooden' as const, icon: '🪵', label: 'Wooden', color: 'text-amber-600', max: selectedReward.chestsWooden },
+              ].filter(c => c.max > 0).map(chest => (
+                <div key={chest.key} className="flex items-center justify-between bg-black/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{chest.icon}</span>
+                    <span className={`font-bold ${chest.color}`}>{chest.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setRewardSelection(prev => ({ ...prev, [chest.key]: Math.max(0, prev[chest.key] - 1) }))}
+                      className="w-8 h-8 rounded bg-gray-700 hover:bg-gray-600 text-white font-bold"
+                    >-</button>
+                    <span className="w-8 text-center font-bold text-white">{rewardSelection[chest.key]}</span>
+                    <button
+                      onClick={() => setRewardSelection(prev => ({ ...prev, [chest.key]: Math.min(chest.max, prev[chest.key] + 1) }))}
+                      className="w-8 h-8 rounded bg-gray-700 hover:bg-gray-600 text-white font-bold"
+                    >+</button>
+                    <span className="text-gray-500 text-sm">/ {chest.max}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Selected count warning */}
+            {(() => {
+              const totalSelected = rewardSelection.wooden + rewardSelection.bronze + rewardSelection.silver + rewardSelection.gold;
+              const freeSlots = Math.max(0, lootStats.chestSlots - chests.length);
+              const isOverLimit = totalSelected > freeSlots;
+              return (
+                <div className={`mx-4 mb-4 p-2 rounded text-center text-sm ${isOverLimit ? 'bg-red-900/50 text-red-400' : 'bg-black/30 text-gray-400'}`}>
+                  {lang === 'ru' ? 'Выбрано:' : 'Selected:'} {totalSelected}
+                  {isOverLimit && ` (${lang === 'ru' ? 'макс' : 'max'} ${freeSlots})`}
+                </div>
+              );
+            })()}
+
+            {/* Actions */}
+            <div className="p-4 pt-0 flex gap-2">
+              <button
+                onClick={() => setSelectedReward(null)}
+                className="flex-1 py-2 rounded-lg bg-gray-700 text-gray-300 font-bold text-sm hover:bg-gray-600"
+              >
+                {lang === 'ru' ? 'Отмена' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmRewardClaim}
+                disabled={(() => {
+                  const total = rewardSelection.wooden + rewardSelection.bronze + rewardSelection.silver + rewardSelection.gold;
+                  const free = Math.max(0, lootStats.chestSlots - chests.length);
+                  return total === 0 || total > free;
+                })()}
+                className={`flex-1 py-2 rounded-lg font-bold text-sm ${
+                  (() => {
+                    const total = rewardSelection.wooden + rewardSelection.bronze + rewardSelection.silver + rewardSelection.gold;
+                    const free = Math.max(0, lootStats.chestSlots - chests.length);
+                    return total > 0 && total <= free;
+                  })()
+                    ? 'bg-l2-gold text-black hover:brightness-110'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {lang === 'ru' ? 'Забрать' : 'Claim'}
+              </button>
+            </div>
           </div>
         </div>
       )}
