@@ -270,19 +270,24 @@ async function loadBossState(prisma) {
       chestsReward: boss.chestsReward || 10,
     };
 
-    // Load session leaderboard (with backward compatibility)
+    // Load session leaderboard (with backward compatibility + PS fields)
     if (state.sessionLeaderboard && !bossRespawnAt) {
       const saved = state.sessionLeaderboard;
       if (Array.isArray(saved)) {
         sessionLeaderboard.clear();
         for (const entry of saved) {
-          // New format: { userId, damage, visitorName, photoUrl, isEligible }
+          // New format: { userId, damage, visitorName, photoUrl, isEligible, ps, lastActionAt, ... }
           if (entry.userId && typeof entry.userId === 'string') {
             sessionLeaderboard.set(entry.userId, {
               damage: entry.damage || 0,
               visitorName: entry.visitorName || 'Unknown',
               photoUrl: entry.photoUrl || null,
               isEligible: entry.isEligible || false,
+              // PS fields (new)
+              ps: entry.ps || 0,
+              lastActionAt: entry.lastActionAt || null,
+              lastDamageSnapshot: entry.lastDamageSnapshot || 0,
+              skillsUsed: entry.skillsUsed ? new Set(entry.skillsUsed) : new Set(),
             });
           }
           // Old format backward compat: { odamage (was damage), odamageN, ... }
@@ -294,6 +299,11 @@ async function loadBossState(prisma) {
               visitorName: entry.odamageN || entry.visitorName || 'Unknown',
               photoUrl: entry.photoUrl || null,
               isEligible: entry.isEligible || false,
+              // PS fields (new, default values for old format)
+              ps: 0,
+              lastActionAt: null,
+              lastDamageSnapshot: 0,
+              skillsUsed: new Set(),
             });
           }
           // else: corrupted entry with numeric odamage, skip it
@@ -354,12 +364,18 @@ async function saveBossState(prisma) {
     }
 
     // Serialize leaderboard with explicit userId field (avoid collision with damage)
+    // Includes PS fields for participation-based XP system
     const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([userId, data]) => ({
       userId,
       damage: data.damage || 0,
       visitorName: data.visitorName || data.odamageN || 'Unknown',
       photoUrl: data.photoUrl || null,
       isEligible: data.isEligible || false,
+      // PS fields
+      ps: data.ps || 0,
+      lastActionAt: data.lastActionAt || null,
+      lastDamageSnapshot: data.lastDamageSnapshot || 0,
+      skillsUsed: data.skillsUsed ? Array.from(data.skillsUsed) : [], // Set → Array for JSON
     }));
 
     await prisma.gameState.upsert({
@@ -573,6 +589,115 @@ const ITEM_SET_MAP = {
   'starter-boots': 'starter',
   'starter-shield': 'starter',
 };
+
+// ═══════════════════════════════════════════════════════════
+// PARTICIPATION SCORE (PS) SYSTEM - XP/SP без привязки к урону
+// ═══════════════════════════════════════════════════════════
+
+// PS tick interval (5 минут)
+const PS_TICK_MS = 5 * 60 * 1000;
+// Окно активности: игрок считается активным если lastActionAt < ACTIVE_WINDOW_MS назад
+const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // 5 минут
+// Капа PS за одного босса (24 тика = 2 часа активности)
+const PS_CAP_PER_BOSS = 24;
+// Полный вес участия (6 тиков = 30 минут для 100% базового пула)
+const BASE_PS_FULL = 6;
+// Соотношение SP к XP (SP = XP / SP_RATIO)
+const SP_RATIO = 8;
+
+// XP pool по индексу босса (простая прогрессия для 100 боссов)
+// Boss 1: 1000 XP, Boss 100: ~50000 XP
+function getBossXpPool(bossIndex) {
+  const base = 1000;
+  const growth = 1.04; // +4% за каждого босса
+  return Math.floor(base * Math.pow(growth, bossIndex));
+}
+
+// SP pool = XP pool / SP_RATIO
+function getBossSpPool(bossIndex) {
+  return Math.floor(getBossXpPool(bossIndex) / SP_RATIO);
+}
+
+// ═══════════════════════════════════════════════════════════
+// XP → LEVEL THRESHOLDS (Cumulative XP для уровней 1-20)
+// ═══════════════════════════════════════════════════════════
+// Классическая L2-style прогрессия
+const LEVEL_THRESHOLDS = [
+  0,        // Level 1 (start)
+  500,      // Level 2
+  1500,     // Level 3
+  3000,     // Level 4
+  5500,     // Level 5
+  9000,     // Level 6
+  14000,    // Level 7
+  21000,    // Level 8
+  30000,    // Level 9
+  42000,    // Level 10
+  58000,    // Level 11
+  78000,    // Level 12
+  103000,   // Level 13
+  135000,   // Level 14
+  175000,   // Level 15
+  225000,   // Level 16
+  290000,   // Level 17
+  370000,   // Level 18
+  470000,   // Level 19
+  600000,   // Level 20 (max)
+];
+const MAX_LEVEL = 20;
+
+// Получить уровень по cumulative XP
+function getLevelFromXp(totalXp) {
+  for (let lvl = MAX_LEVEL; lvl >= 1; lvl--) {
+    if (totalXp >= LEVEL_THRESHOLDS[lvl - 1]) {
+      return lvl;
+    }
+  }
+  return 1;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MENTOR BOOST (Catch-up для отставших)
+// ═══════════════════════════════════════════════════════════
+
+// Milestone кривая: boss index → target level
+const MENTOR_MILESTONES = [
+  { boss: 1, level: 3 },
+  { boss: 5, level: 6 },
+  { boss: 15, level: 10 },
+  { boss: 30, level: 13 },
+  { boss: 60, level: 16 },
+  { boss: 85, level: 18 },
+  { boss: 100, level: 20 },
+];
+
+// Интерполяция целевого уровня по bossIndex
+function getTargetLevel(bossIndex) {
+  // Найти между какими milestone'ами находится bossIndex
+  for (let i = 0; i < MENTOR_MILESTONES.length - 1; i++) {
+    const curr = MENTOR_MILESTONES[i];
+    const next = MENTOR_MILESTONES[i + 1];
+    if (bossIndex >= curr.boss && bossIndex < next.boss) {
+      // Линейная интерполяция
+      const progress = (bossIndex - curr.boss) / (next.boss - curr.boss);
+      return Math.floor(curr.level + progress * (next.level - curr.level));
+    }
+  }
+  // После последнего milestone
+  return MENTOR_MILESTONES[MENTOR_MILESTONES.length - 1].level;
+}
+
+// Рассчитать Mentor Boost для игрока
+function getMentorBoost(playerLevel, bossIndex) {
+  const targetLevel = getTargetLevel(bossIndex);
+  // Буст только если игрок отстаёт на 3+ уровня
+  if (playerLevel < targetLevel - 2) {
+    const delta = targetLevel - playerLevel;
+    const boost = 1 + 0.25 * delta;
+    return Math.min(boost, 3.0); // Cap at 3x
+  }
+  return 1.0;
+}
 
 // ═══════════════════════════════════════════════════════════
 // DROPPABLE EQUIPMENT (50 предметов, 10 сетов × 5 частей)
@@ -1001,7 +1126,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   console.log(`[Boss] ${bossState.name} killed by ${killerPlayer.odamageN}!`);
   addLog('info', 'boss', `${bossState.name} killed by ${killerPlayer.odamageN}!`, { bossIndex: bossState.bossIndex });
 
-  // Build leaderboard with photoUrl and activity status (from sessionLeaderboard)
+  // Build leaderboard with photoUrl, activity status, and PS data
   const leaderboard = Array.from(sessionLeaderboard.entries())
     .map(([userId, data]) => ({
       odamage: userId,  // Keep for backward compat
@@ -1010,6 +1135,9 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       photoUrl: data.photoUrl,
       damage: data.damage || 0,
       isEligible: data.isEligible || false,
+      // PS fields for XP distribution
+      ps: data.ps || 0,
+      skillsUsed: data.skillsUsed || new Set(),
     }))
     .sort((a, b) => b.damage - a.damage);
 
@@ -1020,6 +1148,38 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   // Prize pool from boss config (for adena/exp distribution)
   const expPool = bossState.expReward || 1000000;
   const goldPool = bossState.goldReward || 5000;
+
+  // ═══════════════════════════════════════════════════════════
+  // PARTICIPATION-BASED XP/SP DISTRIBUTION (не по урону!)
+  // ═══════════════════════════════════════════════════════════
+  const bossXpPool = getBossXpPool(bossState.bossIndex);
+  const basePool = Math.floor(bossXpPool * 0.90); // 90% distributed by participation weight
+  const bonusPool = Math.floor(bossXpPool * 0.10); // 10% bonus by PS count
+
+  // Participants: isEligible AND ps >= 1 (at least 1 active tick)
+  const participants = leaderboard.filter(p => p.isEligible && p.ps >= 1);
+
+  // Calculate weight sum and PS sum
+  let weightSum = 0;
+  let psSum = 0;
+  for (const p of participants) {
+    const weight = Math.min(p.ps / BASE_PS_FULL, 1); // clamp to 0..1
+    weightSum += weight;
+    psSum += p.ps;
+  }
+
+  // Pre-calculate XP for each participant
+  const xpDistribution = new Map(); // userId -> { xpGain, spGain, mentorBoost }
+  for (const p of participants) {
+    const weight = Math.min(p.ps / BASE_PS_FULL, 1);
+    const baseXpShare = weightSum > 0 ? basePool * (weight / weightSum) : 0;
+    const bonusXpShare = psSum > 0 ? bonusPool * (p.ps / psSum) : 0;
+    const xpRaw = baseXpShare + bonusXpShare;
+    xpDistribution.set(p.odamage, { xpRaw, weight, ps: p.ps });
+  }
+
+  console.log(`[XP] Boss #${bossState.bossIndex} pool: ${bossXpPool} XP (base: ${basePool}, bonus: ${bonusPool})`);
+  console.log(`[XP] Participants: ${participants.length}, weightSum: ${weightSum.toFixed(2)}, psSum: ${psSum}`);
 
   // ═══════════════════════════════════════════════════════════
   // TZ ЭТАП 2: NEW REWARD SYSTEM
@@ -1117,30 +1277,52 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       chestRewards,
       isFinalBlow,
       isTopDamage,
+      // PS/XP fields (populated after XP calculation)
+      ps: entry.ps || 0,
+      xpGain: 0,
+      spGain: 0,
+      mentorBoost: 1.0,
     });
 
-    // Update player stats in DB (adena, exp, totalDamage, level, skills)
-    // Level-up: +1 for ALL participants who dealt damage (max 90)
-    // Skill level-up: +1 for each skill used in this boss fight
+    // ═══════════════════════════════════════════════════════════
+    // UPDATE PLAYER STATS: XP/SP (participation-based), level, skills
+    // ═══════════════════════════════════════════════════════════
     try {
-      // First fetch current user data for level/skill calculations
+      // Fetch current user data for level/skill calculations
       const currentUser = await prisma.user.findUnique({
         where: { id: entry.odamage },
-        select: { level: true, skillFireball: true, skillIceball: true, skillLightning: true },
+        select: { level: true, exp: true, sp: true, skillFireball: true, skillIceball: true, skillLightning: true },
       });
 
       if (!currentUser) continue;
 
-      const MAX_LEVEL = 90;
-      const newLevel = Math.min(MAX_LEVEL, currentUser.level + 1);
+      // Get XP distribution for this player (if participant)
+      const xpData = xpDistribution.get(entry.odamage);
+      let xpGain = 0;
+      let spGain = 0;
+      let mentorBoost = 1.0;
 
-      // Get skills used by this player from sessionLeaderboard
-      const leaderboardEntry = sessionLeaderboard.get(entry.odamage);
-      const skillsUsed = leaderboardEntry?.skillsUsed || new Set();
+      if (xpData) {
+        // Apply Mentor Boost for catch-up
+        mentorBoost = getMentorBoost(currentUser.level, bossState.bossIndex);
+        xpGain = Math.floor(xpData.xpRaw * mentorBoost);
+        spGain = Math.floor(xpGain / SP_RATIO);
+
+        // Add to rewards for logging
+        rewards[rewards.length - 1].xpGain = xpGain;
+        rewards[rewards.length - 1].spGain = spGain;
+        rewards[rewards.length - 1].mentorBoost = mentorBoost;
+      }
+
+      // Calculate new exp and level
+      const newExp = Number(currentUser.exp) + xpGain;
+      const newLevel = Math.min(MAX_LEVEL, getLevelFromXp(newExp));
+      const newSp = (currentUser.sp || 0) + spGain;
+
+      // Get skills used by this player
+      const skillsUsed = entry.skillsUsed || new Set();
 
       // Calculate new skill levels
-      // Skills unlock: fireball@1, iceball@2, lightning@3
-      // If skill was used AND unlocked, +1 level
       let newSkillFireball = currentUser.skillFireball;
       let newSkillIceball = currentUser.skillIceball;
       let newSkillLightning = currentUser.skillLightning;
@@ -1155,22 +1337,25 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       if (skillsUsed.has('iceball') && newSkillIceball > 0) newSkillIceball++;
       if (skillsUsed.has('lightning') && newSkillLightning > 0) newSkillLightning++;
 
-      // NOTE: totalDamage НЕ добавляем здесь - auto-save уже считает урон через damageDelta
-      // Gold/EXP убраны - награда только сундуками
+      // Update user in DB with new XP-based progression
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
-          // gold/exp убраны - только из сундуков
-          bossesKilled: { increment: isEligibleForReward ? 1 : 0 },
-          // Level-up system
+          exp: BigInt(newExp),
+          sp: newSp,
           level: newLevel,
+          bossesKilled: { increment: isEligibleForReward ? 1 : 0 },
           skillFireball: newSkillFireball,
           skillIceball: newSkillIceball,
           skillLightning: newSkillLightning,
         },
       });
 
-      // Log level-up
+      // Log XP gain and level-up
+      if (xpGain > 0) {
+        const boostStr = mentorBoost > 1 ? ` (boost: ${mentorBoost.toFixed(2)}x)` : '';
+        console.log(`[XP] ${entry.visitorName}: +${xpGain} XP, +${spGain} SP${boostStr}`);
+      }
       if (newLevel > currentUser.level) {
         console.log(`[Level] ${entry.visitorName} leveled up: ${currentUser.level} → ${newLevel}`);
       }
@@ -1213,7 +1398,6 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       // Update in-memory player if online
       for (const [sid, p] of onlineUsers.entries()) {
         if (p.odamage === entry.odamage) {
-          // gold убран - только из сундуков
           // Reset session counters for new boss
           p.sessionDamage = 0;
           p.sessionClicks = 0;
@@ -1223,16 +1407,22 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
           p.activityTime = 0;
           p.isEligible = false;
           p.activityBossSession = null;
-          // Update level and skills in memory
+          // Update level, exp, sp and skills in memory
           p.level = newLevel;
+          p.exp = newExp;
+          p.sp = newSp;
           p.skillFireball = newSkillFireball;
           p.skillIceball = newSkillIceball;
           p.skillLightning = newSkillLightning;
-          // Emit level:up to this player's socket
+          // Emit level:up to this player's socket (includes xp/sp gains)
           const playerSocket = io.sockets.sockets.get(sid);
           if (playerSocket) {
             playerSocket.emit('level:up', {
               level: newLevel,
+              exp: newExp,
+              sp: newSp,
+              xpGain,
+              spGain,
               skillFireball: newSkillFireball,
               skillIceball: newSkillIceball,
               skillLightning: newSkillLightning,
@@ -1335,6 +1525,23 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   ).join(', ');
   console.log(`[Boss] ${bossState.name} killed! Total ${totalChestsCount} chests distributed. Top 3: ${top3Rewards}`);
   console.log(`[Boss] Next boss spawning at ${bossRespawnAt.toISOString()}`);
+
+  // ═══════════════════════════════════════════════════════════
+  // DIAGNOSTIC LOGS: Top 5 by XP, average mentor boost
+  // ═══════════════════════════════════════════════════════════
+  const rewardsWithXp = rewards.filter(r => r.xpGain > 0).sort((a, b) => b.xpGain - a.xpGain);
+  const top5XpRecipients = rewardsWithXp.slice(0, 5).map(r =>
+    `${r.visitorName}: ${r.xpGain} XP (PS:${r.ps || 0}, boost:${(r.mentorBoost || 1).toFixed(2)})`
+  );
+  console.log(`[XP Distribution] Boss #${bossState.bossIndex}, Pool: ${bossXpPool} XP, Recipients: ${rewardsWithXp.length}`);
+  console.log(`[XP Distribution] Top 5 by XP: ${top5XpRecipients.join(' | ')}`);
+
+  // Calculate average mentor boost
+  const boostValues = rewardsWithXp.map(r => r.mentorBoost || 1);
+  const avgBoost = boostValues.length > 0 ? boostValues.reduce((a, b) => a + b, 0) / boostValues.length : 1;
+  if (avgBoost > 1) {
+    console.log(`[Mentor Boost] Average boost: ${avgBoost.toFixed(2)}x among ${boostValues.filter(b => b > 1).length} players`);
+  }
 
   // Save state immediately after boss kill
   await saveBossState(prisma);
@@ -3614,11 +3821,17 @@ app.prepare().then(async () => {
       // Only add to leaderboard if authenticated (has valid odamage)
       if (player.odamage) {
         const existing = sessionLeaderboard.get(player.odamage);
+        const now = Date.now();
         sessionLeaderboard.set(player.odamage, {
           damage: (existing?.damage || 0) + actualDamage,
           visitorName: player.odamageN,
           photoUrl: player.photoUrl,
           isEligible: existing?.isEligible || player.isEligible || false,
+          // PS fields: update lastActionAt when damage dealt
+          ps: existing?.ps || 0,
+          lastActionAt: actualDamage > 0 ? now : (existing?.lastActionAt || null),
+          lastDamageSnapshot: existing?.lastDamageSnapshot || 0,
+          skillsUsed: existing?.skillsUsed || new Set(),
         });
       }
 
@@ -3736,6 +3949,7 @@ app.prepare().then(async () => {
       // Update leaderboard (only if authenticated)
       if (player.odamage) {
         const existing = sessionLeaderboard.get(player.odamage);
+        const now = Date.now();
         const skillsUsed = existing?.skillsUsed || new Set();
         skillsUsed.add(skillId); // Track skill usage for level-up
         sessionLeaderboard.set(player.odamage, {
@@ -3744,6 +3958,10 @@ app.prepare().then(async () => {
           photoUrl: player.photoUrl,
           isEligible: existing?.isEligible || player.isEligible || false,
           skillsUsed, // Skills used in this boss session
+          // PS fields: update lastActionAt on skill use
+          ps: existing?.ps || 0,
+          lastActionAt: now, // Skill use = activity
+          lastDamageSnapshot: existing?.lastDamageSnapshot || 0,
         });
       }
 
@@ -6505,6 +6723,41 @@ app.prepare().then(async () => {
     }
   }, 60000); // 1 minute
 
+  // ═══════════════════════════════════════════════════════════
+  // PS TICK TIMER - начисление Participation Score каждые 5 минут
+  // ═══════════════════════════════════════════════════════════
+  setInterval(() => {
+    const now = Date.now();
+    let tickCount = 0;
+    let cappedCount = 0;
+
+    // Skip if boss is dead/respawning
+    if (bossState.currentHp <= 0 || bossRespawnAt) {
+      return;
+    }
+
+    for (const [userId, data] of sessionLeaderboard.entries()) {
+      // Условия для начисления PS:
+      // 1) isEligible = true (30+ сек активности)
+      // 2) lastActionAt != null и в пределах ACTIVE_WINDOW_MS
+      const isActive = data.lastActionAt && (now - data.lastActionAt) <= ACTIVE_WINDOW_MS;
+
+      if (data.isEligible && isActive) {
+        // Check cap
+        if ((data.ps || 0) < PS_CAP_PER_BOSS) {
+          data.ps = (data.ps || 0) + 1;
+          tickCount++;
+        } else {
+          cappedCount++;
+        }
+      }
+    }
+
+    if (tickCount > 0 || cappedCount > 0) {
+      console.log(`[PS Tick] +1 PS to ${tickCount} active players (${cappedCount} capped at ${PS_CAP_PER_BOSS})`);
+    }
+  }, PS_TICK_MS); // 5 minutes
+
   // Broadcast boss state every 250ms (optimized - still smooth)
   setInterval(() => {
     // FIX: Use bossState.image directly (set correctly in respawnBoss)
@@ -6701,11 +6954,17 @@ app.prepare().then(async () => {
           // Update leaderboard (only if authenticated)
           if (player.odamage) {
             const existing = sessionLeaderboard.get(player.odamage);
+            const now = Date.now();
             sessionLeaderboard.set(player.odamage, {
               damage: (existing?.damage || 0) + actualDamage,
               visitorName: player.odamageN,
               photoUrl: player.photoUrl,
               isEligible: existing?.isEligible || player.isEligible || false,
+              // PS fields: auto-attack counts as activity
+              ps: existing?.ps || 0,
+              lastActionAt: actualDamage > 0 ? now : (existing?.lastActionAt || null),
+              lastDamageSnapshot: existing?.lastDamageSnapshot || 0,
+              skillsUsed: existing?.skillsUsed || new Set(),
             });
           }
 

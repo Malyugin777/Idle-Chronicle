@@ -24,6 +24,7 @@ model User {
   // Stats (L2-style)
   level           Int      @default(1)
   exp             BigInt   @default(0)
+  sp              Int      @default(0)     // Skill Points (дефицитный ресурс)
 
   // Base Stats (legacy - for backward compatibility)
   str             Int      @default(1)
