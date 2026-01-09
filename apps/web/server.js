@@ -270,7 +270,7 @@ async function loadBossState(prisma) {
     console.log(`[Boss] HP Assignment: Using ${bossRespawnAt ? 'maxHp (respawn phase)' : 'savedHp'} = ${finalHp}`);
 
     // ВСЕГДА используем данные из шаблона по currentBossIndex для синхронизации
-    const now = Date.now();
+    const nowMs = Date.now();
     bossState = {
       id: `default-${state.currentBossIndex}`,
       name: boss.name,           // Из шаблона (не из БД!)
@@ -291,11 +291,11 @@ async function loadBossState(prisma) {
       tonReward: boss.tonReward || 10,
       chestsReward: boss.chestsReward || 10,
       // v1.3.0: Dampening state (initialize with defaults when loading)
-      bossStartAt: now,
-      bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
+      bossStartAt: nowMs,
+      bossTargetEndAt: nowMs + BOSS_MIN_DURATION_MS,
       bossDamageMultiplier: 1.0,
       dpsEma: 0,
-      lastDpsSampleAt: now,
+      lastDpsSampleAt: nowMs,
       lastTotalDamageSample: 0,
       totalDamageDealt: 0,
     };
@@ -682,7 +682,7 @@ const CHEST_XP_FACTOR = {
   SILVER: 0.60,   // 60% of boss XP
   GOLD: 1.50,     // 150% of boss XP
 };
-const SP_RATIO = 8; // SP = XP / 8
+// SP_RATIO уже объявлен выше (line 638)
 
 // ═══════════════════════════════════════════════════════════
 // CHEST OPERATION MUTEX (anti-exploit protection)
