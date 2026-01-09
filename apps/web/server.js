@@ -1091,15 +1091,18 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     const rank = i + 1;
     const damagePercent = totalDamageDealt > 0 ? entry.damage / totalDamageDealt : 0;
 
-    // Adena and EXP still distributed by damage %
-    const goldReward = Math.floor(goldPool * damagePercent);
-    const expReward = Math.floor(expPool * damagePercent);
+    // Gold/EXP убраны - награда только сундуками
+    const goldReward = 0;
+    const expReward = 0;
 
     const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
     const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
 
-    // Calculate chest rewards (TZ Этап 2)
-    const chestRewards = getChestRewardsByRank(rank, entry.isEligible);
+    // Eligibility: любой с >0.001% урона получает награду (убрано условие 30 сек активности)
+    const isEligibleForReward = damagePercent > 0.00001; // 0.001%
+
+    // Calculate chest rewards
+    const chestRewards = getChestRewardsByRank(rank, isEligibleForReward);
 
     rewards.push({
       odamage: entry.odamage,
@@ -1108,7 +1111,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       damage: entry.damage,
       damagePercent: Math.round(damagePercent * 100),
       rank,
-      isEligible: entry.isEligible,
+      isEligible: isEligibleForReward,
       goldReward,
       expReward,
       chestRewards,
@@ -1153,14 +1156,12 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       if (skillsUsed.has('lightning') && newSkillLightning > 0) newSkillLightning++;
 
       // NOTE: totalDamage НЕ добавляем здесь - auto-save уже считает урон через damageDelta
-      // Если добавить здесь entry.damage - будет двойной подсчёт!
+      // Gold/EXP убраны - награда только сундуками
       await prisma.user.update({
         where: { id: entry.odamage },
         data: {
-          gold: { increment: BigInt(goldReward) },
-          exp: { increment: BigInt(expReward) },
-          // totalDamage: убрано - auto-save/disconnect уже сохраняют урон
-          bossesKilled: { increment: entry.isEligible ? 1 : 0 },
+          // gold/exp убраны - только из сундуков
+          bossesKilled: { increment: isEligibleForReward ? 1 : 0 },
           // Level-up system
           level: newLevel,
           skillFireball: newSkillFireball,
@@ -1212,7 +1213,7 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       // Update in-memory player if online
       for (const [sid, p] of onlineUsers.entries()) {
         if (p.odamage === entry.odamage) {
-          p.gold += goldReward;
+          // gold убран - только из сундуков
           // Reset session counters for new boss
           p.sessionDamage = 0;
           p.sessionClicks = 0;

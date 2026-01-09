@@ -21,7 +21,7 @@ import { Hammer } from 'lucide-react';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.120';
+const APP_VERSION = 'v1.0.121';
 
 interface BossState {
   name: string;
