@@ -104,6 +104,7 @@ export default function TreasuryTab() {
   const [selectedReward, setSelectedReward] = useState<PendingReward | null>(null); // For selection popup
   const [rewardSelection, setRewardSelection] = useState<{ wooden: number; bronze: number; silver: number; gold: number }>({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
   const [showForge, setShowForge] = useState(false);
+  const [usingKey, setUsingKey] = useState<string | null>(null); // Track which chest is being opened with key
   const [chestKeys, setChestKeys] = useState<ChestKeys>({
     keyWooden: 0,
     keyBronze: 0,
@@ -148,6 +149,7 @@ export default function TreasuryTab() {
       setClaimedReward(data);
       setIsOpeningAnimation(true);
       setSelectedChest(null);
+      setUsingKey(null); // Clear loading state
       getTaskManager().recordChestOpened();
       socket.emit('loot:stats:get');
     };
@@ -174,6 +176,8 @@ export default function TreasuryTab() {
 
     const handleChestError = (data: { message: string }) => {
       console.error('[Chest] Error:', data.message);
+      setUsingKey(null); // Clear loading state
+      alert(data.message); // Show error to user
     };
 
     const handleSlotError = (data: { message: string }) => {
@@ -370,8 +374,14 @@ export default function TreasuryTab() {
 
   // Use key to instantly open chest
   const useKey = (chestId: string) => {
+    if (usingKey) return; // Prevent double-click
+    setUsingKey(chestId);
     getSocket().emit('chest:use-key', { chestId });
-    setSelectedChest(null);
+    // Safety timeout - clear loading after 10 sec if no response
+    setTimeout(() => {
+      setUsingKey(prev => prev === chestId ? null : prev);
+    }, 10000);
+    // Don't close modal - wait for server response
   };
 
   // Get key count for chest type
@@ -808,19 +818,31 @@ export default function TreasuryTab() {
                       {/* Use key to instantly complete */}
                       {(() => {
                         const keyCount = getKeyForChest(selectedChest.chestType);
+                        const isLoading = usingKey === selectedChest.id;
                         return (
                           <button
                             onClick={() => useKey(selectedChest.id)}
-                            disabled={keyCount < 1}
+                            disabled={keyCount < 1 || isLoading}
                             className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
-                              keyCount >= 1
-                                ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
-                                : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                              isLoading
+                                ? 'bg-amber-500/50 text-amber-200 border border-amber-500/50 cursor-wait'
+                                : keyCount >= 1
+                                  ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
+                                  : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
                             }`}
                           >
-                            <span>{KEY_ICONS[selectedChest.chestType]}</span>
-                            <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
-                            <span className="text-xs text-gray-400">({keyCount})</span>
+                            {isLoading ? (
+                              <>
+                                <span className="animate-spin">⏳</span>
+                                <span>{lang === 'ru' ? 'Открываем...' : 'Opening...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{KEY_ICONS[selectedChest.chestType]}</span>
+                                <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
+                                <span className="text-xs text-gray-400">({keyCount})</span>
+                              </>
+                            )}
                           </button>
                         );
                       })()}
@@ -848,19 +870,35 @@ export default function TreasuryTab() {
                           : (lang === 'ru' ? '⏳ Другой сундук открывается' : '⏳ Another chest is opening')}
                       </button>
                       {/* Use key to instantly open */}
-                      <button
-                        onClick={() => useKey(selectedChest.id)}
-                        disabled={keyCount < 1}
-                        className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
-                          keyCount >= 1
-                            ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
-                            : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <span>{KEY_ICONS[selectedChest.chestType]}</span>
-                        <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
-                        <span className="text-xs text-gray-400">({keyCount})</span>
-                      </button>
+                      {(() => {
+                        const isLoading = usingKey === selectedChest.id;
+                        return (
+                          <button
+                            onClick={() => useKey(selectedChest.id)}
+                            disabled={keyCount < 1 || isLoading}
+                            className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
+                              isLoading
+                                ? 'bg-amber-500/50 text-amber-200 border border-amber-500/50 cursor-wait'
+                                : keyCount >= 1
+                                  ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
+                                  : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {isLoading ? (
+                              <>
+                                <span className="animate-spin">⏳</span>
+                                <span>{lang === 'ru' ? 'Открываем...' : 'Opening...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{KEY_ICONS[selectedChest.chestType]}</span>
+                                <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
+                                <span className="text-xs text-gray-400">({keyCount})</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </>
                   );
                 }
