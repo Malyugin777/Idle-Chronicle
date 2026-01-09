@@ -76,6 +76,19 @@ const handle = app.getRequestHandler();
 // IN-MEMORY STATE
 // ═══════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════
+// BOSS DAMPENING SYSTEM - ensures boss lives at least 24 hours
+// ═══════════════════════════════════════════════════════════
+const BOSS_MIN_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours minimum
+const DAMPENING_MIN_MULT = 0.15; // Minimum damage multiplier
+const DAMPENING_MAX_MULT = 1.0; // Maximum (no dampening)
+const DPS_EMA_ALPHA = 0.10; // Smoothing factor for DPS EMA
+const DPS_SAMPLE_INTERVAL_MS = 60 * 1000; // Sample DPS every 60 seconds
+const DAMPENING_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // Update multiplier every 5 minutes
+
+// Game finished flag
+let gameFinished = false;
+
 let bossState = {
   id: 'default',
   name: 'Serpent',
@@ -96,6 +109,14 @@ let bossState = {
   expReward: 1000000,
   tonReward: 10,
   chestsReward: 10,
+  // Dampening state
+  bossStartAt: Date.now(),
+  bossTargetEndAt: Date.now() + BOSS_MIN_DURATION_MS,
+  bossDamageMultiplier: 1.0,
+  dpsEma: 0,
+  lastDpsSampleAt: Date.now(),
+  lastTotalDamageSample: 0,
+  totalDamageDealt: 0, // Track total damage for dampening
 };
 
 // Previous boss session data for leaderboard
@@ -593,6 +614,8 @@ const ITEM_SET_MAP = {
 // ═══════════════════════════════════════════════════════════
 // PARTICIPATION SCORE (PS) SYSTEM - XP/SP без привязки к урону
 // ═══════════════════════════════════════════════════════════
+// PARTICIPATION SCORE (PS) CONSTANTS
+// ═══════════════════════════════════════════════════════════
 
 // PS tick interval (5 минут)
 const PS_TICK_MS = 5 * 60 * 1000;
@@ -600,22 +623,44 @@ const PS_TICK_MS = 5 * 60 * 1000;
 const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // 5 минут
 // Капа PS за одного босса (24 тика = 2 часа активности)
 const PS_CAP_PER_BOSS = 24;
-// Полный вес участия (6 тиков = 30 минут для 100% базового пула)
+// Полный вес участия (6 тиков = 30 минут для 100% базового веса)
 const BASE_PS_FULL = 6;
 // Соотношение SP к XP (SP = XP / SP_RATIO)
 const SP_RATIO = 8;
 
-// XP pool по индексу босса (простая прогрессия для 100 боссов)
-// Boss 1: 1000 XP, Boss 100: ~50000 XP
-function getBossXpPool(bossIndex) {
-  const base = 1000;
-  const growth = 1.04; // +4% за каждого босса
-  return Math.floor(base * Math.pow(growth, bossIndex));
-}
+// ═══════════════════════════════════════════════════════════
+// BOSS XP TABLE (per-player baseline, NOT pool!)
+// Точная таблица: к боссу 100 игрок с full participation выходит на lvl 20
+// Сумма: 835,862 XP = Classic L2 lvl 20 (cumulative)
+// ═══════════════════════════════════════════════════════════
+const BOSS_XP = [
+  0, // index 0 unused
+  // Boss 1 (target: lvl 3)
+  363,
+  // Bosses 2-5 (target: lvl 6 by boss 5)
+  1277, 1348, 1419, 1490,
+  // Bosses 6-15 (target: lvl 10 by boss 15)
+  3817, 3930, 4043, 4156, 4269, 4382, 4495, 4608, 4721, 4834,
+  // Bosses 16-30 (target: lvl 13 by boss 30)
+  5359, 5541, 5723, 5905, 6087, 6269, 6451, 6633, 6815, 6997, 7179, 7361, 7543, 7725, 7907,
+  // Bosses 31-60 (target: lvl 16 by boss 60)
+  5690, 5812, 5934, 6056, 6178, 6300, 6422, 6544, 6666, 6788,
+  6910, 7032, 7154, 7276, 7398, 7520, 7642, 7764, 7886, 8008,
+  8130, 8252, 8374, 8496, 8618, 8740, 8862, 8984, 9106, 9228,
+  // Bosses 61-85 (target: lvl 18 by boss 85)
+  7253, 7430, 7607, 7784, 7961, 8138, 8315, 8492, 8669, 8846,
+  9023, 9200, 9377, 9554, 9731, 9908, 10085, 10262, 10439, 10616,
+  10793, 10970, 11147, 11324, 11501,
+  // Bosses 86-100 (target: lvl 20 by boss 100)
+  17310, 17616, 17923, 18229, 18536, 18842, 19149, 19455, 19762, 20068,
+  20375, 20681, 20988, 21294, 21601,
+];
 
-// SP pool = XP pool / SP_RATIO
-function getBossSpPool(bossIndex) {
-  return Math.floor(getBossXpPool(bossIndex) / SP_RATIO);
+// Get XP per player for boss (NOT a pool, each player gets this baseline)
+function getBossXpPerPlayer(bossIndex) {
+  if (bossIndex < 1) return BOSS_XP[1];
+  if (bossIndex > 100) return BOSS_XP[100];
+  return BOSS_XP[bossIndex];
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1016,7 +1061,25 @@ const DEFAULT_BOSSES = new Proxy([], {
 let currentBossIndex = 0;
 
 async function respawnBoss(prisma, forceNext = true) {
+  // Check if game is finished (boss 100 already killed)
+  if (gameFinished) {
+    console.log('[Boss] Game finished - no more bosses to spawn');
+    return false;
+  }
+
   console.log(`[Boss] respawnBoss called with forceNext=${forceNext}, currentIndex=${currentBossIndex}`);
+
+  // Check if this is boss 100 transition
+  const nextBossIndex = forceNext ? currentBossIndex + 1 : currentBossIndex;
+  if (nextBossIndex >= 100) {
+    gameFinished = true;
+    console.log('[Boss] 🎉 GAME FINISHED! All 100 bosses defeated!');
+    addLog('info', 'boss', '🎉 GAME FINISHED! All 100 bosses defeated!');
+    return false;
+  }
+
+  const now = Date.now();
+
   try {
     // Try to get bosses from DB
     const bosses = await prisma.boss.findMany({
@@ -1056,7 +1119,15 @@ async function respawnBoss(prisma, forceNext = true) {
         icon: boss.iconUrl || dbBossTemplate?.icon || '👹',
         image: dbBossTemplate?.image || null, // FIX: Set image from template
         bossIndex: currentBossIndex + 1,
-        totalBosses: bosses.length,
+        totalBosses: 100,
+        // Dampening state - reset for new boss
+        bossStartAt: now,
+        bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
+        bossDamageMultiplier: 1.0,
+        dpsEma: 0,
+        lastDpsSampleAt: now,
+        lastTotalDamageSample: 0,
+        totalDamageDealt: 0,
       };
       console.log(`[Boss] Loaded from DB: ${boss.name} (${boss.baseHp} HP, thorns: ${boss.thornsDamage || 0}), image: ${bossState.image}`);
     } else {
@@ -1080,11 +1151,19 @@ async function respawnBoss(prisma, forceNext = true) {
         icon: boss.icon,
         image: boss.image || null,
         bossIndex: currentBossIndex + 1,
-        totalBosses: 100, // Будет 100 боссов!
+        totalBosses: 100,
         goldReward: boss.goldReward,
         expReward: boss.expReward,
         tonReward: boss.tonReward || 10,
         chestsReward: boss.chestsReward || 10,
+        // Dampening state - reset for new boss
+        bossStartAt: now,
+        bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
+        bossDamageMultiplier: 1.0,
+        dpsEma: 0,
+        lastDpsSampleAt: now,
+        lastTotalDamageSample: 0,
+        totalDamageDealt: 0,
       };
     }
   } catch (err) {
@@ -1104,17 +1183,27 @@ async function respawnBoss(prisma, forceNext = true) {
       icon: boss.icon,
       image: boss.image || null,
       bossIndex: 1,
-      totalBosses: 100, // Будет 100 боссов!
+      totalBosses: 100,
       goldReward: boss.goldReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
       chestsReward: boss.chestsReward || 10,
+      // Dampening state - reset for new boss
+      bossStartAt: now,
+      bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
+      bossDamageMultiplier: 1.0,
+      dpsEma: 0,
+      lastDpsSampleAt: now,
+      lastTotalDamageSample: 0,
+      totalDamageDealt: 0,
     };
   }
 
   sessionLeaderboard.clear();
   console.log(`[Boss] Respawned: ${bossState.name} (${bossState.bossIndex}/${bossState.totalBosses}) with ${bossState.maxHp} HP`);
+  console.log(`[Boss] Dampening: targetEnd=${new Date(bossState.bossTargetEndAt).toISOString()}, mult=${bossState.bossDamageMultiplier}`);
   addLog('info', 'boss', `Respawned: ${bossState.name} #${bossState.bossIndex}`, { hp: bossState.maxHp });
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1150,36 +1239,33 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   const goldPool = bossState.goldReward || 5000;
 
   // ═══════════════════════════════════════════════════════════
-  // PARTICIPATION-BASED XP/SP DISTRIBUTION (не по урону!)
+  // PER-PLAYER XP/SP DISTRIBUTION (NOT pool-based!)
+  // Each player gets bossXpPerPlayer * (0.90*weight + 0.10*psBonus) * mentorBoost
+  // NO dependency on participantsCount - 50k online doesn't dilute XP
   // ═══════════════════════════════════════════════════════════
-  const bossXpPool = getBossXpPool(bossState.bossIndex);
-  const basePool = Math.floor(bossXpPool * 0.90); // 90% distributed by participation weight
-  const bonusPool = Math.floor(bossXpPool * 0.10); // 10% bonus by PS count
+  const bossXpPerPlayer = getBossXpPerPlayer(bossState.bossIndex);
 
   // Participants: isEligible AND ps >= 1 (at least 1 active tick)
   const participants = leaderboard.filter(p => p.isEligible && p.ps >= 1);
 
-  // Calculate weight sum and PS sum
-  let weightSum = 0;
-  let psSum = 0;
+  // Pre-calculate XP for each participant (per-player baseline, NOT pool division!)
+  const xpDistribution = new Map(); // userId -> { xpRaw, participationWeight, psBonus }
   for (const p of participants) {
-    const weight = Math.min(p.ps / BASE_PS_FULL, 1); // clamp to 0..1
-    weightSum += weight;
-    psSum += p.ps;
+    // participationWeight = clamp(ps / BASE_PS_FULL, 0..1)
+    const participationWeight = Math.min(p.ps / BASE_PS_FULL, 1);
+    // psBonus = ps / PS_CAP_PER_BOSS (reward for longer participation)
+    const psBonus = p.ps / PS_CAP_PER_BOSS;
+    // XP formula: bossXpPerPlayer * (0.90 * participationWeight + 0.10 * psBonus)
+    const xpRaw = bossXpPerPlayer * (0.90 * participationWeight + 0.10 * psBonus);
+    xpDistribution.set(p.odamage, { xpRaw, participationWeight, psBonus, ps: p.ps });
   }
 
-  // Pre-calculate XP for each participant
-  const xpDistribution = new Map(); // userId -> { xpGain, spGain, mentorBoost }
-  for (const p of participants) {
-    const weight = Math.min(p.ps / BASE_PS_FULL, 1);
-    const baseXpShare = weightSum > 0 ? basePool * (weight / weightSum) : 0;
-    const bonusXpShare = psSum > 0 ? bonusPool * (p.ps / psSum) : 0;
-    const xpRaw = baseXpShare + bonusXpShare;
-    xpDistribution.set(p.odamage, { xpRaw, weight, ps: p.ps });
-  }
-
-  console.log(`[XP] Boss #${bossState.bossIndex} pool: ${bossXpPool} XP (base: ${basePool}, bonus: ${bonusPool})`);
-  console.log(`[XP] Participants: ${participants.length}, weightSum: ${weightSum.toFixed(2)}, psSum: ${psSum}`);
+  // Diagnostic: Calculate average XP gain (should NOT depend on participantsCount)
+  const avgXpRaw = participants.length > 0
+    ? Array.from(xpDistribution.values()).reduce((sum, d) => sum + d.xpRaw, 0) / participants.length
+    : 0;
+  console.log(`[XP] Boss #${bossState.bossIndex} per-player baseline: ${bossXpPerPlayer} XP`);
+  console.log(`[XP] Participants: ${participants.length}, avgXpGain (before mentor): ${avgXpRaw.toFixed(0)}`);
 
   // ═══════════════════════════════════════════════════════════
   // TZ ЭТАП 2: NEW REWARD SYSTEM
@@ -3762,6 +3848,12 @@ app.prepare().then(async () => {
 
       player.lastTapTime = now;
 
+      // Check game finished
+      if (gameFinished) {
+        socket.emit('tap:error', { message: 'Game finished! All 100 bosses defeated.' });
+        return;
+      }
+
       if (bossState.currentHp <= 0) {
         socket.emit('tap:error', { message: 'Boss is dead' });
         return;
@@ -3806,8 +3898,11 @@ app.prepare().then(async () => {
       player.dirty = true;  // SSOT: mark for flush
 
       const { totalDamage, crits, etherUsed } = calculateDamage(player, tapCount);
-      const actualDamage = Math.min(totalDamage, bossState.currentHp);
+      // Apply dampening multiplier for 24h boss duration
+      const dampenedDamage = Math.floor(totalDamage * bossState.bossDamageMultiplier);
+      const actualDamage = Math.min(dampenedDamage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
+      bossState.totalDamageDealt += actualDamage;
 
       // Schedule debounced save to prevent data loss on deploy
       if (actualDamage > 0) scheduleBossSave(prisma);
@@ -3904,6 +3999,12 @@ app.prepare().then(async () => {
         return;
       }
 
+      // Check game finished
+      if (gameFinished) {
+        socket.emit('skill:error', { message: 'Game finished!' });
+        return;
+      }
+
       // Check boss alive
       if (bossState.currentHp <= 0) {
         socket.emit('skill:error', { message: 'Boss is dead' });
@@ -3942,9 +4043,12 @@ app.prepare().then(async () => {
 
       // Calculate damage: (baseDamage + pAtk * multiplier) * levelMult * skillMult
       const baseDmg = skill.baseDamage + (player.pAtk * skill.multiplier);
-      const damage = Math.floor(baseDmg * levelMultiplier * skillMultiplier);
+      const rawDamage = Math.floor(baseDmg * levelMultiplier * skillMultiplier);
+      // Apply dampening multiplier for 24h boss duration
+      const damage = Math.floor(rawDamage * bossState.bossDamageMultiplier);
       const actualDamage = Math.min(damage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
+      bossState.totalDamageDealt += actualDamage;
 
       // Schedule debounced save to prevent data loss on deploy
       if (actualDamage > 0) scheduleBossSave(prisma);
@@ -6791,6 +6895,8 @@ app.prepare().then(async () => {
       // Respawn timer info
       isRespawning: bossRespawnAt !== null,
       respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
+      // Game finished flag
+      gameFinished,
     });
   }, 250);
 
@@ -6799,8 +6905,18 @@ app.prepare().then(async () => {
     if (bossRespawnAt && new Date() >= bossRespawnAt) {
       console.log('[Boss] Respawn timer expired, spawning next boss...');
       bossRespawnAt = null;
-      await respawnBoss(prisma);
+      const spawned = await respawnBoss(prisma);
       await saveBossState(prisma);
+
+      if (!spawned) {
+        // Game finished - boss 100 was the last
+        io.emit('game:finished', {
+          message: '🎉 Congratulations! All 100 bosses defeated!',
+          totalBosses: 100,
+        });
+        console.log('[Boss] 🎉 Game finished event sent to all clients');
+        return;
+      }
 
       // После respawnBoss currentBossIndex уже обновлён
       // FIX: Use bossState directly (image is set in respawnBoss)
@@ -6871,12 +6987,65 @@ app.prepare().then(async () => {
     }
   }, 1000);
 
+  // ═══════════════════════════════════════════════════════════
+  // DPS SAMPLING - Sample DPS every 60 seconds for dampening
+  // ═══════════════════════════════════════════════════════════
+  setInterval(() => {
+    if (bossState.currentHp <= 0 || gameFinished) return;
+
+    const now = Date.now();
+    const deltaTime = (now - bossState.lastDpsSampleAt) / 1000;
+    if (deltaTime < 1) return;
+
+    const deltaDamage = bossState.totalDamageDealt - bossState.lastTotalDamageSample;
+    const dps = deltaDamage / Math.max(deltaTime, 1);
+
+    // Exponential moving average
+    bossState.dpsEma = bossState.dpsEma * (1 - DPS_EMA_ALPHA) + dps * DPS_EMA_ALPHA;
+
+    // Update samples
+    bossState.lastTotalDamageSample = bossState.totalDamageDealt;
+    bossState.lastDpsSampleAt = now;
+  }, DPS_SAMPLE_INTERVAL_MS);
+
+  // ═══════════════════════════════════════════════════════════
+  // DAMPENING UPDATE - Adjust bossDamageMultiplier every 5 minutes
+  // ═══════════════════════════════════════════════════════════
+  setInterval(() => {
+    if (bossState.currentHp <= 0 || gameFinished) return;
+
+    const now = Date.now();
+    const timeRemaining = Math.max(1, (bossState.bossTargetEndAt - now) / 1000); // seconds
+    const hpRemaining = bossState.currentHp;
+
+    // If already past target end time, no dampening needed
+    if (now >= bossState.bossTargetEndAt) {
+      bossState.bossDamageMultiplier = DAMPENING_MAX_MULT;
+      return;
+    }
+
+    // Calculate allowed DPS to reach target end time
+    const allowedDps = hpRemaining / timeRemaining;
+    const currentDps = Math.max(bossState.dpsEma, 1);
+
+    // rawMult < 1 means we're going too fast, need to slow down
+    const rawMult = allowedDps / currentDps;
+    const oldMult = bossState.bossDamageMultiplier;
+    bossState.bossDamageMultiplier = Math.max(DAMPENING_MIN_MULT, Math.min(DAMPENING_MAX_MULT, rawMult));
+
+    // Log dampening changes
+    if (Math.abs(oldMult - bossState.bossDamageMultiplier) > 0.01) {
+      const hoursRemaining = (timeRemaining / 3600).toFixed(1);
+      console.log(`[Dampening] Boss #${bossState.bossIndex}: mult ${oldMult.toFixed(2)} → ${bossState.bossDamageMultiplier.toFixed(2)} | DPS: ${currentDps.toFixed(0)} | HP: ${hpRemaining} | Hours left: ${hoursRemaining}h`);
+    }
+  }, DAMPENING_UPDATE_INTERVAL_MS);
+
   // Auto-attack every second (for players with AUTO enabled)
   const AUTO_ATTACKS_PER_SECOND = 1; // 1 hit per second at base attack speed
   const AUTO_STAMINA_COST = 1; // Stamina cost per auto-hit
 
   setInterval(async () => {
-    if (bossState.currentHp <= 0) return; // Boss is dead
+    if (bossState.currentHp <= 0 || gameFinished) return; // Boss is dead or game finished
 
     for (const [socketId, player] of onlineUsers.entries()) {
       // NEW: Check autoAttack toggle instead of autoAttackSpeed
@@ -6951,9 +7120,12 @@ app.prepare().then(async () => {
           player.stamina = Math.max(0, player.stamina - AUTO_STAMINA_COST);
         }
 
-        if (totalAutoDamage > 0 && bossState.currentHp > 0) {
-          const actualDamage = Math.min(totalAutoDamage, bossState.currentHp);
+        if (totalAutoDamage > 0 && bossState.currentHp > 0 && !gameFinished) {
+          // Apply dampening multiplier for 24h boss duration
+          const dampenedDamage = Math.floor(totalAutoDamage * bossState.bossDamageMultiplier);
+          const actualDamage = Math.min(dampenedDamage, bossState.currentHp);
           bossState.currentHp -= actualDamage;
+          bossState.totalDamageDealt += actualDamage;
 
           // Schedule debounced save to prevent data loss on deploy
           scheduleBossSave(prisma);
