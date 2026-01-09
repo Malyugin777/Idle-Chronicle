@@ -47,6 +47,13 @@ interface LootStats {
   };
 }
 
+interface ChestKeys {
+  keyWooden: number;
+  keyBronze: number;
+  keySilver: number;
+  keyGold: number;
+}
+
 // TZ Этап 2: Pending Rewards
 interface PendingReward {
   id: string;
@@ -95,6 +102,12 @@ export default function TreasuryTab() {
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
   const [showForge, setShowForge] = useState(false);
+  const [chestKeys, setChestKeys] = useState<ChestKeys>({
+    keyWooden: 0,
+    keyBronze: 0,
+    keySilver: 0,
+    keyGold: 0,
+  });
 
   // Update timer every second
   useEffect(() => {
@@ -195,7 +208,17 @@ export default function TreasuryTab() {
       if (data) {
         setCrystals(data.ancientCoin || 0);
         setGold(data.gold || 0);
+        setChestKeys({
+          keyWooden: data.keyWooden || 0,
+          keyBronze: data.keyBronze || 0,
+          keySilver: data.keySilver || 0,
+          keyGold: data.keyGold || 0,
+        });
       }
+    };
+
+    const handlePlayerKeys = (data: ChestKeys) => {
+      setChestKeys(data);
     };
 
     const handleEtherCraft = (data: { gold?: number }) => {
@@ -229,6 +252,7 @@ export default function TreasuryTab() {
     socket.on('player:data', handlePlayerData);
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('player:state', handlePlayerState);
+    socket.on('player:keys', handlePlayerKeys);
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -249,6 +273,7 @@ export default function TreasuryTab() {
       socket.off('player:data', handlePlayerData);
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('player:state', handlePlayerState);
+      socket.off('player:keys', handlePlayerKeys);
     };
   }, []);
 
@@ -300,6 +325,31 @@ export default function TreasuryTab() {
     if (claimingRewardId) return;
     setClaimingRewardId(rewardId);
     getSocket().emit('rewards:claim', { rewardId });
+  };
+
+  // Use key to instantly open chest
+  const useKey = (chestId: string) => {
+    getSocket().emit('chest:use-key', { chestId });
+    setSelectedChest(null);
+  };
+
+  // Get key count for chest type
+  const getKeyForChest = (chestType: ChestType): number => {
+    const keyMap: Record<ChestType, keyof ChestKeys> = {
+      WOODEN: 'keyWooden',
+      BRONZE: 'keyBronze',
+      SILVER: 'keySilver',
+      GOLD: 'keyGold',
+    };
+    return chestKeys[keyMap[chestType]] || 0;
+  };
+
+  // Key icons per type
+  const KEY_ICONS: Record<ChestType, string> = {
+    WOODEN: '🗝️',
+    BRONZE: '🔑',
+    SILVER: '🔐',
+    GOLD: '🏆',
   };
 
   // Format time remaining
@@ -372,6 +422,15 @@ export default function TreasuryTab() {
                 {lang === 'ru' ? 'Кузница' : 'Forge'}
               </span>
             </button>
+            {/* Keys display */}
+            {(chestKeys.keyWooden > 0 || chestKeys.keyBronze > 0 || chestKeys.keySilver > 0 || chestKeys.keyGold > 0) && (
+              <div className="flex items-center gap-1 bg-amber-900/30 px-2 py-1 rounded text-xs">
+                {chestKeys.keyWooden > 0 && <span title="Wooden Keys">🗝️{chestKeys.keyWooden}</span>}
+                {chestKeys.keyBronze > 0 && <span title="Bronze Keys">🔑{chestKeys.keyBronze}</span>}
+                {chestKeys.keySilver > 0 && <span title="Silver Keys">🔐{chestKeys.keySilver}</span>}
+                {chestKeys.keyGold > 0 && <span title="Gold Keys">🏆{chestKeys.keyGold}</span>}
+              </div>
+            )}
             <div className="flex items-center gap-1 bg-purple-500/20 px-2 py-1 rounded">
               <Gem className="text-purple-400" size={14} />
               <span className="text-sm font-bold text-purple-400">{crystals}</span>
@@ -704,27 +763,63 @@ export default function TreasuryTab() {
                           {BOOST_COST}
                         </span>
                       </button>
+                      {/* Use key to instantly complete */}
+                      {(() => {
+                        const keyCount = getKeyForChest(selectedChest.chestType);
+                        return (
+                          <button
+                            onClick={() => useKey(selectedChest.id)}
+                            disabled={keyCount < 1}
+                            className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
+                              keyCount >= 1
+                                ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
+                                : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <span>{KEY_ICONS[selectedChest.chestType]}</span>
+                            <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
+                            <span className="text-xs text-gray-400">({keyCount})</span>
+                          </button>
+                        );
+                      })()}
                     </>
                   );
                 } else {
+                  const keyCount = getKeyForChest(selectedChest.chestType);
                   return (
-                    <button
-                      onClick={() => {
-                        if (canOpen) {
-                          startOpening(selectedChest.id);
-                        }
-                      }}
-                      disabled={!canOpen}
-                      className={`w-full py-3 rounded-lg text-sm font-bold ${
-                        canOpen
-                          ? 'bg-white/10 text-white hover:bg-white/20'
-                          : 'bg-black/30 text-gray-600 cursor-not-allowed'
-                      }`}
-                    >
-                      {canOpen
-                        ? (lang === 'ru' ? '🔓 Начать открытие' : '🔓 Start Opening')
-                        : (lang === 'ru' ? '⏳ Другой сундук открывается' : '⏳ Another chest is opening')}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          if (canOpen) {
+                            startOpening(selectedChest.id);
+                          }
+                        }}
+                        disabled={!canOpen}
+                        className={`w-full py-3 rounded-lg text-sm font-bold ${
+                          canOpen
+                            ? 'bg-white/10 text-white hover:bg-white/20'
+                            : 'bg-black/30 text-gray-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {canOpen
+                          ? (lang === 'ru' ? '🔓 Начать открытие' : '🔓 Start Opening')
+                          : (lang === 'ru' ? '⏳ Другой сундук открывается' : '⏳ Another chest is opening')}
+                      </button>
+                      {/* Use key to instantly open */}
+                      <button
+                        onClick={() => useKey(selectedChest.id)}
+                        disabled={keyCount < 1}
+                        className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
+                          keyCount >= 1
+                            ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50 border border-amber-500/50'
+                            : 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>{KEY_ICONS[selectedChest.chestType]}</span>
+                        <span>{lang === 'ru' ? 'Открыть ключом' : 'Use Key'}</span>
+                        <span className="text-xs text-gray-400">({keyCount})</span>
+                      </button>
+                    </>
                   );
                 }
               })()}

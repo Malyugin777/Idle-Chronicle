@@ -533,6 +533,17 @@ const STARTER_EQUIPMENT = [
   { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2, setId: 'starter' },
 ];
 
+// DEBUG EQUIPMENT (для тестирования)
+const DEBUG_EQUIPMENT = {
+  code: 'debug-sword',
+  slot: 'WEAPON',
+  name: '[DEBUG] Меч разработчика',
+  icon: '⚔️',
+  pAtk: 1500,
+  rarity: 'EPIC',
+  setId: 'debug',
+};
+
 // Map item codes to set IDs
 const ITEM_SET_MAP = {
   'starter-sword': 'starter',
@@ -2860,6 +2871,11 @@ app.prepare().then(async () => {
             // Enchant System consumables (from DB - not frequently changed)
             enchantCharges: user.enchantCharges ?? 0,
             protectionCharges: user.protectionCharges ?? 0,
+            // Chest Keys (from DB)
+            keyWooden: user.keyWooden ?? 0,
+            keyBronze: user.keyBronze ?? 0,
+            keySilver: user.keySilver ?? 0,
+            keyGold: user.keyGold ?? 0,
             // Session stats (from memory, not DB)
             sessionDamage: player.sessionDamage || 0,
           });
@@ -4094,6 +4110,211 @@ app.prepare().then(async () => {
       }
     });
 
+    // USE KEY - моментальное открытие сундука ключом
+    socket.on('chest:use-key', async (data) => {
+      if (!player.odamage) {
+        socket.emit('chest:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { chestId } = data;
+
+      try {
+        const chest = await prisma.chest.findUnique({
+          where: { id: chestId },
+        });
+
+        if (!chest || chest.userId !== player.odamage) {
+          socket.emit('chest:error', { message: 'Chest not found' });
+          return;
+        }
+
+        // Определяем какой ключ нужен
+        const KEY_MAP = {
+          'WOODEN': 'keyWooden',
+          'BRONZE': 'keyBronze',
+          'SILVER': 'keySilver',
+          'GOLD': 'keyGold',
+        };
+
+        const chestType = chest.chestType || 'WOODEN';
+        const keyField = KEY_MAP[chestType];
+        if (!keyField) {
+          socket.emit('chest:error', { message: 'Invalid chest type' });
+          return;
+        }
+
+        // Проверяем есть ли ключ
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { [keyField]: true, pityCounter: true },
+        });
+
+        const keysAvailable = user?.[keyField] || 0;
+        if (keysAvailable < 1) {
+          socket.emit('chest:error', { message: 'No key available' });
+          return;
+        }
+
+        // Генерируем лут (копия логики из chest:claim)
+        const dropRates = CHEST_DROP_RATES[chestType];
+        const goldReward = dropRates.gold;
+        const expReward = goldReward * 10;
+
+        const chargesRange = CHEST_ENCHANT_CHARGES[chestType] || { min: 1, max: 2 };
+        const enchantCharges = Math.floor(Math.random() * (chargesRange.max - chargesRange.min + 1)) + chargesRange.min;
+
+        let protectionDrop = 0;
+        if (chestType === 'GOLD' && Math.random() < PROTECTION_DROP_CHANCE) {
+          protectionDrop = 1;
+        }
+
+        let currentPity = user?.pityCounter || 0;
+        const isSilverOrGold = chestType === 'SILVER' || chestType === 'GOLD';
+
+        let droppedItem = null;
+        let droppedItemRarity = null;
+
+        if (Math.random() < dropRates.itemChance) {
+          const weights = { ...dropRates.rarityWeights };
+          const pityBonus = isSilverOrGold && currentPity >= 30 ? (currentPity - 30 + 1) : 0;
+          if (pityBonus > 0 && weights.EPIC !== undefined) {
+            weights.EPIC = (weights.EPIC || 0) + pityBonus;
+          }
+
+          const totalWeight = Object.values(weights).reduce((sum, w) => sum + (w || 0), 0);
+          let roll = Math.random() * totalWeight;
+
+          for (const [rarity, weight] of Object.entries(weights)) {
+            if (!weight) continue;
+            roll -= weight;
+            if (roll <= 0) {
+              droppedItemRarity = rarity;
+              break;
+            }
+          }
+        }
+
+        let pityCounterDelta = 0;
+        if (isSilverOrGold) {
+          if (droppedItemRarity === 'EPIC') {
+            pityCounterDelta = -currentPity;
+          } else {
+            pityCounterDelta = 1;
+          }
+        }
+
+        // Дроп предмета
+        if (droppedItemRarity) {
+          const droppableItems = await prisma.equipment.findMany({
+            where: { rarity: droppedItemRarity, droppable: true },
+          });
+
+          if (droppableItems.length > 0) {
+            let equipment = null;
+            const setWeights = DROP_SET_WEIGHTS[droppedItemRarity];
+            if (setWeights) {
+              const chosenSetId = weightedRandom(setWeights);
+              const setItems = droppableItems.filter(e => {
+                const code = e.code || '';
+                const itemSetId = code.split('-')[0];
+                return itemSetId === chosenSetId;
+              });
+              if (setItems.length > 0) {
+                equipment = setItems[Math.floor(Math.random() * setItems.length)];
+              }
+            }
+            if (!equipment) {
+              equipment = droppableItems[Math.floor(Math.random() * droppableItems.length)];
+            }
+
+            const rolledPAtk = equipment.pAtkMax > 0
+              ? Math.floor(Math.random() * (equipment.pAtkMax - equipment.pAtkMin + 1)) + equipment.pAtkMin
+              : 0;
+            const rolledPDef = equipment.pDefMax > 0
+              ? Math.floor(Math.random() * (equipment.pDefMax - equipment.pDefMin + 1)) + equipment.pDefMin
+              : 0;
+
+            await prisma.userEquipment.create({
+              data: {
+                userId: player.odamage,
+                equipmentId: equipment.id,
+                pAtk: rolledPAtk,
+                pDef: rolledPDef,
+                enchant: 0,
+                isEquipped: false,
+              },
+            });
+
+            droppedItem = {
+              name: equipment.name,
+              icon: equipment.icon,
+              rarity: droppedItemRarity,
+              pAtk: rolledPAtk,
+              pDef: rolledPDef,
+            };
+          }
+        }
+
+        // Удаляем сундук и обновляем данные игрока
+        await prisma.chest.delete({ where: { id: chestId } });
+
+        const totalChestField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
+        const updateData = {
+          gold: { increment: goldReward },
+          exp: { increment: expReward },
+          enchantCharges: { increment: enchantCharges },
+          totalGoldEarned: { increment: goldReward },
+          [totalChestField]: { increment: 1 },
+          [keyField]: { decrement: 1 }, // Отнимаем ключ
+        };
+
+        if (protectionDrop > 0) {
+          updateData.protectionCharges = { increment: protectionDrop };
+        }
+        if (pityCounterDelta !== 0) {
+          if (pityCounterDelta < 0) {
+            updateData.pityCounter = 0;
+          } else {
+            updateData.pityCounter = { increment: pityCounterDelta };
+          }
+        }
+
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: updateData,
+        });
+
+        player.gold += goldReward;
+        player[keyField] = keysAvailable - 1;
+
+        console.log(`[Chest] ${player.telegramId} used ${keyField} to instant-open ${chestType} chest`);
+
+        socket.emit('chest:claimed', {
+          chestId,
+          chestType,
+          rewards: {
+            gold: goldReward,
+            exp: expReward,
+            enchantCharges,
+            protectionDrop,
+            equipment: droppedItem,
+          },
+        });
+
+        // Отправляем обновление ключей
+        socket.emit('player:keys', {
+          keyWooden: player.keyWooden || 0,
+          keyBronze: player.keyBronze || 0,
+          keySilver: player.keySilver || 0,
+          keyGold: player.keyGold || 0,
+        });
+      } catch (err) {
+        console.error('[Chest] Use key error:', err.message);
+        socket.emit('chest:error', { message: 'Failed to use key' });
+      }
+    });
+
     // BOOST CHEST (ускорить на 30 минут за 999 кристаллов, 1 монета для debug юзеров)
     socket.on('chest:boost', async (data) => {
       if (!player.odamage) {
@@ -4649,6 +4870,58 @@ app.prepare().then(async () => {
           socket.emit('shop:success', {
             gold: player.gold,
             [potionKey]: player[potionKey],
+          });
+        } else if (data.type === 'debug-sword') {
+          // DEBUG: Бесплатный меч 1500 pAtk для тестирования
+          // Найти или создать шаблон в БД
+          let equipmentTemplate = await prisma.equipment.findUnique({
+            where: { code: DEBUG_EQUIPMENT.code },
+          });
+
+          if (!equipmentTemplate) {
+            equipmentTemplate = await prisma.equipment.create({
+              data: {
+                code: DEBUG_EQUIPMENT.code,
+                name: DEBUG_EQUIPMENT.name,
+                nameRu: DEBUG_EQUIPMENT.name,
+                icon: DEBUG_EQUIPMENT.icon,
+                slot: DEBUG_EQUIPMENT.slot,
+                rarity: DEBUG_EQUIPMENT.rarity,
+                pAtkMin: DEBUG_EQUIPMENT.pAtk,
+                pAtkMax: DEBUG_EQUIPMENT.pAtk,
+                pDefMin: 0,
+                pDefMax: 0,
+                droppable: false,
+              },
+            });
+          }
+
+          // Создать предмет в инвентаре игрока
+          const userEquip = await prisma.userEquipment.create({
+            data: {
+              userId: player.odamage,
+              equipmentId: equipmentTemplate.id,
+              pAtk: DEBUG_EQUIPMENT.pAtk,
+              pDef: 0,
+              enchant: 0,
+              isEquipped: false,
+            },
+          });
+
+          console.log(`[Shop] ${player.telegramId} bought DEBUG SWORD (1500 pAtk)`);
+
+          socket.emit('shop:success', {
+            gold: player.gold,
+            equipment: {
+              id: userEquip.id,
+              code: DEBUG_EQUIPMENT.code,
+              name: DEBUG_EQUIPMENT.name,
+              icon: DEBUG_EQUIPMENT.icon,
+              slot: DEBUG_EQUIPMENT.slot,
+              pAtk: DEBUG_EQUIPMENT.pAtk,
+              pDef: 0,
+              rarity: DEBUG_EQUIPMENT.rarity,
+            },
           });
         }
       } catch (err) {
