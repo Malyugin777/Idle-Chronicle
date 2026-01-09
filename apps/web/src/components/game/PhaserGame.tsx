@@ -9,6 +9,8 @@ import { getSocket } from '@/lib/socket';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import { getTaskManager } from '@/lib/taskManager';
 import TasksModal from './TasksModal';
+import ForgeModal from './ForgeModal';
+import { Hammer } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════
 // PHASER GAME + REACT UI
@@ -19,7 +21,7 @@ import TasksModal from './TasksModal';
 // See docs/ARCHITECTURE.md
 // ═══════════════════════════════════════════════════════════
 
-const APP_VERSION = 'v1.0.116';
+const APP_VERSION = 'v1.0.117';
 
 interface BossState {
   name: string;
@@ -52,6 +54,7 @@ interface PlayerState {
   level: number;
   crystals: number;
   photoUrl: string | null;
+  firstName: string;
   // Skill levels (0 = locked)
   skillFireball: number;
   skillIceball: number;
@@ -228,6 +231,7 @@ export default function PhaserGame() {
     level: 1,
     crystals: 0,
     photoUrl: null,
+    firstName: '',
     skillFireball: 1,
     skillIceball: 0,
     skillLightning: 0,
@@ -291,6 +295,7 @@ export default function PhaserGame() {
   const [pressedSkill, setPressedSkill] = useState<string | null>(null);
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [showTasks, setShowTasks] = useState(false);
+  const [showForge, setShowForge] = useState(false);
   const [hasClaimable, setHasClaimable] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [serverUptime, setServerUptime] = useState<string>('');
@@ -595,6 +600,7 @@ export default function PhaserGame() {
         level: data.level ?? 1,
         crystals: data.ancientCoin ?? 0,
         photoUrl: data.photoUrl ?? null,
+        firstName: data.firstName ?? '',
         skillFireball: data.skillFireball ?? 1,
         skillIceball: data.skillIceball ?? 0,
         skillLightning: data.skillLightning ?? 0,
@@ -912,28 +918,22 @@ export default function PhaserGame() {
       <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
         {/* Row 1: Avatar + Level + Currency */}
         <div className="flex items-center justify-between mb-2">
-          {/* Left: Avatar + Level */}
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              {playerState.photoUrl ? (
-                <img
-                  src={playerState.photoUrl}
-                  alt=""
-                  className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                  <span className="text-lg">👤</span>
-                </div>
-              )}
-              {/* Level badge */}
-              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
-                {playerState.level}
+          {/* Left: Avatar with Level badge */}
+          <div className="relative">
+            {playerState.photoUrl ? (
+              <img
+                src={playerState.photoUrl}
+                alt=""
+                className="w-10 h-10 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <span className="text-lg">👤</span>
               </div>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-gray-400 leading-none">{lang === 'ru' ? 'Уровень' : 'Level'}</span>
-              <span className="text-sm font-bold text-amber-400">{playerState.level}</span>
+            )}
+            {/* Level badge */}
+            <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md border border-amber-400/50">
+              {playerState.level}
             </div>
           </div>
 
@@ -954,6 +954,29 @@ export default function PhaserGame() {
 
         {/* Row 2: Resource Bars */}
         <div className="flex gap-2">
+          {/* Stamina Bar (Yellow, first) */}
+          <div className="flex-1">
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-[10px]">⚡</span>
+              <span className="text-[9px] text-yellow-300 font-medium">{lang === 'ru' ? 'Стамина' : 'Stamina'}</span>
+            </div>
+            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-yellow-500/30 shadow-inner">
+              <div
+                className={`h-full transition-all duration-200 ${
+                  exhausted
+                    ? 'bg-gradient-to-r from-red-600 to-red-400'
+                    : staminaPercent < 25
+                      ? 'bg-gradient-to-r from-orange-600 to-orange-400'
+                      : 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                }`}
+                style={{ width: `${staminaPercent}%` }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
+                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
+              </span>
+            </div>
+          </div>
+
           {/* Mana Bar */}
           <div className="flex-1">
             <div className="flex items-center gap-1 mb-0.5">
@@ -967,29 +990,6 @@ export default function PhaserGame() {
               />
               <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
                 {Math.floor(playerState.mana)}/{playerState.maxMana}
-              </span>
-            </div>
-          </div>
-
-          {/* Stamina Bar */}
-          <div className="flex-1">
-            <div className="flex items-center gap-1 mb-0.5">
-              <span className="text-[10px]">⚡</span>
-              <span className="text-[9px] text-green-300 font-medium">SP</span>
-            </div>
-            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-green-500/30 shadow-inner">
-              <div
-                className={`h-full transition-all duration-200 ${
-                  exhausted
-                    ? 'bg-gradient-to-r from-red-600 to-red-400'
-                    : staminaPercent < 25
-                      ? 'bg-gradient-to-r from-orange-600 to-orange-400'
-                      : 'bg-gradient-to-r from-green-600 to-green-400'
-                }`}
-                style={{ width: `${staminaPercent}%` }}
-              />
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-lg">
-                {Math.floor(playerState.stamina)}/{playerState.maxStamina}
               </span>
             </div>
           </div>
@@ -1060,85 +1060,71 @@ export default function PhaserGame() {
           </div>
         ) : (
           /* Boss alive - show HP bar with premium styling */
-          <div className="w-[75%] max-w-xs">
-            {/* Boss name plate */}
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-800/60 to-amber-950/80 border border-amber-600/40 flex items-center justify-center shadow-lg shadow-amber-900/30">
+          <div className="w-[90%] max-w-sm">
+            {/* Boss name plate (centered, no icon) */}
+            <div className="flex flex-col items-center mb-2">
+              <span className="text-l2-gold font-bold text-sm drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
+                {bossDisplayName}
+              </span>
+              <span className="text-gray-500 text-[9px]">
+                #{bossState.bossIndex} / {bossState.totalBosses}
+              </span>
+            </div>
+
+            {/* HP Bar Row: [Boss icon] [HP bar] [Drop icon] */}
+            <div className="flex items-center gap-2">
+              {/* Boss icon (left) */}
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-800/60 to-amber-950/80 border border-amber-600/40 flex items-center justify-center shadow-lg shadow-amber-900/30 flex-shrink-0">
                 <span className="text-lg drop-shadow-md">{bossState.icon}</span>
               </div>
-              <div className="flex flex-col">
-                <span className="text-l2-gold font-bold text-sm drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
-                  {bossDisplayName}
-                </span>
-                <span className="text-gray-500 text-[9px]">
-                  #{bossState.bossIndex} / {bossState.totalBosses}
-                </span>
-              </div>
-            </div>
 
-            {/* HP Bar Container with frame */}
-            <div className="relative">
-              {/* Decorative corners */}
-              <div className="absolute -top-1 -left-1 w-2 h-2 border-l-2 border-t-2 border-amber-600/60" />
-              <div className="absolute -top-1 -right-1 w-2 h-2 border-r-2 border-t-2 border-amber-600/60" />
-              <div className="absolute -bottom-1 -left-1 w-2 h-2 border-l-2 border-b-2 border-amber-600/60" />
-              <div className="absolute -bottom-1 -right-1 w-2 h-2 border-r-2 border-b-2 border-amber-600/60" />
+              {/* HP Bar Container with frame (center) */}
+              <div className="relative flex-1">
+                {/* Decorative corners */}
+                <div className="absolute -top-1 -left-1 w-2 h-2 border-l-2 border-t-2 border-amber-600/60" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 border-r-2 border-t-2 border-amber-600/60" />
+                <div className="absolute -bottom-1 -left-1 w-2 h-2 border-l-2 border-b-2 border-amber-600/60" />
+                <div className="absolute -bottom-1 -right-1 w-2 h-2 border-r-2 border-b-2 border-amber-600/60" />
 
-              {/* Main HP bar */}
-              <div className="h-6 bg-gradient-to-b from-gray-900 to-black rounded-md overflow-hidden relative border border-gray-700/50 shadow-inner">
-                {/* HP fill with gradient */}
-                <div
-                  className={`h-full transition-all duration-150 relative ${
-                    hpPercent < 25 ? 'hp-critical' : ''
-                  }`}
-                  style={{
-                    width: `${hpPercent}%`,
-                    background: hpPercent < 25
-                      ? 'linear-gradient(to bottom, #dc2626, #991b1b)'
-                      : hpPercent < 50
-                        ? 'linear-gradient(to bottom, #ea580c, #c2410c)'
-                        : hpPercent < 75
-                          ? 'linear-gradient(to bottom, #eab308, #ca8a04)'
-                          : 'linear-gradient(to bottom, #22c55e, #16a34a)'
-                  }}
-                >
-                  {/* Shine effect */}
-                  <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent" />
-                </div>
+                {/* Main HP bar */}
+                <div className="h-6 bg-gradient-to-b from-gray-900 to-black rounded-md overflow-hidden relative border border-gray-700/50 shadow-inner">
+                  {/* HP fill with gradient */}
+                  <div
+                    className={`h-full transition-all duration-150 relative ${
+                      hpPercent < 25 ? 'hp-critical' : ''
+                    }`}
+                    style={{
+                      width: `${hpPercent}%`,
+                      background: hpPercent < 25
+                        ? 'linear-gradient(to bottom, #dc2626, #991b1b)'
+                        : hpPercent < 50
+                          ? 'linear-gradient(to bottom, #ea580c, #c2410c)'
+                          : hpPercent < 75
+                            ? 'linear-gradient(to bottom, #eab308, #ca8a04)'
+                            : 'linear-gradient(to bottom, #22c55e, #16a34a)'
+                    }}
+                  >
+                    {/* Shine effect */}
+                    <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent" />
+                  </div>
 
-                {/* HP numbers - full format for clarity */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-[10px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                    {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
-                  </span>
+                  {/* HP numbers - full format for clarity */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[10px] text-white font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      {bossState.hp.toLocaleString()} / {bossState.maxHp.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Info row below HP bar */}
-            <div className="flex items-center justify-between mt-2 px-1">
-              <div className="flex items-center gap-1">
-                <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                <span className="text-[9px] text-gray-400">
-                  {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
-                  onClick={() => setShowDebug(true)}
-                >
-                  {APP_VERSION}
-                </span>
-                {/* Drop info button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
-                  className="w-6 h-6 bg-gradient-to-b from-amber-700/50 to-amber-900/50 rounded-md flex items-center justify-center
-                             border border-amber-600/40 active:scale-90 transition-all hover:border-amber-500/60 shadow-sm"
-                >
-                  <span className="text-xs">📦</span>
-                </button>
-              </div>
+              {/* Drop info button (right) */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowDropTable(true); }}
+                className="w-8 h-8 bg-gradient-to-b from-amber-700/50 to-amber-900/50 rounded-lg flex items-center justify-center
+                           border border-amber-600/40 active:scale-90 transition-all hover:border-amber-500/60 shadow-lg flex-shrink-0"
+              >
+                <span className="text-sm">📦</span>
+              </button>
             </div>
 
             {/* Your Damage display - accumulated damage to current boss */}
@@ -1162,6 +1148,21 @@ export default function PhaserGame() {
         id="game-container"
         className="flex-1 w-full"
       />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FORGE BUTTON - Left side, quick access to forge */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <button
+        onClick={() => setShowForge(true)}
+        className="absolute top-56 left-2 z-10 w-12 h-12 bg-gradient-to-b from-amber-700/60 to-amber-900/80
+                   rounded-lg border border-amber-600/50 flex flex-col items-center justify-center
+                   active:scale-90 transition-all hover:border-amber-500/70 shadow-lg shadow-amber-900/30"
+      >
+        <Hammer className="text-amber-400" size={20} />
+        <span className="text-[7px] text-amber-300 font-bold mt-0.5">
+          {lang === 'ru' ? 'КОВКА' : 'FORGE'}
+        </span>
+      </button>
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DAMAGE FEED - Right side, premium combat log */}
@@ -1199,7 +1200,30 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) - Premium Design */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pb-3 pt-6 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 z-10 pb-2 pt-6 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
+        {/* Footer Row: Nickname + Version + Online */}
+        <div className="flex items-center justify-between px-2 mb-2">
+          {/* Nickname (left) */}
+          <span className="text-[10px] text-gray-400 truncate max-w-[100px]">
+            {playerState.firstName || 'Player'}
+          </span>
+          {/* Version + Online (right) */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <span className="text-[9px] text-gray-500">
+                {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
+              </span>
+            </div>
+            <span
+              className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
+              onClick={() => setShowDebug(true)}
+            >
+              {APP_VERSION}
+            </span>
+          </div>
+        </div>
+
         {/* Action Bar Container */}
         <div className="flex justify-center items-center gap-1.5 bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl p-2 border border-gray-700/30 shadow-lg">
           {/* AUTO Button (Smart Auto-Hunt) - Premium with pulse when ON */}
@@ -1860,6 +1884,11 @@ export default function PhaserGame() {
       {/* TASKS MODAL */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <TasksModal isOpen={showTasks} onClose={() => setShowTasks(false)} />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FORGE MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <ForgeModal isOpen={showForge} onClose={() => setShowForge(false)} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* LOADING OVERLAY - Shows while data loading */}

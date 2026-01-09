@@ -8,7 +8,6 @@ import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 interface ShopState {
   gold: number;
   ether: number;
-  etherDust: number;
   potionHaste: number;
   potionAcumen: number;
   potionLuck: number;
@@ -27,7 +26,6 @@ export default function ShopTab() {
   const [shopState, setShopState] = useState<ShopState>({
     gold: 0,
     ether: 0,
-    etherDust: 0,
     potionHaste: 0,
     potionAcumen: 0,
     potionLuck: 0,
@@ -45,7 +43,6 @@ export default function ShopTab() {
       setShopState({
         gold: data.gold || 0,
         ether: data.ether || 0,
-        etherDust: data.etherDust || 0,
         potionHaste: data.potionHaste || 0,
         potionAcumen: data.potionAcumen || 0,
         potionLuck: data.potionLuck || 0,
@@ -58,16 +55,6 @@ export default function ShopTab() {
     };
 
     const handleShopError = () => {
-      setBuying(null);
-    };
-
-    const handleEtherCraft = (data: { ether: number; etherDust: number; gold: number }) => {
-      setShopState(prev => ({
-        ...prev,
-        ether: data.ether,
-        etherDust: data.etherDust,
-        gold: data.gold,
-      }));
       setBuying(null);
     };
 
@@ -93,7 +80,6 @@ export default function ShopTab() {
     socket.on('auth:success', updateShopState);
     socket.on('shop:success', handleShopSuccess);
     socket.on('shop:error', handleShopError);
-    socket.on('ether:craft:success', handleEtherCraft);
     socket.on('tap:result', handleTapResult);
     socket.on('player:state', handlePlayerState);
 
@@ -103,7 +89,6 @@ export default function ShopTab() {
       socket.off('auth:success', updateShopState);
       socket.off('shop:success', handleShopSuccess);
       socket.off('shop:error', handleShopError);
-      socket.off('ether:craft:success', handleEtherCraft);
       socket.off('tap:result', handleTapResult);
       socket.off('player:state', handlePlayerState);
     };
@@ -121,24 +106,8 @@ export default function ShopTab() {
     getSocket().emit('shop:buy', { type: 'buff', buffId });
   };
 
-  const handleCraftEther = () => {
-    if (buying) return;
-    // Craft max possible (5 dust + 5 gold = 1 ether)
-    const maxByDust = Math.floor(shopState.etherDust / 5);
-    const maxByGold = Math.floor(shopState.gold / 5);
-    const amount = Math.min(maxByDust, maxByGold);
-    if (amount <= 0) return;
-    setBuying('craft');
-    getSocket().emit('ether:craft', { amount });
-  };
-
-  const etherCost = 10; // 10 gold per 100 ether
+  const etherCost = 200; // 200 gold per 100 ether
   const canAffordEther = shopState.gold >= etherCost;
-
-  // Craft: 5 dust + 5 gold = 1 ether
-  const craftableDust = Math.floor(shopState.etherDust / 5);
-  const craftableGold = Math.floor(shopState.gold / 5);
-  const canCraft = craftableDust > 0 && craftableGold > 0;
 
   return (
     <div className="flex-1 overflow-auto bg-l2-dark p-4">
@@ -186,32 +155,10 @@ export default function ShopTab() {
           </button>
         </div>
 
-        {/* Ether Dust and Craft */}
-        <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg border border-cyan-500/20">
-          <div className="w-10 h-10 rounded-lg bg-gray-700/50 flex items-center justify-center">
-            <span className="text-xl">🌫️</span>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{lang === 'ru' ? 'Эфирная пыль' : 'Ether Dust'}</span>
-            </div>
-            <p className="text-xs text-gray-500">
-              {t.shop.owned}: {shopState.etherDust} • 5🌫️ + 5🪙 = 1✨
-            </p>
-          </div>
-
-          <button
-            onClick={handleCraftEther}
-            disabled={!canCraft || buying === 'craft'}
-            className={`px-3 py-2 rounded-lg text-xs font-bold ${
-              canCraft
-                ? 'bg-cyan-600 text-white hover:bg-cyan-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            {buying === 'craft' ? '...' : (lang === 'ru' ? 'Крафт' : 'Craft')}
-          </button>
-        </div>
+        {/* Craft hint */}
+        <p className="text-[10px] text-gray-500 text-center mt-2">
+          {lang === 'ru' ? '💡 Крафт эфира из пыли → Кузница' : '💡 Craft ether from dust → Forge'}
+        </p>
       </div>
 
       {/* Buffs */}

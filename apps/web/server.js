@@ -430,7 +430,7 @@ const RAGE_PHASES = [
 // Ether config - x2 damage, 1 per tap
 const ETHER = {
   multiplier: 2.0,
-  cost: 10, // gold per 100
+  cost: 200, // gold per 100
 };
 
 // Meditation config (Offline Ether Dust accumulation)
@@ -5505,18 +5505,15 @@ app.prepare().then(async () => {
         const buff = BUFFS[buffId];
         const now = Date.now();
 
-        // FIX: Extend buff timer instead of replacing
-        // If buff is active, add duration to remaining time
+        // FIX: Reset buff timer to full duration (L2-style, no stacking)
         const existingBuff = player.activeBuffs.find(b => b.type === buffId && b.expiresAt > now);
-        let expiresAt;
+        let expiresAt = now + buff.duration;  // Always reset to full duration
 
         if (existingBuff) {
-          // Extend: add buff.duration to remaining time
-          expiresAt = existingBuff.expiresAt + buff.duration;
+          // Reset existing buff timer
           existingBuff.expiresAt = expiresAt;
         } else {
           // New buff
-          expiresAt = now + buff.duration;
           player.activeBuffs.push({
             type: buffId,
             value: buff.value,

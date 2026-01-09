@@ -33,7 +33,7 @@ interface ForgeState {
   resources: PlayerResources;
 }
 
-type ForgeTab = 'salvage' | 'broken' | 'merge';
+type ForgeTab = 'salvage' | 'broken' | 'merge' | 'craft';
 
 // Merge preview response from server
 interface MergePreview {
@@ -76,6 +76,10 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   const [mergePreview, setMergePreview] = useState<MergePreview>({ chance: 0, valid: false, resultChest: null });
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
 
+  // Ether craft state
+  const [etherState, setEtherState] = useState({ ether: 0, etherDust: 0, gold: 0 });
+  const [craftBuying, setCraftBuying] = useState(false);
+
   // Timer update for broken items
   const [, setTimerTick] = useState(0);
 
@@ -88,6 +92,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
     const socket = getSocket();
     socket.emit('forge:get');
+    socket.emit('player:get'); // For ether data
 
     const handleForgeData = (data: ForgeState) => {
       setForgeState(data);
@@ -119,11 +124,36 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       setLoading(false);
     };
 
+    // Ether craft handlers
+    const handlePlayerData = (data: any) => {
+      setEtherState({
+        ether: data.ether ?? 0,
+        etherDust: data.etherDust ?? 0,
+        gold: Number(data.gold) ?? 0,
+      });
+    };
+
+    const handleEtherCraftSuccess = (data: { ether: number; etherDust: number; gold: number }) => {
+      setEtherState({
+        ether: data.ether,
+        etherDust: data.etherDust,
+        gold: data.gold,
+      });
+      setCraftBuying(false);
+    };
+
+    const handleEtherCraftError = () => {
+      setCraftBuying(false);
+    };
+
     socket.on('forge:data', handleForgeData);
     socket.on('forge:error', handleForgeError);
     socket.on('merge:preview', handleMergePreview);
     socket.on('merge:result', handleMergeResult);
     socket.on('merge:error', handleMergeError);
+    socket.on('player:data', handlePlayerData);
+    socket.on('ether:craft:success', handleEtherCraftSuccess);
+    socket.on('ether:craft:error', handleEtherCraftError);
 
     return () => {
       socket.off('forge:data', handleForgeData);
@@ -131,6 +161,9 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       socket.off('merge:preview', handleMergePreview);
       socket.off('merge:result', handleMergeResult);
       socket.off('merge:error', handleMergeError);
+      socket.off('player:data', handlePlayerData);
+      socket.off('ether:craft:success', handleEtherCraftSuccess);
+      socket.off('ether:craft:error', handleEtherCraftError);
     };
   }, [isOpen]);
 
@@ -202,6 +235,21 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
   }, [loading]);
 
   // ─────────────────────────────────────────────────────────
+  // ETHER CRAFT HANDLERS
+  // ─────────────────────────────────────────────────────────
+
+  const handleCraftEther = useCallback(() => {
+    if (craftBuying) return;
+    // Craft max possible (5 dust + 5 gold = 1 ether)
+    const maxByDust = Math.floor(etherState.etherDust / 5);
+    const maxByGold = Math.floor(etherState.gold / 5);
+    const amount = Math.min(maxByDust, maxByGold);
+    if (amount <= 0) return;
+    setCraftBuying(true);
+    getSocket().emit('ether:craft', { amount });
+  }, [craftBuying, etherState.etherDust, etherState.gold]);
+
+  // ─────────────────────────────────────────────────────────
   // MERGE HANDLERS
   // ─────────────────────────────────────────────────────────
 
@@ -266,6 +314,8 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
 
   if (!isOpen) return null;
 
+  const canCraft = Math.floor(etherState.etherDust / 5) > 0 && Math.floor(etherState.gold / 5) > 0;
+
   const tabs: { id: ForgeTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'salvage', label: lang === 'ru' ? 'Разбор' : 'Salvage', icon: <Hammer size={16} /> },
     {
@@ -275,6 +325,7 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
       badge: forgeState.brokenItems.length || undefined,
     },
     { id: 'merge', label: lang === 'ru' ? 'Слияние' : 'Merge', icon: <Zap size={16} /> },
+    { id: 'craft', label: lang === 'ru' ? 'Крафт' : 'Craft', icon: <Plus size={16} /> },
   ];
 
   return (
@@ -381,6 +432,94 @@ export default function ForgeModal({ isOpen, onClose }: ForgeModalProps) {
               loading={loading}
               lang={lang}
             />
+          )}
+
+          {activeTab === 'craft' && (
+            <div className="space-y-4">
+              {/* Ether Craft Section */}
+              <div className="bg-black/30 rounded-lg p-4">
+                <h3 className="text-sm text-gray-400 mb-2">
+                  {lang === 'ru' ? 'Крафт Эфира' : 'Ether Craft'}
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">
+                  {lang === 'ru'
+                    ? 'Эфир удваивает урон за каждый удар в бою'
+                    : 'Ether doubles damage per hit in combat'}
+                </p>
+
+                {/* Current resources */}
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <span className="text-2xl">✨</span>
+                    <p className="text-cyan-400 font-bold">{etherState.ether}</p>
+                    <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Эфир' : 'Ether'}</p>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <span className="text-2xl">🌫️</span>
+                    <p className="text-purple-400 font-bold">{etherState.etherDust}</p>
+                    <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Пыль' : 'Dust'}</p>
+                  </div>
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                    <span className="text-2xl">🪙</span>
+                    <p className="text-amber-400 font-bold">{etherState.gold.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">{lang === 'ru' ? 'Золото' : 'Gold'}</p>
+                  </div>
+                </div>
+
+                {/* Craft formula */}
+                <div className="bg-cyan-900/20 border border-cyan-500/30 rounded-lg p-3 mb-4">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-purple-400">5 🌫️</span>
+                    <span className="text-gray-500">+</span>
+                    <span className="text-amber-400">5 🪙</span>
+                    <span className="text-gray-500">=</span>
+                    <span className="text-cyan-400">1 ✨</span>
+                  </div>
+                  <p className="text-center text-[10px] text-gray-500 mt-1">
+                    {lang === 'ru' ? 'Формула крафта' : 'Craft formula'}
+                  </p>
+                </div>
+
+                {/* Max craftable preview */}
+                {canCraft && (
+                  <div className="bg-black/30 rounded-lg p-3 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-xs">
+                        {lang === 'ru' ? 'Можно скрафтить:' : 'Can craft:'}
+                      </span>
+                      <span className="text-cyan-400 font-bold">
+                        {Math.min(Math.floor(etherState.etherDust / 5), Math.floor(etherState.gold / 5))} ✨
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Craft button */}
+                <button
+                  onClick={handleCraftEther}
+                  disabled={!canCraft || craftBuying}
+                  className={`w-full py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
+                    canCraft && !craftBuying
+                      ? 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white'
+                      : 'bg-gray-700 text-gray-500'
+                  }`}
+                >
+                  <Plus size={18} />
+                  {craftBuying
+                    ? '...'
+                    : lang === 'ru'
+                      ? 'Скрафтить максимум'
+                      : 'Craft Maximum'}
+                </button>
+              </div>
+
+              {/* Info */}
+              <div className="text-xs text-gray-500 text-center">
+                {lang === 'ru'
+                  ? '💡 Эфирная пыль добывается при убийстве боссов'
+                  : '💡 Ether Dust is obtained from boss kills'}
+              </div>
+            </div>
           )}
         </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
+import { SETS, SetDefinition, SetBonus } from '@shared/data/sets';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -33,37 +34,6 @@ interface Item {
   isBroken?: boolean;
   brokenUntil?: number | null;
 }
-
-// ═══════════════════════════════════════════════════════════
-// SET DEFINITIONS
-// ═══════════════════════════════════════════════════════════
-
-interface SetBonus {
-  pieces: number;
-  bonusPct?: { pAtk?: number; pDef?: number };
-  description: { ru: string; en: string };
-}
-
-interface SetDefinition {
-  id: string;
-  nameRu: string;
-  nameEn: string;
-  totalPieces: number;
-  bonuses: SetBonus[];
-}
-
-const SETS: Record<string, SetDefinition> = {
-  novice: {
-    id: 'novice',
-    nameRu: 'Сет новичка',
-    nameEn: 'Novice Set',
-    totalPieces: 7,
-    bonuses: [
-      { pieces: 3, bonusPct: { pAtk: 0.03 }, description: { ru: '+3% физ. атака', en: '+3% P.Atk' } },
-      { pieces: 6, bonusPct: { pAtk: 0.05, pDef: 0.05 }, description: { ru: '+5% физ. атака, +5% физ. защита', en: '+5% P.Atk, +5% P.Def' } },
-    ],
-  },
-};
 
 // ═══════════════════════════════════════════════════════════
 // STAT TOOLTIPS
@@ -441,15 +411,29 @@ function ItemTooltip({ item, isEquipped, slotHasItem, onEquip, onUnequip, onClos
 
         {/* Stats */}
         <div className="p-4 space-y-2">
-          {/* Set info */}
-          {item.setId && SETS[item.setId] && (
-            <div className="flex justify-between items-center p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
-              <span className="text-gray-300 text-sm">📜 {lang === 'ru' ? 'Сэт' : 'Set'}</span>
-              <span className="text-purple-400 font-bold text-xs">
-                {lang === 'ru' ? SETS[item.setId].nameRu : SETS[item.setId].nameEn}
-              </span>
-            </div>
-          )}
+          {/* Set info with bonuses */}
+          {item.setId && SETS[item.setId] && (() => {
+            const set = SETS[item.setId!];
+            return (
+              <div className="p-2 bg-purple-900/30 rounded-lg border border-purple-500/30">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-300 text-sm">📜 {lang === 'ru' ? 'Сэт' : 'Set'}</span>
+                  <span className="text-purple-400 font-bold text-xs">
+                    {lang === 'ru' ? set.nameRu : set.nameEn}
+                  </span>
+                </div>
+                {/* Set bonuses list */}
+                <div className="space-y-1 mt-2 pt-2 border-t border-purple-500/20">
+                  {set.bonuses.map((bonus, idx) => (
+                    <div key={idx} className="text-[10px] text-gray-400">
+                      <span className="text-purple-400">{bonus.pieces}/{set.totalPieces}:</span>{' '}
+                      {lang === 'ru' ? bonus.description.ru : bonus.description.en}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {/* Enchant level */}
           {(item.enchantLevel ?? 0) > 0 && (
             <div className="flex justify-between items-center p-2 bg-amber-900/30 rounded-lg border border-amber-500/30">
