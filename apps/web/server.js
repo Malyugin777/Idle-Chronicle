@@ -324,10 +324,34 @@ async function loadBossState(prisma) {
   }
 }
 
+// Debounced save - сохраняем через 500ms после последнего урона
+let bossSaveTimeout = null;
+let lastBossSaveTime = 0;
+
+function scheduleBossSave(prisma) {
+  // Если уже запланировано - не добавляем новый таймер
+  if (bossSaveTimeout) return;
+
+  // Ограничиваем частоту - не чаще раз в 500ms
+  const now = Date.now();
+  const timeSinceLastSave = now - lastBossSaveTime;
+  const delay = Math.max(0, 500 - timeSinceLastSave);
+
+  bossSaveTimeout = setTimeout(async () => {
+    bossSaveTimeout = null;
+    lastBossSaveTime = Date.now();
+    await saveBossState(prisma);
+  }, delay);
+}
+
 async function saveBossState(prisma) {
   try {
     const hpPercent = ((bossState.currentHp / bossState.maxHp) * 100).toFixed(1);
-    console.log(`[Boss] 💾 Saving: HP=${bossState.currentHp}/${bossState.maxHp} (${hpPercent}%), index=${currentBossIndex}, respawnAt=${bossRespawnAt?.toISOString() || 'null'}`);
+    // Убираем спам логов - показываем только раз в 30 секунд
+    if (!saveBossState.lastLogTime || Date.now() - saveBossState.lastLogTime > 30000) {
+      console.log(`[Boss] 💾 Saving: HP=${bossState.currentHp}/${bossState.maxHp} (${hpPercent}%)`);
+      saveBossState.lastLogTime = Date.now();
+    }
 
     // Serialize leaderboard with explicit userId field (avoid collision with damage)
     const leaderboardArray = Array.from(sessionLeaderboard.entries()).map(([userId, data]) => ({
@@ -376,11 +400,6 @@ async function saveBossState(prisma) {
         previousBossSession: previousBossSession, // Сохраняем предыдущего босса
       },
     });
-    // Log successful save (every 60 seconds to reduce spam)
-    if (!saveBossState.lastLogTime || Date.now() - saveBossState.lastLogTime > 60000) {
-      addLog('debug', 'boss', `State saved: HP ${hpPercent}%`, { hp: bossState.currentHp, max: bossState.maxHp });
-      saveBossState.lastLogTime = Date.now();
-    }
   } catch (err) {
     console.error('[Boss] ❌ Save state FAILED:', err.message);
     addLog('error', 'boss', 'Save state failed', { error: err.message, hp: bossState.currentHp });
@@ -3572,6 +3591,9 @@ app.prepare().then(async () => {
       const actualDamage = Math.min(totalDamage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
 
+      // Schedule debounced save to prevent data loss on deploy
+      if (actualDamage > 0) scheduleBossSave(prisma);
+
       // Gold убран из тапов - только из сундуков
 
       player.sessionDamage += actualDamage;
@@ -3693,6 +3715,9 @@ app.prepare().then(async () => {
       const damage = Math.floor(baseDmg * levelMultiplier * skillMultiplier);
       const actualDamage = Math.min(damage, bossState.currentHp);
       bossState.currentHp -= actualDamage;
+
+      // Schedule debounced save to prevent data loss on deploy
+      if (actualDamage > 0) scheduleBossSave(prisma);
 
       // Gold убран - только из сундуков
       player.sessionDamage += actualDamage;
@@ -6593,6 +6618,9 @@ app.prepare().then(async () => {
         if (totalAutoDamage > 0 && bossState.currentHp > 0) {
           const actualDamage = Math.min(totalAutoDamage, bossState.currentHp);
           bossState.currentHp -= actualDamage;
+
+          // Schedule debounced save to prevent data loss on deploy
+          scheduleBossSave(prisma);
 
           // Update leaderboard (only if authenticated)
           if (player.odamage) {
