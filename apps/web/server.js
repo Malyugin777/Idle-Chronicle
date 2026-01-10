@@ -3317,6 +3317,9 @@ app.prepare().then(async () => {
             lotteryTickets: user.lotteryTickets ?? 0,
             // Session stats (from memory, not DB)
             sessionDamage: player.sessionDamage || 0,
+            // Participation Score (from current boss session)
+            ps: sessionLeaderboard.get(player.odamage)?.ps || 0,
+            psCap: PS_CAP_PER_BOSS,
           });
         }
       } catch (err) {
@@ -3983,6 +3986,9 @@ app.prepare().then(async () => {
           passiveStaminaTraining: player.passiveStaminaTraining,
           passiveManaFlow: player.passiveManaFlow,
           passiveEtherEfficiency: player.passiveEtherEfficiency,
+          // Participation Score (from current boss session)
+          ps: sessionLeaderboard.get(player.odamage)?.ps || 0,
+          psCap: PS_CAP_PER_BOSS,
         });
       } catch (err) {
         console.error('[Auth] Error:', err.message);

@@ -4,7 +4,7 @@
 
 import type { Skill } from './types';
 
-export const APP_VERSION = 'v1.5.7';
+export const APP_VERSION = 'v1.5.8';
 
 export const BUFF_ICONS: Record<string, string> = {
   haste: '⚡',
