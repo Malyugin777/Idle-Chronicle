@@ -7,6 +7,7 @@ export type RewardType =
   | 'gold'        // Adena/Coins - основной источник голды
   | 'ether'       // Эфир (x2 урон)
   | 'woodChest'   // Wooden chest
+  | 'bronzeChest' // Bronze chest (medium tasks)
   | 'crystals'    // Premium currency (ancientCoin)
   | 'scrollHaste' // Haste scroll
   | 'scrollAcumen'// Acumen scroll
@@ -39,7 +40,7 @@ export interface TaskDefinition {
 // Задачи НЕ требуют убийства босса
 // ═══════════════════════════════════════════════════════════
 export const DAILY_TASKS: TaskDefinition[] = [
-  // A) Daily Login: +5 crystals + 5,000 gold
+  // A) Daily Login: +5 crystals + 5,000 gold + 1 Wooden chest
   {
     id: 'dailyLogin',
     nameRu: 'Логин',
@@ -51,9 +52,10 @@ export const DAILY_TASKS: TaskDefinition[] = [
     rewards: [
       { type: 'crystals', amount: 5 },
       { type: 'gold', amount: 5000 },
+      { type: 'woodChest', amount: 1 },
     ],
   },
-  // B) Clicker (50 taps): +6,000 gold
+  // B) Clicker (50 taps): +6,000 gold + 1 Wooden chest
   {
     id: 'clicker',
     nameRu: 'Кликер',
@@ -62,7 +64,10 @@ export const DAILY_TASKS: TaskDefinition[] = [
     descEn: 'Make 50 taps',
     icon: '👆',
     condition: { type: 'taps', target: 50 },
-    rewards: [{ type: 'gold', amount: 6000 }],
+    rewards: [
+      { type: 'gold', amount: 6000 },
+      { type: 'woodChest', amount: 1 },
+    ],
   },
   // C) Caster (30 skill casts): +6,000 gold
   {
@@ -86,7 +91,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
     condition: { type: 'damage', target: 100000 },
     rewards: [{ type: 'gold', amount: 8000 }],
   },
-  // E) Chest Hunter (3 chests): +3,000 gold + scrolls
+  // E) Chest Hunter (3 chests): +3,000 gold + scrolls + 1 Bronze chest
   {
     id: 'chestHunter',
     nameRu: 'Охотник за сундуками',
@@ -100,6 +105,7 @@ export const DAILY_TASKS: TaskDefinition[] = [
       { type: 'scrollHaste', amount: 1 },
       { type: 'scrollAcumen', amount: 1 },
       { type: 'scrollLuck', amount: 1 },
+      { type: 'bronzeChest', amount: 1 },
     ],
   },
   // F) Chest Opener (1 chest): +2,000 gold + booster

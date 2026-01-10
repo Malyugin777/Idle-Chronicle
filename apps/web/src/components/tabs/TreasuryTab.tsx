@@ -6,7 +6,7 @@ import { Package, Gem, Coins, Lock, X, ScrollText, Hammer } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import ChestOpenModal from '../modals/ChestOpenModal';
 import ForgeModal from '../game/ForgeModal';
-import { getTaskManager } from '@/lib/taskManager';
+// Task manager chest tracking moved to socket.ts (global handler)
 
 type ChestType = 'WOODEN' | 'BRONZE' | 'SILVER' | 'GOLD';
 
@@ -39,6 +39,7 @@ interface ClaimedReward {
 interface LootStats {
   totalGoldEarned: number;
   chestSlots: number;
+  nextPrice: number;
   totalChests: {
     WOODEN: number;
     BRONZE: number;
@@ -80,7 +81,7 @@ const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: stri
   GOLD: { icon: '🟨', name: 'Gold', nameRu: 'Золотой', color: 'text-yellow-400', bgColor: 'bg-yellow-600/30', borderColor: 'border-yellow-500', duration: 8 * 60 * 60 * 1000 },
 };
 
-const SLOT_UNLOCK_COST = 999; // crystals to unlock a slot
+// Slot pricing is now from server (progressive: 50, 150, 300, 500, ...)
 const BOOST_COST = 999; // crystals to boost chest opening by 30 min
 
 export default function TreasuryTab() {
@@ -93,6 +94,7 @@ export default function TreasuryTab() {
   const [lootStats, setLootStats] = useState<LootStats>({
     totalGoldEarned: 0,
     chestSlots: 5,
+    nextPrice: 50, // Default, will be updated from server
     totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
   });
   const [now, setNow] = useState(Date.now());
@@ -151,7 +153,7 @@ export default function TreasuryTab() {
       setIsOpeningAnimation(true);
       setSelectedChest(null);
       setUsingKey(null); // Clear loading state
-      getTaskManager().recordChestOpened();
+      // Note: recordChestOpened() is called globally in socket.ts
       socket.emit('loot:stats:get');
     };
 
@@ -169,8 +171,12 @@ export default function TreasuryTab() {
       setChests(prev => prev.filter(c => c.id !== data.chestId));
     };
 
-    const handleSlotUnlocked = (data: { chestSlots: number; crystals: number }) => {
-      setLootStats(prev => ({ ...prev, chestSlots: data.chestSlots }));
+    const handleSlotUnlocked = (data: { chestSlots: number; crystals: number; nextPrice?: number }) => {
+      setLootStats(prev => ({
+        ...prev,
+        chestSlots: data.chestSlots,
+        nextPrice: data.nextPrice ?? prev.nextPrice,
+      }));
       setCrystals(data.crystals);
       setSelectedLockedSlot(null);
     };
@@ -186,8 +192,16 @@ export default function TreasuryTab() {
       alert(data.message);
     };
 
-    const handleRewardsData = (data: { rewards: PendingReward[] }) => {
+    const handleRewardsData = (data: { rewards: PendingReward[]; slots?: { max: number; used: number; free: number; nextPrice: number } }) => {
       setPendingRewards(data.rewards);
+      // Update slot info with progressive pricing from server
+      if (data.slots) {
+        setLootStats(prev => ({
+          ...prev,
+          chestSlots: data.slots!.max,
+          nextPrice: data.slots!.nextPrice,
+        }));
+      }
     };
 
     const handleRewardsAvailable = () => {
@@ -322,9 +336,9 @@ export default function TreasuryTab() {
     getSocket().emit('chest:boost', { chestId });
   };
 
-  // Unlock slot
+  // Unlock slot (progressive pricing from server)
   const unlockSlot = () => {
-    if (crystals < SLOT_UNLOCK_COST) return;
+    if (crystals < lootStats.nextPrice) return;
     getSocket().emit('slot:unlock');
   };
 
@@ -952,7 +966,7 @@ export default function TreasuryTab() {
             <div className="bg-black/30 rounded-lg p-3 mb-4">
               <div className="flex items-center justify-center gap-2">
                 <Gem className="text-purple-400" size={20} />
-                <span className="text-xl font-bold text-purple-400">{SLOT_UNLOCK_COST}</span>
+                <span className="text-xl font-bold text-purple-400">{lootStats.nextPrice}</span>
                 <span className="text-gray-400">{lang === 'ru' ? 'кристаллов' : 'crystals'}</span>
               </div>
               <div className="text-center text-xs text-gray-500 mt-1">
@@ -962,14 +976,14 @@ export default function TreasuryTab() {
 
             <button
               onClick={unlockSlot}
-              disabled={crystals < SLOT_UNLOCK_COST}
+              disabled={crystals < lootStats.nextPrice}
               className={`w-full py-3 rounded-lg font-bold text-sm ${
-                crystals >= SLOT_UNLOCK_COST
+                crystals >= lootStats.nextPrice
                   ? 'bg-purple-500 text-white hover:bg-purple-600'
                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'
               }`}
             >
-              {crystals >= SLOT_UNLOCK_COST
+              {crystals >= lootStats.nextPrice
                 ? (lang === 'ru' ? '🔓 Разблокировать' : '🔓 Unlock')
                 : (lang === 'ru' ? '❌ Недостаточно кристаллов' : '❌ Not enough crystals')}
             </button>

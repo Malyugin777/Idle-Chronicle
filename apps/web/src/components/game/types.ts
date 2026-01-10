@@ -76,12 +76,15 @@ export interface PendingReward {
   bossName: string;
   bossIcon: string;
   rank: number | null;
+  wasEligible: boolean;
   chestsWooden: number;
   chestsBronze: number;
   chestsSilver: number;
   chestsGold: number;
+  lotteryTickets: number;
   crystals: number;
   badgeId?: string;
+  badgeDuration?: number;
 }
 
 export interface SlotInfo {

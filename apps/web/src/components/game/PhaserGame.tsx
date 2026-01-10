@@ -95,6 +95,8 @@ export default function PhaserGame() {
 
   // Session
   const [sessionDamage, setSessionDamage] = useState(0);
+  const [sessionClicks, setSessionClicks] = useState(0);
+  const [currentRank, setCurrentRank] = useState(0);
 
   // Resource feedback flash (for insufficient resources)
   const [staminaFlash, setStaminaFlash] = useState(false);
@@ -355,6 +357,8 @@ export default function PhaserGame() {
     // Tap result
     socket.on('tap:result', (data: any) => {
       setSessionDamage(data.sessionDamage || 0);
+      setSessionClicks(data.sessionClicks || 0);
+      setCurrentRank(data.currentRank || 0);
       setPlayerState(p => ({
         ...p,
         stamina: data.stamina ?? p.stamina,
@@ -558,6 +562,8 @@ export default function PhaserGame() {
 
     socket.on('boss:respawn', (data: any) => {
       setSessionDamage(0);
+      setSessionClicks(0);
+      setCurrentRank(0);
       setVictoryData(null);
       setRespawnCountdown(0);
       setPendingRewards([]);
@@ -880,6 +886,23 @@ export default function PhaserGame() {
                 </div>
               </div>
             )}
+
+            {/* Eligibility Debug Overlay - shows participation status */}
+            {sessionDamage > 0 && (
+              <div className="mt-1 bg-black/70 rounded-lg px-2 py-1 border border-gray-700/50">
+                <div className="flex items-center justify-center gap-3 text-[9px]">
+                  <span className={activityStatus.eligible ? 'text-green-400' : 'text-red-400'}>
+                    {activityStatus.eligible ? '✅' : '⏳'} {activityStatus.eligible ? 'Eligible' : 'Not eligible'}
+                  </span>
+                  <span className="text-gray-500">|</span>
+                  <span className="text-cyan-400">#{currentRank || '?'}</span>
+                  <span className="text-gray-500">|</span>
+                  <span className="text-gray-400">{Math.floor(activityStatus.time / 1000)}s</span>
+                  <span className="text-gray-500">|</span>
+                  <span className="text-gray-400">{sessionClicks} clicks</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1039,18 +1062,30 @@ export default function PhaserGame() {
 
               return (
                 <div className="bg-l2-gold/10 border border-l2-gold/50 rounded-lg p-3 mb-3">
-                  {/* Header with rank and crystals */}
+                  {/* Header with rank, tickets, crystals, badge */}
                   <div className="flex justify-between items-center mb-2">
                     <div className="text-l2-gold font-bold text-sm">
                       {lang === 'ru' ? 'Твоя награда' : 'Your Reward'}
                       {reward.rank && ` (#${reward.rank})`}
                     </div>
-                    {reward.crystals > 0 && (
-                      <div className="flex items-center gap-1 bg-purple-500/30 px-2 py-0.5 rounded">
-                        <Gem className="text-purple-400" size={12} />
-                        <span className="text-xs font-bold text-purple-400">+{reward.crystals}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {reward.badgeId && (
+                        <span className="bg-purple-500/30 px-2 py-0.5 rounded text-[10px] text-purple-400">
+                          {reward.badgeId === 'slayer' ? '⚔️' : '🏆'}
+                        </span>
+                      )}
+                      {reward.lotteryTickets > 0 && (
+                        <span className="bg-yellow-500/30 px-2 py-0.5 rounded text-[10px] text-yellow-300">
+                          +{reward.lotteryTickets}🎟️
+                        </span>
+                      )}
+                      {reward.crystals > 0 && (
+                        <div className="flex items-center gap-1 bg-purple-500/30 px-2 py-0.5 rounded">
+                          <Gem className="text-purple-400" size={12} />
+                          <span className="text-xs font-bold text-purple-400">+{reward.crystals}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Slot info */}

@@ -473,6 +473,11 @@ const RAGE_PHASES = [
   { hpPercent: 25, multiplier: 2.0 },
 ];
 
+// Chest slot pricing (SSOT - Single Source of Truth)
+// Base 5 slots free, additional slots cost crystals
+const CHEST_SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
+const getNextSlotPrice = (purchasedSlots) => CHEST_SLOT_PRICES[purchasedSlots] || (purchasedSlots + 1) * 500;
+
 // Ether config - x2 damage, 1 per tap
 const ETHER = {
   multiplier: 2.0,
@@ -3408,8 +3413,7 @@ app.prepare().then(async () => {
 
         const maxSlots = user?.chestSlots || 5;
         const purchasedSlots = maxSlots - 5;
-        const SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
-        const nextPrice = SLOT_PRICES[purchasedSlots] || (purchasedSlots + 1) * 500;
+        const nextPrice = getNextSlotPrice(purchasedSlots);
 
         socket.emit('rewards:data', {
           rewards: pendingRewards.map(r => ({
@@ -4125,6 +4129,10 @@ app.prepare().then(async () => {
       // Get player's PS from leaderboard
       const playerPsData = sessionLeaderboard.get(player.odamage);
 
+      // Calculate current rank (for eligibility debug)
+      const leaderboardArray = [...sessionLeaderboard.values()].sort((a, b) => b.damage - a.damage);
+      const currentRank = leaderboardArray.findIndex(e => e.odamage === player.odamage) + 1;
+
       socket.emit('tap:result', {
         damage: actualDamage,
         crits,
@@ -4142,6 +4150,9 @@ app.prepare().then(async () => {
         // Participation Score
         ps: playerPsData?.ps || 0,
         psCap: PS_CAP_PER_BOSS,
+        // Eligibility debug (v1.5.12)
+        sessionClicks: player.sessionClicks || 0,
+        currentRank: currentRank || 0,
       });
 
       io.emit('damage:feed', {
@@ -4978,10 +4989,11 @@ app.prepare().then(async () => {
 
         // Build update data with pity counter handling (v1.2: charges instead of scrolls)
         // v1.3.1: XP/SP from BOSS_XP table
+        // FIX v1.5.12: sp is Int in schema, not BigInt - use Number()
         const updateData = {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(chestXpReward) },
-          sp: { increment: BigInt(chestSpReward) },
+          sp: { increment: Number(chestSpReward) },  // sp = Int, not BigInt!
           totalGoldEarned: { increment: BigInt(goldReward) },
           enchantCharges: { increment: enchantCharges },
           [chestTypeCounterField]: { increment: 1 },
@@ -5234,10 +5246,11 @@ app.prepare().then(async () => {
 
         const totalChestField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
         // v1.3.1: XP/SP from BOSS_XP table
+        // FIX v1.5.12: sp is Int in schema, not BigInt - use Number()
         const updateData = {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(chestXpReward) },
-          sp: { increment: BigInt(chestSpReward) },
+          sp: { increment: Number(chestSpReward) },  // sp = Int, not BigInt!
           enchantCharges: { increment: enchantCharges },
           totalGoldEarned: { increment: BigInt(goldReward) },
           [totalChestField]: { increment: 1 },
@@ -5422,6 +5435,7 @@ app.prepare().then(async () => {
         socket.emit('loot:stats', {
           totalGoldEarned: 0,
           chestSlots: 5,
+          nextPrice: getNextSlotPrice(0), // 0 purchased slots = first price
           enchantScrolls: 0,
           totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
         });
@@ -5442,9 +5456,11 @@ app.prepare().then(async () => {
           },
         });
 
+        const purchasedSlots = (user?.chestSlots || 5) - 5; // 5 = base slots
         socket.emit('loot:stats', {
           totalGoldEarned: Number(user?.totalGoldEarned || 0),
           chestSlots: user?.chestSlots || 5,
+          nextPrice: getNextSlotPrice(purchasedSlots),
           enchantScrolls: user?.enchantScrolls || 0,
           totalChests: {
             WOODEN: user?.totalChestsWooden || 0,
@@ -5458,21 +5474,21 @@ app.prepare().then(async () => {
         socket.emit('loot:stats', {
           totalGoldEarned: 0,
           chestSlots: 5,
+          nextPrice: getNextSlotPrice(0),
           enchantScrolls: 0,
           totalChests: { WOODEN: 0, BRONZE: 0, SILVER: 0, GOLD: 0 },
         });
       }
     });
 
-    // Unlock a chest slot
+    // Unlock a chest slot (progressive pricing from CHEST_SLOT_PRICES)
     socket.on('slot:unlock', async () => {
       if (!player.odamage) {
         socket.emit('slot:error', { message: 'Not authenticated' });
         return;
       }
 
-      const SLOT_UNLOCK_COST = 999;
-      const MAX_SLOTS = 10;
+      const MAX_SLOTS = 15; // 5 base + 10 purchasable
 
       try {
         const user = await prisma.user.findUnique({
@@ -5490,8 +5506,12 @@ app.prepare().then(async () => {
           return;
         }
 
-        if (user.ancientCoin < SLOT_UNLOCK_COST) {
-          socket.emit('slot:error', { message: 'Недостаточно кристаллов' });
+        // Get price for next slot (progressive pricing)
+        const purchasedSlots = user.chestSlots - 5;
+        const slotPrice = getNextSlotPrice(purchasedSlots);
+
+        if (user.ancientCoin < slotPrice) {
+          socket.emit('slot:error', { message: `Недостаточно кристаллов (нужно ${slotPrice}💎)` });
           return;
         }
 
@@ -5499,13 +5519,18 @@ app.prepare().then(async () => {
           where: { id: player.odamage },
           data: {
             chestSlots: { increment: 1 },
-            ancientCoin: { decrement: SLOT_UNLOCK_COST },
+            ancientCoin: { decrement: slotPrice },
           },
         });
+
+        // Calculate next price for UI
+        const newPurchasedSlots = updated.chestSlots - 5;
+        const nextPrice = getNextSlotPrice(newPurchasedSlots);
 
         socket.emit('slot:unlocked', {
           chestSlots: updated.chestSlots,
           crystals: updated.ancientCoin,
+          nextPrice,
         });
       } catch (err) {
         console.error('[Slot Unlock] Error:', err.message);
@@ -6035,9 +6060,8 @@ app.prepare().then(async () => {
         const currentSlots = user?.chestSlots || 5;
         const purchasedSlots = currentSlots - 5; // How many extra slots bought
 
-        // Progressive pricing: 50, 150, 300, 500, 750, 1000...
-        const SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
-        const price = SLOT_PRICES[purchasedSlots] || (purchasedSlots + 1) * 500;
+        // Use global CHEST_SLOT_PRICES
+        const price = getNextSlotPrice(purchasedSlots);
 
         if ((user?.ancientCoin || 0) < price) {
           socket.emit('chest:buySlot:error', { message: 'Not enough crystals', price });
@@ -6056,7 +6080,7 @@ app.prepare().then(async () => {
         player.ancientCoin = (user?.ancientCoin || 0) - price;
 
         // Calculate next price
-        const nextPrice = SLOT_PRICES[purchasedSlots + 1] || (purchasedSlots + 2) * 500;
+        const nextPrice = getNextSlotPrice(purchasedSlots + 1);
 
         socket.emit('chest:buySlot:success', {
           newSlots: currentSlots + 1,
@@ -6277,6 +6301,16 @@ app.prepare().then(async () => {
                   userId: player.odamage,
                   chestType: 'WOODEN',
                   openingDuration: 5 * 60 * 1000, // 5 min
+                });
+              }
+              break;
+            case 'bronzeChest':
+              // Add bronze chests (medium task reward)
+              for (let i = 0; i < reward.amount; i++) {
+                chestsToCreate.push({
+                  userId: player.odamage,
+                  chestType: 'BRONZE',
+                  openingDuration: 30 * 60 * 1000, // 30 min
                 });
               }
               break;

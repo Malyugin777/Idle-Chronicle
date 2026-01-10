@@ -27,6 +27,7 @@ function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Languag
       gold: { ru: 'Золото', en: 'Gold' },
       ether: { ru: 'Эфир', en: 'Ether' },
       woodChest: { ru: 'Дерев. сундук', en: 'Wood Chest' },
+      bronzeChest: { ru: 'Бронз. сундук', en: 'Bronze Chest' },
       crystals: { ru: 'Кристаллы', en: 'Crystals' },
       scrollHaste: { ru: 'Haste', en: 'Haste' },
       scrollAcumen: { ru: 'Acumen', en: 'Acumen' },
@@ -45,7 +46,8 @@ function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Languag
     const icons: Record<string, string> = {
       gold: '🪙',
       ether: '✨',
-      woodChest: '📦',
+      woodChest: '🪵',
+      bronzeChest: '🟫',
       crystals: '💎',
       scrollHaste: '⚡',
       scrollAcumen: '🔥',

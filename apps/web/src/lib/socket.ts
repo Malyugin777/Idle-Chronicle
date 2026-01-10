@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { getTaskManager } from './taskManager';
 
 let socket: Socket | null = null;
 
@@ -33,6 +34,12 @@ export function getSocket(): Socket {
 
     socket.on('reconnect', (attempt) => {
       console.log('[Socket] Reconnected after', attempt, 'attempts');
+    });
+
+    // Global task tracking: record chest opens for daily tasks
+    // Works regardless of which tab is active (key-open or timer-open)
+    socket.on('chest:claimed', () => {
+      getTaskManager().recordChestOpened();
     });
   }
 
