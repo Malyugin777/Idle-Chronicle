@@ -609,6 +609,357 @@ function weightedRandom(weights) {
   return entries[0][0]; // fallback
 }
 
+// ═══════════════════════════════════════════════════════════
+// TASK SYSTEM v2.0 — Daily/Weekly with server-side SSOT
+// ═══════════════════════════════════════════════════════════
+
+// Helper: get date key (YYYY-MM-DD in UTC)
+function getDateKey(date = new Date()) {
+  return date.toISOString().split('T')[0];
+}
+
+// Helper: get week key (YYYY-WNN)
+function getWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
+}
+
+// Helper: get rotation index (0, 1, or 2) for grind tasks
+function getGrindRotationIndex(date = new Date()) {
+  const daysSinceEpoch = Math.floor(date.getTime() / 86400000);
+  return daysSinceEpoch % 3;
+}
+
+// ─────────────────────────────────────────────────────────
+// DAILY BASE TASKS (5 tasks, always active)
+// Total: 5+6+6+8+10 = 35k gold + 5 crystals
+// ─────────────────────────────────────────────────────────
+const DAILY_BASE_TASKS = [
+  {
+    id: 'D1_login',
+    nameRu: 'Ежедневный вход',
+    nameEn: 'Daily Login',
+    descRu: 'Зайди в игру',
+    descEn: 'Log into the game',
+    icon: '🎮',
+    condition: { type: 'login', target: 1 },
+    rewards: [{ type: 'crystals', amount: 5 }],
+  },
+  {
+    id: 'D2_bossDamage',
+    nameRu: 'Разминка',
+    nameEn: 'Boss Warm-up',
+    descRu: 'Нанеси 10,000 урона боссу',
+    descEn: 'Deal 10,000 damage to boss',
+    icon: '👊',
+    condition: { type: 'bossDamage', target: 10000 },
+    rewards: [{ type: 'gold', amount: 6000 }],
+  },
+  {
+    id: 'D3_taps',
+    nameRu: 'Тапалка',
+    nameEn: 'Tap Session',
+    descRu: 'Сделай 100 тапов',
+    descEn: 'Make 100 taps',
+    icon: '👆',
+    condition: { type: 'taps', target: 100 },
+    rewards: [{ type: 'gold', amount: 6000 }],
+  },
+  {
+    id: 'D4_skills',
+    nameRu: 'Практика',
+    nameEn: 'Skill Practice',
+    descRu: 'Используй умения 20 раз',
+    descEn: 'Use skills 20 times',
+    icon: '✨',
+    condition: { type: 'skillUses', target: 20 },
+    rewards: [{ type: 'gold', amount: 8000 }],
+  },
+  {
+    id: 'D5_chest',
+    nameRu: 'Открыватель',
+    nameEn: 'Chest Opener',
+    descRu: 'Открой 1 сундук',
+    descEn: 'Open 1 chest',
+    icon: '📦',
+    condition: { type: 'chestsOpened', target: 1 },
+    rewards: [{ type: 'gold', amount: 10000 }],
+  },
+];
+
+// ─────────────────────────────────────────────────────────
+// GRIND TASK POOL (6 tasks, 2 active per day via rotation)
+// Rewards are chests (требуют свободных слотов!)
+// ─────────────────────────────────────────────────────────
+const GRIND_TASK_POOL = [
+  // Pair 0
+  {
+    id: 'G1_bossGrind',
+    nameRu: 'Босс-гринд',
+    nameEn: 'Boss Grind',
+    descRu: 'Нанеси 50,000 урона боссу',
+    descEn: 'Deal 50,000 damage to boss',
+    icon: '💀',
+    condition: { type: 'bossDamage', target: 50000 },
+    rewards: [{ type: 'woodenChest', amount: 3 }],
+    pairIndex: 0,
+  },
+  {
+    id: 'G5_enchant',
+    nameRu: 'Попытка заточки',
+    nameEn: 'Enchant Attempt',
+    descRu: 'Попробуй заточить 1 раз',
+    descEn: 'Try to enchant 1 time',
+    icon: '🔮',
+    condition: { type: 'enchantAttempts', target: 1 },
+    rewards: [{ type: 'woodenChest', amount: 2 }],
+    pairIndex: 0,
+  },
+  // Pair 1
+  {
+    id: 'G2_tapGrind',
+    nameRu: 'Тап-гринд',
+    nameEn: 'Tap Grind',
+    descRu: 'Сделай 300 тапов',
+    descEn: 'Make 300 taps',
+    icon: '👆',
+    condition: { type: 'taps', target: 300 },
+    rewards: [{ type: 'woodenChest', amount: 3 }],
+    pairIndex: 1,
+  },
+  {
+    id: 'G4_openChests',
+    nameRu: 'Охотник за сундуками',
+    nameEn: 'Chest Hunter',
+    descRu: 'Открой 5 сундуков',
+    descEn: 'Open 5 chests',
+    icon: '🎁',
+    condition: { type: 'chestsOpened', target: 5 },
+    rewards: [
+      { type: 'bronzeChest', amount: 1 },
+      { type: 'woodenChest', amount: 2 },
+    ],
+    pairIndex: 1,
+  },
+  // Pair 2
+  {
+    id: 'G3_skillGrind',
+    nameRu: 'Скилл-гринд',
+    nameEn: 'Skill Grind',
+    descRu: 'Используй умения 60 раз',
+    descEn: 'Use skills 60 times',
+    icon: '🔥',
+    condition: { type: 'skillUses', target: 60 },
+    rewards: [{ type: 'woodenChest', amount: 3 }],
+    pairIndex: 2,
+  },
+  {
+    id: 'G6_dismantle',
+    nameRu: 'Утилизатор',
+    nameEn: 'Dismantler',
+    descRu: 'Разбери 3 предмета',
+    descEn: 'Dismantle 3 items',
+    icon: '🔧',
+    condition: { type: 'dismantleCount', target: 3 },
+    rewards: [{ type: 'bronzeChest', amount: 1 }],
+    pairIndex: 2,
+  },
+];
+
+// ─────────────────────────────────────────────────────────
+// INVITE TASK (always visible, 1 task)
+// Requires invited user to meet minAction requirement
+// ─────────────────────────────────────────────────────────
+const DAILY_INVITE_TASK = {
+  id: 'I1_invite',
+  nameRu: 'Пригласи друга',
+  nameEn: 'Invite a Friend',
+  descRu: 'Пригласи друга (он должен нанести 1,000 урона)',
+  descEn: 'Invite a friend (they must deal 1,000 damage)',
+  icon: '👥',
+  condition: { type: 'inviteValid', target: 1 },
+  rewards: [
+    { type: 'silverChest', amount: 1 },
+    { type: 'tickets', amount: 3 },
+    { type: 'crystals', amount: 40 },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────
+// WEEKLY TASKS (5 tasks)
+// ─────────────────────────────────────────────────────────
+const WEEKLY_TASKS = [
+  {
+    id: 'W1_baseDays',
+    nameRu: 'Стабильность',
+    nameEn: 'Consistency',
+    descRu: 'Выполни базовые задачи 5 дней из 7',
+    descEn: 'Complete base tasks 5 out of 7 days',
+    icon: '📅',
+    condition: { type: 'baseDaysCompleted', target: 5 },
+    rewards: [{ type: 'goldChest', amount: 1 }],
+  },
+  {
+    id: 'W2_weeklyDamage',
+    nameRu: 'Недельный урон',
+    nameEn: 'Weekly Damage',
+    descRu: 'Нанеси 500,000 урона за неделю',
+    descEn: 'Deal 500,000 damage this week',
+    icon: '💥',
+    condition: { type: 'weeklyBossDamage', target: 500000 },
+    rewards: [{ type: 'silverChest', amount: 2 }],
+  },
+  {
+    id: 'W3_weeklyChests',
+    nameRu: 'Коллекционер',
+    nameEn: 'Collector',
+    descRu: 'Открой 40 сундуков за неделю',
+    descEn: 'Open 40 chests this week',
+    icon: '📦',
+    condition: { type: 'weeklyChestsOpened', target: 40 },
+    rewards: [
+      { type: 'protectionCharges', amount: 2 },
+      { type: 'enchantCharges', amount: 10 },
+    ],
+  },
+  {
+    id: 'W4_weeklyEnchants',
+    nameRu: 'Заточник',
+    nameEn: 'Enchanter',
+    descRu: 'Попробуй заточить 20 раз за неделю',
+    descEn: 'Try to enchant 20 times this week',
+    icon: '🔮',
+    condition: { type: 'weeklyEnchantAttempts', target: 20 },
+    rewards: [{ type: 'tickets', amount: 10 }],
+  },
+  {
+    id: 'W5_weeklyInvites',
+    nameRu: 'Рекрутер',
+    nameEn: 'Recruiter',
+    descRu: 'Пригласи 3 друзей за неделю',
+    descEn: 'Invite 3 friends this week',
+    icon: '👥',
+    condition: { type: 'weeklyInvitesValid', target: 3 },
+    rewards: [
+      { type: 'goldChest', amount: 1 },
+      { type: 'crystals', amount: 150 },
+    ],
+  },
+];
+
+// Helper: Get today's active grind tasks (2 tasks based on rotation)
+function getTodaysGrindTasks() {
+  const pairIndex = getGrindRotationIndex();
+  return GRIND_TASK_POOL.filter(t => t.pairIndex === pairIndex);
+}
+
+// Helper: Get all active daily tasks for today
+function getAllTodaysDailyTasks() {
+  return [
+    ...DAILY_BASE_TASKS,
+    ...getTodaysGrindTasks(),
+    DAILY_INVITE_TASK,
+  ];
+}
+
+// Helper: Get or create daily progress for a user
+async function getOrCreateDailyProgress(prisma, odamage, dateKey = getDateKey()) {
+  let progress = await prisma.dailyTaskProgress.findUnique({
+    where: { odamage_dateKey: { odamage, dateKey } },
+  });
+
+  if (!progress) {
+    progress = await prisma.dailyTaskProgress.create({
+      data: {
+        odamage,
+        dateKey,
+        loginDone: true, // Auto-mark login on first access of the day
+        claimedTasks: {},
+      },
+    });
+    console.log(`[Tasks] Created daily progress for ${odamage} on ${dateKey}`);
+  }
+
+  return progress;
+}
+
+// Helper: Get or create weekly progress for a user
+async function getOrCreateWeeklyProgress(prisma, odamage, weekKey = getWeekKey()) {
+  let progress = await prisma.weeklyTaskProgress.findUnique({
+    where: { odamage_weekKey: { odamage, weekKey } },
+  });
+
+  if (!progress) {
+    progress = await prisma.weeklyTaskProgress.create({
+      data: {
+        odamage,
+        weekKey,
+        claimedTasks: {},
+      },
+    });
+    console.log(`[Tasks] Created weekly progress for ${odamage} on ${weekKey}`);
+  }
+
+  return progress;
+}
+
+// Helper: Increment daily task counter
+async function incrementDailyCounter(prisma, odamage, counterName, amount = 1) {
+  const dateKey = getDateKey();
+  const weekKey = getWeekKey();
+
+  // Ensure progress exists
+  await getOrCreateDailyProgress(prisma, odamage, dateKey);
+
+  // Update daily counter
+  const dailyUpdate = {};
+  dailyUpdate[counterName] = { increment: amount };
+
+  const updatedDaily = await prisma.dailyTaskProgress.update({
+    where: { odamage_dateKey: { odamage, dateKey } },
+    data: dailyUpdate,
+  });
+
+  // Also update weekly counters where applicable
+  const weeklyCounterMap = {
+    bossDamage: 'weeklyBossDamage',
+    chestsOpened: 'weeklyChestsOpened',
+    enchantAttempts: 'weeklyEnchantAttempts',
+  };
+
+  if (weeklyCounterMap[counterName]) {
+    await getOrCreateWeeklyProgress(prisma, odamage, weekKey);
+    const weeklyUpdate = {};
+    weeklyUpdate[weeklyCounterMap[counterName]] = { increment: amount };
+    await prisma.weeklyTaskProgress.update({
+      where: { odamage_weekKey: { odamage, weekKey } },
+      data: weeklyUpdate,
+    });
+  }
+
+  return updatedDaily;
+}
+
+// Helper: Check if all base tasks (D1-D5) are claimed
+function checkBaseDayCompleted(claimedTasks) {
+  const baseTasks = ['D1_login', 'D2_bossDamage', 'D3_taps', 'D4_skills', 'D5_chest'];
+  return baseTasks.every(id => claimedTasks[id] === true);
+}
+
+// Helper: Count chest rewards in a task
+function countChestRewardsInTask(task) {
+  let count = 0;
+  for (const reward of task.rewards) {
+    if (reward.type.includes('Chest')) {
+      count += reward.amount;
+    }
+  }
+  return count;
+}
+
 // Starter equipment set (Novice Set)
 // Синхронизировано с packages/shared/src/data/items.ts (novice set)
 // TODO: После сборки shared импортировать оттуда напрямую
@@ -4188,6 +4539,16 @@ app.prepare().then(async () => {
         });
       }
 
+      // === TASK TRACKING: taps + bossDamage ===
+      if (player.odamage && actualDamage > 0) {
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'taps', tapCount);
+          await incrementDailyCounter(prisma, player.odamage, 'bossDamage', actualDamage);
+        } catch (e) {
+          console.error('[Tasks] Failed to track tap/damage:', e.message);
+        }
+      }
+
       // Boss killed
       if (bossState.currentHp <= 0) {
         await handleBossKill(io, prisma, player, socket.id);
@@ -4335,6 +4696,18 @@ app.prepare().then(async () => {
         isSkill: true,
         skillId,
       });
+
+      // === TASK TRACKING: skillUses + bossDamage ===
+      if (player.odamage) {
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'skillUses', 1);
+          if (actualDamage > 0) {
+            await incrementDailyCounter(prisma, player.odamage, 'bossDamage', actualDamage);
+          }
+        } catch (e) {
+          console.error('[Tasks] Failed to track skill use:', e.message);
+        }
+      }
 
       // Check boss killed
       if (bossState.currentHp <= 0) {
@@ -5095,6 +5468,13 @@ app.prepare().then(async () => {
 
         player.gold += goldReward;
 
+        // === TASK TRACKING: chestsOpened ===
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'chestsOpened', 1);
+        } catch (e) {
+          console.error('[Tasks] Failed to track chest opened:', e.message);
+        }
+
         // Release mutex lock
         chestClaimLocks.delete(chestId);
 
@@ -5387,6 +5767,13 @@ app.prepare().then(async () => {
 
         player.gold += goldReward;
         player[keyField] = keysAvailable - 1;
+
+        // === TASK TRACKING: chestsOpened (via key) ===
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'chestsOpened', 1);
+        } catch (e) {
+          console.error('[Tasks] Failed to track chest opened (key):', e.message);
+        }
 
         // Release mutex lock
         chestClaimLocks.delete(chestId);
@@ -6349,114 +6736,308 @@ app.prepare().then(async () => {
       }
     });
 
-    // TASKS CLAIM - обработка наград за задачи
-    socket.on('tasks:claim', async (data) => {
-      if (!player.odamage) return;
+    // ═══════════════════════════════════════════════════════════
+    // TASKS v2.0 — Server-side SSOT
+    // ═══════════════════════════════════════════════════════════
 
-      const { taskId, rewards } = data;
-      if (!taskId || !rewards || !Array.isArray(rewards)) {
-        socket.emit('tasks:error', { message: 'Invalid data' });
+    // TASKS:GET - Get all task data (daily + weekly progress)
+    socket.on('tasks:get', async () => {
+      if (!player.odamage) {
+        socket.emit('tasks:error', { message: 'Not authenticated' });
         return;
       }
 
-      console.log(`[Tasks] User ${player.username} claiming task ${taskId}:`, rewards);
+      try {
+        const dateKey = getDateKey();
+        const weekKey = getWeekKey();
+
+        // Get or create progress records
+        const dailyProgress = await getOrCreateDailyProgress(prisma, player.odamage, dateKey);
+        const weeklyProgress = await getOrCreateWeeklyProgress(prisma, player.odamage, weekKey);
+
+        // Get user for invite tracking
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { totalInvites: true, chestSlots: true },
+        });
+
+        // Count current chests for slot checking
+        const currentChestCount = await prisma.chest.count({
+          where: { userId: player.odamage },
+        });
+        const freeSlots = (user?.chestSlots || 5) - currentChestCount;
+
+        // Build response
+        const grindRotationIndex = getGrindRotationIndex();
+        const todaysGrindTasks = getTodaysGrindTasks();
+
+        // Helper: Check task completion
+        const getTaskProgress = (task, daily, weekly, invites) => {
+          const { type, target } = task.condition;
+          let progress = 0;
+
+          switch (type) {
+            case 'login':
+              progress = daily.loginDone ? 1 : 0;
+              break;
+            case 'taps':
+              progress = daily.taps;
+              break;
+            case 'bossDamage':
+              progress = daily.bossDamage;
+              break;
+            case 'skillUses':
+              progress = daily.skillUses;
+              break;
+            case 'chestsOpened':
+              progress = daily.chestsOpened;
+              break;
+            case 'enchantAttempts':
+              progress = daily.enchantAttempts;
+              break;
+            case 'dismantleCount':
+              progress = daily.dismantleCount;
+              break;
+            case 'inviteValid':
+              progress = invites;
+              break;
+            // Weekly conditions
+            case 'baseDaysCompleted':
+              progress = weekly.baseDaysCompleted;
+              break;
+            case 'weeklyBossDamage':
+              progress = Number(weekly.weeklyBossDamage);
+              break;
+            case 'weeklyChestsOpened':
+              progress = weekly.weeklyChestsOpened;
+              break;
+            case 'weeklyEnchantAttempts':
+              progress = weekly.weeklyEnchantAttempts;
+              break;
+            case 'weeklyInvitesValid':
+              progress = weekly.weeklyInvitesValid;
+              break;
+          }
+
+          const completed = progress >= target;
+          const claimedTasks = (type.startsWith('weekly') || type === 'baseDaysCompleted')
+            ? (weekly.claimedTasks || {})
+            : (daily.claimedTasks || {});
+          const claimed = claimedTasks[task.id] === true;
+
+          return { progress, completed, claimed };
+        };
+
+        // Daily tasks with progress
+        const dailyTasks = [
+          ...DAILY_BASE_TASKS.map(t => ({
+            ...t,
+            section: 'base',
+            ...getTaskProgress(t, dailyProgress, weeklyProgress, user?.totalInvites || 0),
+          })),
+          ...todaysGrindTasks.map(t => ({
+            ...t,
+            section: 'grind',
+            ...getTaskProgress(t, dailyProgress, weeklyProgress, user?.totalInvites || 0),
+          })),
+          {
+            ...DAILY_INVITE_TASK,
+            section: 'invite',
+            ...getTaskProgress(DAILY_INVITE_TASK, dailyProgress, weeklyProgress, user?.totalInvites || 0),
+          },
+        ];
+
+        // Weekly tasks with progress
+        const weeklyTasks = WEEKLY_TASKS.map(t => ({
+          ...t,
+          section: 'weekly',
+          ...getTaskProgress(t, dailyProgress, weeklyProgress, user?.totalInvites || 0),
+        }));
+
+        socket.emit('tasks:data', {
+          daily: dailyTasks,
+          weekly: weeklyTasks,
+          grindRotationIndex,
+          freeSlots,
+          dateKey,
+          weekKey,
+        });
+      } catch (err) {
+        console.error('[Tasks] Get error:', err.message);
+        socket.emit('tasks:error', { message: 'Failed to get tasks' });
+      }
+    });
+
+    // TASKS CLAIM - обработка наград за задачи (v2.0 - server-side SSOT)
+    socket.on('tasks:claim', async (data) => {
+      if (!player.odamage) return;
+
+      const { taskId } = data;
+      if (!taskId) {
+        socket.emit('tasks:error', { message: 'Task ID required' });
+        return;
+      }
+
+      console.log(`[Tasks] User ${player.username} claiming task ${taskId}`);
 
       try {
-        // Build update object based on rewards
-        const updateData = {};
-        const chestsToCreate = [];
-        let boostApplied = false;
+        const dateKey = getDateKey();
+        const weekKey = getWeekKey();
 
-        for (const reward of rewards) {
-          switch (reward.type) {
-            case 'gold':
-              // Gold from tasks - основной источник голды
-              updateData.gold = { increment: BigInt(reward.amount) };
-              break;
-            case 'ether':
-            case 'etherPack':
-              updateData.ether = { increment: reward.amount };
-              break;
-            case 'crystals':
-              updateData.ancientCoin = { increment: reward.amount };
-              break;
-            case 'scrollHaste':
-              updateData.potionHaste = { increment: reward.amount };
-              break;
-            case 'scrollAcumen':
-              updateData.potionAcumen = { increment: reward.amount };
-              break;
-            case 'scrollLuck':
-              updateData.potionLuck = { increment: reward.amount };
-              break;
-            case 'woodChest':
-              // Add wooden chests
-              for (let i = 0; i < reward.amount; i++) {
-                chestsToCreate.push({
-                  userId: player.odamage,
-                  chestType: 'WOODEN',
-                  openingDuration: 5 * 60 * 1000, // 5 min
-                });
-              }
-              break;
-            case 'bronzeChest':
-              // Add bronze chests (medium task reward)
-              for (let i = 0; i < reward.amount; i++) {
-                chestsToCreate.push({
-                  userId: player.odamage,
-                  chestType: 'BRONZE',
-                  openingDuration: 30 * 60 * 1000, // 30 min
-                });
-              }
-              break;
-            case 'chestBooster':
-              // Instantly boost currently opening chest by 30 minutes
-              const BOOST_TIME_MS = 30 * 60 * 1000; // 30 minutes
-              const openingChest = await prisma.chest.findFirst({
-                where: {
-                  userId: player.odamage,
-                  openingStarted: { not: null },
-                },
-              });
-              if (openingChest) {
-                // Move openingStarted back by 30 minutes (effectively reducing remaining time)
-                const newOpeningStarted = new Date(openingChest.openingStarted.getTime() - BOOST_TIME_MS);
-                await prisma.chest.update({
-                  where: { id: openingChest.id },
-                  data: { openingStarted: newOpeningStarted },
-                });
-                boostApplied = true;
-                console.log(`[Tasks] Applied chest boost to chest ${openingChest.id} for user ${player.username}`);
-              } else {
-                console.log(`[Tasks] No opening chest found for boost, user ${player.username}`);
-              }
-              break;
+        // Find the task definition
+        const allTasks = [
+          ...DAILY_BASE_TASKS,
+          ...GRIND_TASK_POOL,
+          DAILY_INVITE_TASK,
+          ...WEEKLY_TASKS,
+        ];
+        const task = allTasks.find(t => t.id === taskId);
+
+        if (!task) {
+          socket.emit('tasks:error', { message: 'Task not found' });
+          return;
+        }
+
+        // Determine if daily or weekly
+        const isWeekly = taskId.startsWith('W');
+
+        // Get progress records
+        const dailyProgress = await getOrCreateDailyProgress(prisma, player.odamage, dateKey);
+        const weeklyProgress = await getOrCreateWeeklyProgress(prisma, player.odamage, weekKey);
+
+        // Get user for invite count
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { totalInvites: true, chestSlots: true },
+        });
+
+        // Check if already claimed
+        const claimedTasks = isWeekly
+          ? (weeklyProgress.claimedTasks || {})
+          : (dailyProgress.claimedTasks || {});
+
+        if (claimedTasks[taskId]) {
+          socket.emit('tasks:error', { message: 'Already claimed' });
+          return;
+        }
+
+        // Check grind task rotation (ensure task is active today)
+        if (taskId.startsWith('G')) {
+          const todaysGrindIds = getTodaysGrindTasks().map(t => t.id);
+          if (!todaysGrindIds.includes(taskId)) {
+            socket.emit('tasks:error', { message: 'Task not active today' });
+            return;
           }
         }
 
-        // Check chest slot availability before creating
+        // Check completion
+        const { type, target } = task.condition;
+        let progress = 0;
+
+        switch (type) {
+          case 'login':
+            progress = dailyProgress.loginDone ? 1 : 0;
+            break;
+          case 'taps':
+            progress = dailyProgress.taps;
+            break;
+          case 'bossDamage':
+            progress = dailyProgress.bossDamage;
+            break;
+          case 'skillUses':
+            progress = dailyProgress.skillUses;
+            break;
+          case 'chestsOpened':
+            progress = dailyProgress.chestsOpened;
+            break;
+          case 'enchantAttempts':
+            progress = dailyProgress.enchantAttempts;
+            break;
+          case 'dismantleCount':
+            progress = dailyProgress.dismantleCount;
+            break;
+          case 'inviteValid':
+            progress = user?.totalInvites || 0;
+            break;
+          case 'baseDaysCompleted':
+            progress = weeklyProgress.baseDaysCompleted;
+            break;
+          case 'weeklyBossDamage':
+            progress = Number(weeklyProgress.weeklyBossDamage);
+            break;
+          case 'weeklyChestsOpened':
+            progress = weeklyProgress.weeklyChestsOpened;
+            break;
+          case 'weeklyEnchantAttempts':
+            progress = weeklyProgress.weeklyEnchantAttempts;
+            break;
+          case 'weeklyInvitesValid':
+            progress = weeklyProgress.weeklyInvitesValid;
+            break;
+        }
+
+        if (progress < target) {
+          socket.emit('tasks:error', { message: 'Task not completed' });
+          return;
+        }
+
+        // Count chest rewards and check slots
+        const chestsToCreate = [];
+        for (const reward of task.rewards) {
+          if (reward.type === 'woodenChest') {
+            for (let i = 0; i < reward.amount; i++) {
+              chestsToCreate.push({ userId: player.odamage, chestType: 'WOODEN', openingDuration: 5 * 60 * 1000 });
+            }
+          } else if (reward.type === 'bronzeChest') {
+            for (let i = 0; i < reward.amount; i++) {
+              chestsToCreate.push({ userId: player.odamage, chestType: 'BRONZE', openingDuration: 30 * 60 * 1000 });
+            }
+          } else if (reward.type === 'silverChest') {
+            for (let i = 0; i < reward.amount; i++) {
+              chestsToCreate.push({ userId: player.odamage, chestType: 'SILVER', openingDuration: 4 * 60 * 60 * 1000 });
+            }
+          } else if (reward.type === 'goldChest') {
+            for (let i = 0; i < reward.amount; i++) {
+              chestsToCreate.push({ userId: player.odamage, chestType: 'GOLD', openingDuration: 8 * 60 * 60 * 1000 });
+            }
+          }
+        }
+
         if (chestsToCreate.length > 0) {
-          const user = await prisma.user.findUnique({
-            where: { id: player.odamage },
-            select: { chestSlots: true },
-          });
-          const currentChests = await prisma.chest.count({
-            where: { userId: player.odamage },
-          });
+          const currentChests = await prisma.chest.count({ where: { userId: player.odamage } });
           const availableSlots = (user?.chestSlots || 5) - currentChests;
 
           if (availableSlots < chestsToCreate.length) {
-            socket.emit('tasks:error', { message: 'Not enough chest slots' });
+            socket.emit('tasks:error', { message: `Need ${chestsToCreate.length} free chest slots` });
             return;
           }
         }
 
         // Apply rewards
-        if (Object.keys(updateData).length > 0) {
-          await prisma.user.update({
-            where: { id: player.odamage },
-            data: updateData,
-          });
+        const userUpdate = {};
+        for (const reward of task.rewards) {
+          switch (reward.type) {
+            case 'gold':
+              userUpdate.gold = { increment: BigInt(reward.amount) };
+              break;
+            case 'crystals':
+              userUpdate.ancientCoin = { increment: reward.amount };
+              break;
+            case 'tickets':
+              userUpdate.lotteryTickets = { increment: reward.amount };
+              break;
+            case 'enchantCharges':
+              userUpdate.enchantCharges = { increment: reward.amount };
+              break;
+            case 'protectionCharges':
+              userUpdate.protectionCharges = { increment: reward.amount };
+              break;
+          }
+        }
+
+        // Update user
+        if (Object.keys(userUpdate).length > 0) {
+          await prisma.user.update({ where: { id: player.odamage }, data: userUpdate });
         }
 
         // Create chests
@@ -6464,32 +7045,35 @@ app.prepare().then(async () => {
           await prisma.chest.createMany({ data: chestsToCreate });
         }
 
-        // Update local player state
-        const updatedUser = await prisma.user.findUnique({
-          where: { id: player.odamage },
-        });
-        if (updatedUser) {
-          player.ether = updatedUser.ether;
-          player.ancientCoin = updatedUser.ancientCoin;
-          player.potionHaste = updatedUser.potionHaste;
-          player.potionAcumen = updatedUser.potionAcumen;
-          player.potionLuck = updatedUser.potionLuck;
+        // Mark task as claimed
+        if (isWeekly) {
+          const newClaimedTasks = { ...weeklyProgress.claimedTasks, [taskId]: true };
+          await prisma.weeklyTaskProgress.update({
+            where: { odamage_weekKey: { odamage: player.odamage, weekKey } },
+            data: { claimedTasks: newClaimedTasks },
+          });
+        } else {
+          const newClaimedTasks = { ...dailyProgress.claimedTasks, [taskId]: true };
+          await prisma.dailyTaskProgress.update({
+            where: { odamage_dateKey: { odamage: player.odamage, dateKey } },
+            data: { claimedTasks: newClaimedTasks },
+          });
+
+          // Check if all base tasks are now claimed → increment baseDaysCompleted
+          if (checkBaseDayCompleted(newClaimedTasks)) {
+            await prisma.weeklyTaskProgress.update({
+              where: { odamage_weekKey: { odamage: player.odamage, weekKey } },
+              data: { baseDaysCompleted: { increment: 1 } },
+            });
+            console.log(`[Tasks] ${player.username} completed all base tasks for ${dateKey}`);
+          }
         }
 
-        console.log(`[Tasks] Rewards applied for ${player.username}`);
+        console.log(`[Tasks] ${player.username} claimed ${taskId}`);
         socket.emit('tasks:claimed', { taskId });
 
-        // Send updated consumables to client
-        socket.emit('player:state', {
-          ether: player.ether,
-          ancientCoin: player.ancientCoin,
-          potionHaste: player.potionHaste,
-          potionAcumen: player.potionAcumen,
-          potionLuck: player.potionLuck,
-        });
-
-        // Refresh chest data if chests were created or boost was applied
-        if (chestsToCreate.length > 0 || boostApplied) {
+        // Refresh chest data if chests were created
+        if (chestsToCreate.length > 0) {
           const chests = await prisma.chest.findMany({
             where: { userId: player.odamage },
             orderBy: { createdAt: 'asc' },
@@ -6503,8 +7087,20 @@ app.prepare().then(async () => {
             })),
           });
         }
+
+        // Send updated user state
+        const updatedUser = await prisma.user.findUnique({ where: { id: player.odamage } });
+        if (updatedUser) {
+          socket.emit('player:state', {
+            gold: Number(updatedUser.gold),
+            ancientCoin: updatedUser.ancientCoin,
+            lotteryTickets: updatedUser.lotteryTickets,
+            enchantCharges: updatedUser.enchantCharges,
+            protectionCharges: updatedUser.protectionCharges,
+          });
+        }
       } catch (err) {
-        console.error('[Tasks] Claim error:', err.message);
+        console.error('[Tasks] Claim error:', err.message, err.stack);
         socket.emit('tasks:error', { message: 'Failed to claim rewards' });
       }
     });
@@ -7013,6 +7609,13 @@ app.prepare().then(async () => {
         ]);
 
         console.log(`[Forge] ${player.odamage} salvaged ${items.length} items -> ${dustGained} dust`);
+
+        // === TASK TRACKING: dismantleCount ===
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'dismantleCount', items.length);
+        } catch (e) {
+          console.error('[Tasks] Failed to track dismantle:', e.message);
+        }
 
         // Send updated forge data
         socket.emit('forge:get');
@@ -7530,6 +8133,13 @@ app.prepare().then(async () => {
           ]);
 
           console.log(`[Enchant] BROKEN: ${item.equipment.name} +${currentLevel}, expires: ${brokenUntil.toISOString()}`);
+        }
+
+        // === TASK TRACKING: enchantAttempts ===
+        try {
+          await incrementDailyCounter(prisma, player.odamage, 'enchantAttempts', 1);
+        } catch (e) {
+          console.error('[Tasks] Failed to track enchant attempt:', e.message);
         }
 
         socket.emit('enchant:result', {

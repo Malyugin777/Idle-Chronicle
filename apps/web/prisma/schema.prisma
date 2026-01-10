@@ -164,6 +164,12 @@ model User {
   lastOnline      DateTime @default(now())
   offlineEarnings BigInt   @default(0)
 
+  // Referral System (for invite tasks)
+  referralCode    String?  @unique  // User's own referral code (auto-generated)
+  referredById    String?           // Who invited this user (User.id)
+  referralValid   Boolean  @default(false)  // Has this user met minAction (1k dmg or 50 taps)?
+  totalInvites    Int      @default(0)      // How many valid invites this user made
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -635,4 +641,62 @@ model GameState {
   previousBossSession Json?
 
   updatedAt        DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAILY TASK PROGRESS (Server-side SSOT)
+// ═══════════════════════════════════════════════════════════
+
+model DailyTaskProgress {
+  id          String   @id @default(cuid())
+  odamage     String   // Renamed from userId for consistency
+  dateKey     String   // YYYY-MM-DD (UTC)
+
+  // Counters
+  taps            Int @default(0)
+  bossDamage      Int @default(0)
+  skillUses       Int @default(0)
+  chestsOpened    Int @default(0)
+  enchantAttempts Int @default(0)
+  dismantleCount  Int @default(0)
+
+  // Flags
+  loginDone       Boolean @default(false)
+
+  // Claimed flags (JSON object: {taskId: true})
+  claimedTasks    Json    @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([odamage, dateKey])
+  @@index([odamage])
+  @@index([dateKey])
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY TASK PROGRESS (Server-side SSOT)
+// ═══════════════════════════════════════════════════════════
+
+model WeeklyTaskProgress {
+  id          String   @id @default(cuid())
+  odamage     String   // Renamed from userId for consistency
+  weekKey     String   // YYYY-WW (ISO week number)
+
+  // Counters
+  weeklyBossDamage      BigInt @default(0)
+  weeklyChestsOpened    Int    @default(0)
+  weeklyEnchantAttempts Int    @default(0)
+  weeklyInvitesValid    Int    @default(0)
+  baseDaysCompleted     Int    @default(0)  // Days where D1-D5 all completed
+
+  // Claimed flags (JSON object: {taskId: true})
+  claimedTasks          Json   @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([odamage, weekKey])
+  @@index([odamage])
+  @@index([weekKey])
 }
