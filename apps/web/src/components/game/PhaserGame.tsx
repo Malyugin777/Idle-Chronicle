@@ -737,20 +737,28 @@ export default function PhaserGame() {
     return () => clearInterval(interval);
   }, []);
 
-  // Tasks claimable badge checker
+  // Tasks claimable badge checker - use SERVER data (not legacy localStorage)
   useEffect(() => {
-    const tm = getTaskManager();
+    const socket = getSocket();
 
-    const checkClaimable = () => {
-      const tasks = tm.getDailyTasks();
-      const claimable = tasks.some((t: any) => t.completed && !t.claimed);
+    const handleTasksData = (data: { daily?: any[]; weekly?: any[] }) => {
+      const allTasks = [...(data.daily || []), ...(data.weekly || [])];
+      const claimable = allTasks.some((t: any) => t.completed && !t.claimed);
       setHasClaimable(claimable);
     };
 
-    checkClaimable();
-    const unsubscribe = tm.subscribe(checkClaimable);
+    socket.on('tasks:data', handleTasksData);
 
-    return unsubscribe;
+    // Request tasks on mount and periodically
+    socket.emit('tasks:get');
+    const interval = setInterval(() => {
+      socket.emit('tasks:get');
+    }, 30000); // Check every 30 sec
+
+    return () => {
+      socket.off('tasks:data', handleTasksData);
+      clearInterval(interval);
+    };
   }, []);
 
   const hpPercent = (bossState.hp / bossState.maxHp) * 100;
