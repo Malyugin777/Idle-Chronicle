@@ -23,6 +23,11 @@ interface ChestRewards {
   gold: number;
   equipment?: EquipmentReward;
   enchantScrolls?: number;
+  enchantCharges?: number;     // v1.6: charges instead of scrolls
+  protectionDrop?: number;      // Protection charges
+  crystals?: number;            // v1.6: bonus crystals (ancientCoin)
+  tickets?: number;             // v1.6: lottery tickets
+  keyDrop?: ChestType | null;   // v1.6: key type dropped
 }
 
 interface ChestOpenModalProps {
@@ -233,12 +238,53 @@ export default function ChestOpenModal({ chestType, rewards, isOpening, onClose,
                 </div>
               )}
 
-              {/* Enchant Scrolls */}
-              {rewards.enchantScrolls && rewards.enchantScrolls > 0 && (
+              {/* Enchant Charges */}
+              {rewards.enchantCharges && rewards.enchantCharges > 0 && (
                 <div className="flex items-center justify-center gap-3 bg-black/30 rounded-xl p-4">
-                  <ScrollText className="text-blue-400" size={24} />
+                  <span className="text-2xl">⚡</span>
                   <span className="text-lg font-bold text-blue-400">
-                    +{rewards.enchantScrolls} {lang === 'ru' ? 'Свиток заточки' : 'Enchant Scroll'}
+                    +{rewards.enchantCharges} {lang === 'ru' ? 'Заряды заточки' : 'Enchant Charges'}
+                  </span>
+                </div>
+              )}
+
+              {/* Protection Charges */}
+              {rewards.protectionDrop && rewards.protectionDrop > 0 && (
+                <div className="flex items-center justify-center gap-3 bg-purple-500/20 rounded-xl p-4 border border-purple-500/30">
+                  <span className="text-2xl">🛡️</span>
+                  <span className="text-lg font-bold text-purple-400">
+                    +{rewards.protectionDrop} {lang === 'ru' ? 'Защита' : 'Protection'}
+                  </span>
+                </div>
+              )}
+
+              {/* Crystals (bonus drop) */}
+              {rewards.crystals && rewards.crystals > 0 && (
+                <div className="flex items-center justify-center gap-3 bg-cyan-500/20 rounded-xl p-4 border border-cyan-500/30">
+                  <span className="text-2xl">💎</span>
+                  <span className="text-lg font-bold text-cyan-400">
+                    +{rewards.crystals} {lang === 'ru' ? 'Кристаллы' : 'Crystals'}
+                  </span>
+                </div>
+              )}
+
+              {/* Lottery Tickets (bonus drop) */}
+              {rewards.tickets && rewards.tickets > 0 && (
+                <div className="flex items-center justify-center gap-3 bg-yellow-500/20 rounded-xl p-4 border border-yellow-500/30">
+                  <span className="text-2xl">🎟️</span>
+                  <span className="text-lg font-bold text-yellow-400">
+                    +{rewards.tickets} {lang === 'ru' ? 'Лотерейные билеты' : 'Lottery Tickets'}
+                  </span>
+                </div>
+              )}
+
+              {/* Key Drop (rare!) */}
+              {rewards.keyDrop && (
+                <div className="flex items-center justify-center gap-3 bg-gradient-to-r from-amber-500/30 to-yellow-500/30 rounded-xl p-4 border border-amber-500/50 animate-pulse">
+                  <span className="text-2xl">🔑</span>
+                  <span className="text-lg font-bold text-amber-400">
+                    +1 {rewards.keyDrop === 'WOODEN' ? '🗝️' : rewards.keyDrop === 'BRONZE' ? '🔑' : rewards.keyDrop === 'SILVER' ? '🔐' : '🏆'}
+                    {lang === 'ru' ? ' Ключ!' : ' Key!'}
                   </span>
                 </div>
               )}

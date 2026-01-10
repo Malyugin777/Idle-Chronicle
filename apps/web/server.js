@@ -518,41 +518,57 @@ function getChestDuration(chestType) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CHEST DROP CONFIG — синхронизировано с packages/shared/src/data/lootTables.ts
-// TODO: После сборки shared импортировать оттуда напрямую
+// CHEST DROP CONFIG — v1.6 Economy (crystals/tickets/keys)
+// Gold сбалансирован: суммарно с daily ~50-100k/сутки
 // ═══════════════════════════════════════════════════════════
 const CHEST_DROP_RATES = {
   WOODEN: {
-    // 55% шмот (93% Common, 7% Uncommon), 3% свиток
-    gold: 1000,
+    // 55% шмот (93% Common, 7% Uncommon)
+    goldRange: [200, 600],        // Снижено для баланса
     itemChance: 0.55,
     rarityWeights: { COMMON: 93, UNCOMMON: 7 },
-    enchantChance: 0.03,
-    enchantQty: [1, 1],
+    // Бонусные дропы
+    crystalsChance: 0.08,         // 8%
+    crystalsRange: [1, 5],
+    ticketsChance: 0.05,          // 5%
+    ticketsRange: [1, 1],
+    keyChance: 0.002,             // 0.2% (очень редко)
   },
   BRONZE: {
-    // 80% шмот (70% C, 27% U, 3% R), 15% свиток
-    gold: 2500,
+    // 80% шмот (70% C, 27% U, 3% R)
+    goldRange: [1000, 4000],
     itemChance: 0.80,
     rarityWeights: { COMMON: 70, UNCOMMON: 27, RARE: 3 },
-    enchantChance: 0.15,
-    enchantQty: [1, 1],
+    // Бонусные дропы
+    crystalsChance: 0.10,         // 10%
+    crystalsRange: [5, 20],
+    ticketsChance: 0.07,          // 7%
+    ticketsRange: [1, 2],
+    keyChance: 0.005,             // 0.5%
   },
   SILVER: {
-    // 100% шмот (75% U, 24% R, 1% E), 25% свиток x1-2
-    gold: 7000,
+    // 100% шмот (75% U, 24% R, 1% E)
+    goldRange: [5000, 12000],
     itemChance: 1.0,
     rarityWeights: { UNCOMMON: 75, RARE: 24, EPIC: 1 },
-    enchantChance: 0.25,
-    enchantQty: [1, 2],
+    // Бонусные дропы
+    crystalsChance: 0.12,         // 12%
+    crystalsRange: [20, 60],
+    ticketsChance: 0.10,          // 10%
+    ticketsRange: [2, 4],
+    keyChance: 0.01,              // 1%
   },
   GOLD: {
-    // 100% шмот (92% R, 8% E), 45% свиток x1-3
-    gold: 20000,
+    // 100% шмот (92% R, 8% E)
+    goldRange: [12000, 30000],
     itemChance: 1.0,
     rarityWeights: { RARE: 92, EPIC: 8 },
-    enchantChance: 0.45,
-    enchantQty: [1, 3],
+    // Бонусные дропы
+    crystalsChance: 0.15,         // 15%
+    crystalsRange: [60, 150],
+    ticketsChance: 0.12,          // 12%
+    ticketsRange: [4, 8],
+    keyChance: 0.02,              // 2%
   },
 };
 
@@ -4831,8 +4847,9 @@ app.prepare().then(async () => {
         const chestType = chest.chestType || 'WOODEN';
         const dropRates = CHEST_DROP_RATES[chestType];
 
-        // Gold reward (fixed amount per TZ)
-        const goldReward = dropRates.gold;
+        // v1.6: Gold reward (random range для баланса экономики)
+        const [goldMin, goldMax] = dropRates.goldRange;
+        const goldReward = Math.floor(Math.random() * (goldMax - goldMin + 1)) + goldMin;
 
         // ═══ v1.3.1: XP/SP from chests using BOSS_XP table ═══
         const xpFactor = CHEST_XP_FACTOR[chestType] || 0.10;
@@ -4847,6 +4864,25 @@ app.prepare().then(async () => {
         let protectionDrop = 0;
         if (chestType === 'GOLD' && Math.random() < PROTECTION_DROP_CHANCE) {
           protectionDrop = 1;
+        }
+
+        // ═══ v1.6: Бонусные дропы (crystals, tickets, keys) ═══
+        let crystalsDrop = 0;
+        if (dropRates.crystalsChance && Math.random() < dropRates.crystalsChance) {
+          const [cMin, cMax] = dropRates.crystalsRange;
+          crystalsDrop = Math.floor(Math.random() * (cMax - cMin + 1)) + cMin;
+        }
+
+        let ticketsDrop = 0;
+        if (dropRates.ticketsChance && Math.random() < dropRates.ticketsChance) {
+          const [tMin, tMax] = dropRates.ticketsRange;
+          ticketsDrop = Math.floor(Math.random() * (tMax - tMin + 1)) + tMin;
+        }
+
+        let keyDrop = 0;
+        if (dropRates.keyChance && Math.random() < dropRates.keyChance) {
+          keyDrop = 1;
+          console.log(`[Chest] 🔑 RARE KEY DROP for ${player.telegramId} from ${chestType}!`);
         }
 
         // Get current pity counter for Epic (only silver+gold chests count)
@@ -4990,6 +5026,7 @@ app.prepare().then(async () => {
         // Build update data with pity counter handling (v1.2: charges instead of scrolls)
         // v1.3.1: XP/SP from BOSS_XP table
         // FIX v1.5.12: sp is Int in schema, not BigInt - use Number()
+        // v1.6: Added crystals, tickets, keys bonus drops
         const updateData = {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(chestXpReward) },
@@ -5002,6 +5039,19 @@ app.prepare().then(async () => {
         // v1.2: Add protection if dropped
         if (protectionDrop > 0) {
           updateData.protectionCharges = { increment: protectionDrop };
+        }
+
+        // v1.6: Add bonus drops (crystals, tickets, keys)
+        if (crystalsDrop > 0) {
+          updateData.ancientCoin = { increment: crystalsDrop };
+        }
+        if (ticketsDrop > 0) {
+          updateData.lotteryTickets = { increment: ticketsDrop };
+        }
+        // Key drop: same type as chest being opened
+        const KEY_FIELD_MAP = { WOODEN: 'keyWooden', BRONZE: 'keyBronze', SILVER: 'keySilver', GOLD: 'keyGold' };
+        if (keyDrop > 0) {
+          updateData[KEY_FIELD_MAP[chestType]] = { increment: keyDrop };
         }
 
         // Handle pity counter (increment or reset)
@@ -5053,6 +5103,9 @@ app.prepare().then(async () => {
             sp: chestSpReward,
             enchantCharges,      // v1.2: charges instead of scrolls
             protectionDrop,      // v1.2: protection from gold chests
+            crystals: crystalsDrop,      // v1.6: bonus crystals
+            tickets: ticketsDrop,        // v1.6: lottery tickets
+            keyDrop: keyDrop > 0 ? chestType : null, // v1.6: key type dropped
             equipment: droppedItem, // Changed from 'item' to 'equipment' to match TreasuryTab
           },
           // v1.3.1: Updated profile data
@@ -5130,7 +5183,10 @@ app.prepare().then(async () => {
 
         // Генерируем лут
         const dropRates = CHEST_DROP_RATES[chestType];
-        const goldReward = dropRates.gold;
+
+        // v1.6: Gold reward (random range для баланса экономики)
+        const [goldMin, goldMax] = dropRates.goldRange;
+        const goldReward = Math.floor(Math.random() * (goldMax - goldMin + 1)) + goldMin;
 
         // ═══ v1.3.1: XP/SP from chests using BOSS_XP table ═══
         const xpFactor = CHEST_XP_FACTOR[chestType] || 0.10;
@@ -5143,6 +5199,25 @@ app.prepare().then(async () => {
         let protectionDrop = 0;
         if (chestType === 'GOLD' && Math.random() < PROTECTION_DROP_CHANCE) {
           protectionDrop = 1;
+        }
+
+        // ═══ v1.6: Бонусные дропы (crystals, tickets, keys) ═══
+        let crystalsDrop = 0;
+        if (dropRates.crystalsChance && Math.random() < dropRates.crystalsChance) {
+          const [cMin, cMax] = dropRates.crystalsRange;
+          crystalsDrop = Math.floor(Math.random() * (cMax - cMin + 1)) + cMin;
+        }
+
+        let ticketsDrop = 0;
+        if (dropRates.ticketsChance && Math.random() < dropRates.ticketsChance) {
+          const [tMin, tMax] = dropRates.ticketsRange;
+          ticketsDrop = Math.floor(Math.random() * (tMax - tMin + 1)) + tMin;
+        }
+
+        let keyDrop = 0;
+        if (dropRates.keyChance && Math.random() < dropRates.keyChance) {
+          keyDrop = 1;
+          console.log(`[Chest:Key] 🔑 RARE KEY DROP for ${player.telegramId} from ${chestType}!`);
         }
 
         let currentPity = user?.pityCounter || 0;
@@ -5247,6 +5322,7 @@ app.prepare().then(async () => {
         const totalChestField = `totalChests${chestType.charAt(0) + chestType.slice(1).toLowerCase()}`;
         // v1.3.1: XP/SP from BOSS_XP table
         // FIX v1.5.12: sp is Int in schema, not BigInt - use Number()
+        // v1.6: Added crystals, tickets, keys bonus drops
         const updateData = {
           gold: { increment: BigInt(goldReward) },
           exp: { increment: BigInt(chestXpReward) },
@@ -5259,6 +5335,18 @@ app.prepare().then(async () => {
 
         if (protectionDrop > 0) {
           updateData.protectionCharges = { increment: protectionDrop };
+        }
+        // v1.6: Add bonus drops (crystals, tickets, keys)
+        if (crystalsDrop > 0) {
+          updateData.ancientCoin = { increment: crystalsDrop };
+        }
+        if (ticketsDrop > 0) {
+          updateData.lotteryTickets = { increment: ticketsDrop };
+        }
+        // Key drop: same type as chest being opened
+        const KEY_FIELD_MAP = { WOODEN: 'keyWooden', BRONZE: 'keyBronze', SILVER: 'keySilver', GOLD: 'keyGold' };
+        if (keyDrop > 0) {
+          updateData[KEY_FIELD_MAP[chestType]] = { increment: keyDrop };
         }
         if (pityCounterDelta !== 0) {
           if (pityCounterDelta < 0) {
@@ -5310,6 +5398,9 @@ app.prepare().then(async () => {
             sp: chestSpReward,
             enchantCharges,
             protectionDrop,
+            crystals: crystalsDrop,      // v1.6: bonus crystals
+            tickets: ticketsDrop,        // v1.6: lottery tickets
+            keyDrop: keyDrop > 0 ? chestType : null, // v1.6: key type dropped
             equipment: droppedItem,
           },
           // v1.3.1: Updated profile data
