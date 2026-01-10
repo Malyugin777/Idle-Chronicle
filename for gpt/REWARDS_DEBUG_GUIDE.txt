@@ -1,0 +1,176 @@
+=================================================================
+РУКОВОДСТВО ПО ДЕБАГУ НАГРАД v1.5.11
+=================================================================
+
+Если игрок говорит "не получил сундуки/билеты", проверь:
+
+=================================================================
+1. ELIGIBILITY CHECK
+=================================================================
+
+Игрок должен быть eligible для получения наград.
+
+УСЛОВИЯ ELIGIBILITY (любое):
+- activityTime >= 60000 ms (60 секунд на battle tab)
+- sessionClicks >= 20 (20 тапов/скиллов)
+
+ГДЕ ИСКАТЬ В ЛОГАХ:
+```
+[Activity] PlayerName is now eligible (time: Xs, actions: Y)
+```
+
+ЕСЛИ ЛОГА НЕТ - игрок НЕ eligible!
+
+КОД ПРОВЕРКИ (server.js:3357-3362):
+```javascript
+const actions = player.sessionClicks || 0;
+if (!player.isEligible && (player.activityTime >= 60000 || actions >= 20)) {
+  player.isEligible = true;
+  console.log(`[Activity] ${player.odamageN} is now eligible...`);
+}
+```
+
+=================================================================
+2. LEADERBOARD ENTRY CHECK
+=================================================================
+
+В момент убийства босса, entry в leaderboard должен иметь isEligible = true.
+
+КОД (server.js:1455-1457):
+```javascript
+const isEligibleForReward = entry.isEligible;
+const chestRewards = getChestRewardsByRank(rank, isEligibleForReward);
+```
+
+ЕСЛИ isEligible = false:
+```javascript
+return { wooden: 0, bronze: 0, silver: 0, gold: 0, crystals: 0, lotteryTickets: 0 };
+```
+
+=================================================================
+3. PENDING REWARD CHECK
+=================================================================
+
+Награды сохраняются в PendingReward в БД.
+
+ПРОВЕРИТЬ В БД:
+```sql
+SELECT * FROM PendingReward
+WHERE bossSessionId = 'xxx' AND userId = 'yyy';
+```
+
+ЕСЛИ ЗАПИСИ НЕТ - награды не были созданы (игрок не eligible).
+
+КОД СОЗДАНИЯ (server.js:1561-1592):
+```javascript
+if (entry.isEligible) {
+  // Create PendingReward
+  await prisma.pendingReward.create({
+    data: {
+      bossSessionId,
+      userId: entry.odamage,
+      chests: { wooden, bronze, silver, gold },
+      crystals,
+      lotteryTickets,
+      // ...
+    },
+  });
+}
+```
+
+=================================================================
+4. REWARDS:CLAIM CHECK
+=================================================================
+
+Игрок забирает награды через rewards:claim.
+
+КОД (server.js:3448-3600):
+```javascript
+socket.on('rewards:claim', async (data) => {
+  // Ищет PendingReward
+  const pending = await prisma.pendingReward.findFirst({
+    where: { bossSessionId, userId: player.odamage },
+  });
+
+  if (!pending) {
+    socket.emit('rewards:error', { message: 'No rewards to claim' });
+    return;
+  }
+
+  // Создаёт сундуки, начисляет crystals/tickets
+  // Удаляет PendingReward
+});
+```
+
+=================================================================
+5. ТИПИЧНЫЕ ПРОБЛЕМЫ
+=================================================================
+
+ПРОБЛЕМА: "Чуть-чуть побил, не получил награды"
+ПРИЧИНА: Не набрал 60 сек или 20 действий
+РЕШЕНИЕ: Нужно активнее участвовать
+
+ПРОБЛЕМА: "Был на экране, но не eligible"
+ПРИЧИНА: activity:ping не отправлялся (не на battle tab, или лаги)
+ДИАГНОСТИКА: Проверить логи [Activity]
+
+ПРОБЛЕМА: "В лидерборде был, но PendingReward нет"
+ПРИЧИНА: isEligible = false в entry
+ДИАГНОСТИКА: Проверить previousBossSession.leaderboard
+
+ПРОБЛЕМА: "Награды были, но не забрались"
+ПРИЧИНА: rewards:claim не был вызван или ошибка
+ДИАГНОСТИКА: Проверить PendingReward в БД
+
+ПРОБЛЕМА: "Забрал, но сундуков нет"
+ПРИЧИНА: Баг в создании Chest или ограничение слотов
+ДИАГНОСТИКА: Проверить Chest в БД для userId
+
+=================================================================
+6. SQL ЗАПРОСЫ ДЛЯ ДЕБАГА
+=================================================================
+
+-- Найти награды игрока за сессию
+SELECT * FROM PendingReward WHERE userId = 'xxx';
+
+-- Найти сундуки игрока
+SELECT * FROM Chest WHERE userId = 'xxx' ORDER BY createdAt DESC;
+
+-- Проверить лотерейные билеты
+SELECT lotteryTickets FROM User WHERE id = 'xxx';
+
+-- Проверить кристаллы
+SELECT ancientCoin FROM User WHERE id = 'xxx';
+
+=================================================================
+7. КОД ACTIVITY TRACKING
+=================================================================
+
+Файл: server.js
+Строки: 3330-3370
+
+Ключевые события:
+- 'activity:ping' - клиент шлёт каждые 5 сек на battle tab
+- 'activity:status' - сервер отвечает с activityTime и isEligible
+
+Ключевые поля player:
+- player.activityTime - накопленное время в ms
+- player.sessionClicks - количество тапов/скиллов
+- player.isEligible - true если условия выполнены
+- player.activityBossSession - sessionId текущего босса
+
+=================================================================
+8. КОД REWARDS
+=================================================================
+
+Файл: server.js
+Строки: 1368-1600
+
+Ключевые функции:
+- getChestRewardsByRank(rank, isEligible) - расчёт наград
+- distributeBossRewards() - вызывается при убийстве босса
+- socket.on('rewards:claim') - игрок забирает награды
+
+=================================================================
+ВЕРСИЯ: v1.5.11
+=================================================================

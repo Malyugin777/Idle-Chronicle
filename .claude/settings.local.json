@@ -36,7 +36,9 @@
       "Bash(du:*)",
       "Bash(powershell:*)",
       "Bash(find:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(npm run lint)",
+      "Bash(ls:*)"
     ]
   }
 }

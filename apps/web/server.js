@@ -3742,9 +3742,24 @@ app.prepare().then(async () => {
         player.str = user.str;
         player.dex = user.dex;
         player.luck = user.luck;
-        player.basePAtk = user.pAtk;  // Store base pAtk
+
+        // FIX v1.5.11: Validate and fix corrupted pAtk values
+        // Base pAtk formula: 10 + (str - 10), minimum 10
+        const correctBasePAtk = 10 + Math.max(0, user.str - 10);
+        if (user.pAtk > correctBasePAtk + 50) {
+          // pAtk is corrupted (includes equipment bonus) - fix it
+          console.log(`[Auth] FIX: User ${user.id} has corrupted pAtk=${user.pAtk}, should be ${correctBasePAtk}. Fixing...`);
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { pAtk: correctBasePAtk },
+          });
+          player.basePAtk = correctBasePAtk;
+        } else {
+          player.basePAtk = user.pAtk;
+        }
+
         player.basePDef = user.physicalDefense || 0;
-        player.pAtk = user.pAtk;  // Will be recalculated with equipment
+        player.pAtk = player.basePAtk;  // Will be recalculated with equipment
         player.critChance = user.critChance;
         // L2 Core Attributes (NEW)
         player.power = user.power || 10;
@@ -5521,25 +5536,32 @@ app.prepare().then(async () => {
         player[stat] += 1;
         player.gold -= cost;
 
-        // Recalculate derived stats
-        player.pAtk = 10 + Math.floor(player.str * 2);
+        // Recalculate BASE pAtk (WITHOUT equipment)
+        // Formula from CLAUDE.md: P.Atk = 10 + (СИЛ-10)*1
+        player.basePAtk = 10 + Math.max(0, player.str - 10);
         player.critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
 
+        // Save BASE pAtk to DB (not total with equipment!)
         await prisma.user.update({
           where: { id: player.odamage },
           data: {
             [stat]: player[stat],
             gold: BigInt(player.gold),
-            pAtk: player.pAtk,
+            pAtk: player.basePAtk,  // FIX: Save BASE pAtk, not total!
             critChance: player.critChance,
           },
         });
+
+        // Recalculate total pAtk including equipment
+        await recalculateEquipmentStats(player, prisma);
 
         socket.emit('upgrade:success', {
           stat,
           value: player[stat],
           gold: player.gold,
-          pAtk: player.pAtk,
+          pAtk: player.pAtk,  // Now includes equipment
+          basePAtk: player.basePAtk,
+          equipmentPAtk: player.equipmentPAtk || 0,
           critChance: player.critChance,
         });
       } catch (err) {

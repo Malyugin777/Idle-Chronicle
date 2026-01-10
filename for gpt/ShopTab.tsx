@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Flame, Zap, Clover, Coins, Sparkles, Key } from 'lucide-react';
+import { Flame, Zap, Clover, Coins, Sparkles, Key, Gem } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
   gold: number;
+  crystals: number; // ancientCoin - для покупки ключей
   ether: number;
   potionHaste: number;
   potionAcumen: number;
@@ -32,6 +33,7 @@ export default function ShopTab() {
 
   const [shopState, setShopState] = useState<ShopState>({
     gold: 0,
+    crystals: 0,
     ether: 0,
     potionHaste: 0,
     potionAcumen: 0,
@@ -54,6 +56,7 @@ export default function ShopTab() {
       if (!data) return;
       setShopState({
         gold: data.gold || 0,
+        crystals: data.ancientCoin || data.crystals || 0, // ancientCoin from server, crystals from shop:success
         ether: data.ether || 0,
         potionHaste: data.potionHaste || 0,
         potionAcumen: data.potionAcumen || 0,
@@ -138,12 +141,13 @@ export default function ShopTab() {
   const etherCost = 200; // 200 gold per 100 ether
   const canAffordEther = shopState.gold >= etherCost;
 
-  // Keys pricing (based on chest open time: 5min, 30min, 4h, 8h)
+  // Keys pricing - 999 crystals for ANY key
+  const KEY_COST_CRYSTALS = 999;
   const KEYS = [
-    { id: 'wooden', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🔑', cost: 500, color: 'amber' },
-    { id: 'bronze', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🗝️', cost: 1000, color: 'orange' },
-    { id: 'silver', name: lang === 'ru' ? 'Серебряный' : 'Silver', icon: '🔐', cost: 2000, color: 'gray' },
-    { id: 'gold', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🏆', cost: 4000, color: 'yellow' },
+    { id: 'wooden', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🔑', color: 'amber' },
+    { id: 'bronze', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🗝️', color: 'orange' },
+    { id: 'silver', name: lang === 'ru' ? 'Серебряный' : 'Silver', icon: '🔐', color: 'gray' },
+    { id: 'gold', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🏆', color: 'yellow' },
   ];
 
   const ENCHANT_COST = 3000;
@@ -254,19 +258,25 @@ export default function ShopTab() {
 
       {/* Keys Section */}
       <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">
-          <Key size={14} className="inline mr-1" />
-          {lang === 'ru' ? 'Ключи' : 'Keys'}
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm text-gray-400">
+            <Key size={14} className="inline mr-1" />
+            {lang === 'ru' ? 'Ключи' : 'Keys'}
+          </h3>
+          <div className="flex items-center gap-1 text-sm">
+            <span className="text-purple-400">💎</span>
+            <span className="text-purple-400 font-bold">{shopState.crystals.toLocaleString()}</span>
+          </div>
+        </div>
         <p className="text-xs text-gray-500 mb-3">
-          {lang === 'ru' ? 'Мгновенно открывают сундуки' : 'Instantly open chests'}
+          {lang === 'ru' ? 'Мгновенно открывают сундуки • 999💎 за любой' : 'Instantly open chests • 999💎 each'}
         </p>
 
         <div className="grid grid-cols-2 gap-2">
           {KEYS.map((key) => {
             const ownedKey = `key${key.id.charAt(0).toUpperCase() + key.id.slice(1)}` as keyof ShopState;
             const owned = shopState[ownedKey] as number || 0;
-            const canAfford = shopState.gold >= key.cost;
+            const canAfford = shopState.crystals >= KEY_COST_CRYSTALS;
 
             return (
               <div
@@ -277,15 +287,15 @@ export default function ShopTab() {
                 <span className="text-xs font-bold text-white">{key.name}</span>
                 <span className="text-[10px] text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {owned}</span>
                 <button
-                  onClick={() => handleBuyKey(key.id, key.cost)}
+                  onClick={() => handleBuyKey(key.id, KEY_COST_CRYSTALS)}
                   disabled={!canAfford || buying === `key-${key.id}`}
                   className={`w-full px-2 py-1.5 rounded text-xs font-bold ${
                     canAfford
-                      ? 'bg-l2-gold text-black hover:bg-l2-gold/80'
+                      ? 'bg-purple-600 text-white hover:bg-purple-500'
                       : 'bg-gray-700 text-gray-500'
                   }`}
                 >
-                  {buying === `key-${key.id}` ? '...' : `🪙 ${key.cost}`}
+                  {buying === `key-${key.id}` ? '...' : `💎 ${KEY_COST_CRYSTALS}`}
                 </button>
               </div>
             );
