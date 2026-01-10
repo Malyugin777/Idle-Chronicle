@@ -142,11 +142,8 @@ Rank 101+:  только базовые 2 Wooden
 - User: `scrollEnchantWeapon`, `scrollEnchantArmor`, `scrollProtection`
 
 ## TODO для будущих ТЗ
-- [ ] Система Merge/Fusion - объединение одинаковых предметов
 - [ ] Дейлики с наградами EnchantCharges
 - [ ] Активность/урон/рейтинги → награда EnchantCharges
-- [ ] Shop UI для покупки Protection за 💎 (premiumCrystals)
-- [ ] Источник premiumCrystals (донат/достижения)
 
 ## Enchant System v1.2 (текущая)
 - EnchantCharges: из сундуков (Wooden:1-2, Bronze:2-4, Silver:4-8, Gold:8-15)

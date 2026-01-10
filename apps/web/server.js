@@ -4916,17 +4916,21 @@ app.prepare().then(async () => {
               },
             });
 
+            // ВАЖНО: Используем equipment.rarity из БД, а не droppedItemRarity!
             droppedItem = {
               name: equipment.name,
               icon: equipment.icon,
-              rarity: droppedItemRarity,
+              rarity: equipment.rarity,
               pAtk: rolledPAtk,
               pDef: rolledPDef,
             };
+
+            // Логируем если есть расхождение (для отладки)
+            if (equipment.rarity !== droppedItemRarity) {
+              console.error(`[CHEST BUG] ⚠️ Rarity mismatch! Rolled=${droppedItemRarity} but equipment.rarity=${equipment.rarity} for ${equipment.code}`);
+            }
           } else {
-            // ERROR: No droppable items of this rarity exist!
-            // Item drop SKIPPED - needs manual fix by adding items to DB
-            console.error(`[CHEST ERROR] ❌ NO DROPPABLE ${droppedItemRarity} ITEMS! User ${player.odamage} lost item from ${chestType} chest. FIX: Add ${droppedItemRarity} items to items.ts with droppable=true`);
+            console.error(`[CHEST] ❌ NO DROPPABLE ${droppedItemRarity} ITEMS! User ${player.odamage} lost item`);
           }
         }
 
@@ -5170,13 +5174,22 @@ app.prepare().then(async () => {
               },
             });
 
+            // ВАЖНО: Используем equipment.rarity из БД, а не droppedItemRarity!
+            // Это гарантирует что показанное = сохранённому
             droppedItem = {
               name: equipment.name,
               icon: equipment.icon,
-              rarity: droppedItemRarity,
+              rarity: equipment.rarity,
               pAtk: rolledPAtk,
               pDef: rolledPDef,
             };
+
+            // Логируем если есть расхождение (для отладки)
+            if (equipment.rarity !== droppedItemRarity) {
+              console.error(`[CHEST BUG] ⚠️ Rarity mismatch! Rolled=${droppedItemRarity} but equipment.rarity=${equipment.rarity} for ${equipment.code}`);
+            }
+          } else {
+            console.error(`[CHEST] ❌ NO DROPPABLE ${droppedItemRarity} ITEMS! User ${player.odamage} lost item from ${chestType} chest`);
           }
         }
 
