@@ -7,9 +7,10 @@
 Idle Chronicle — мобильный кликер-RPG для Telegram Mini App с L2-стилем.
 
 ## Версионирование
-**При каждом коммите обновляй версию в PhaserGame.tsx!**
+**При каждом коммите обновляй версию в constants.ts!**
 ```typescript
-const APP_VERSION = 'v1.0.XX';  // Инкремент при каждом фиксе
+// apps/web/src/components/game/constants.ts
+export const APP_VERSION = 'v1.X.XX';  // Инкремент при каждом фиксе
 ```
 
 Формат версии: `v{major}.{minor}.{patch}`
@@ -22,7 +23,15 @@ const APP_VERSION = 'v1.0.XX';  // Инкремент при каждом фик
 - Backend: server.js (Node.js + Socket.io)
 - Database: PostgreSQL + Prisma
 - Shared: packages/shared (типы, константы, данные)
-- Deploy: Railway
+- Deploy: Render (автодеплой с GitHub)
+
+## Деплой и доступы
+- **Хостинг**: Render.com (автодеплой при пуше в master)
+- **У пользователя НЕТ доступа к**: Render dashboard, БД напрямую
+- **Есть доступ только к**: GitHub репозиторий
+- **Важно**: Render НЕ деплоит если билд падает с ошибкой
+- **Проверка билда локально**: `cd apps/web && npx next build`
+- **Версия в игре**: если старая — значит билд упал или Render не задеплоил
 
 ## Структура проекта
 ```
@@ -130,9 +139,10 @@ Rank 101+:  только базовые 2 Wooden
 | Rare | 16-18 | 5-7 | +60-80% к статам |
 | Epic | 20-24 | 8-10 | +100-140% к статам |
 
-## TODO для будущих ТЗ
-- [ ] Дейлики с наградами EnchantCharges
-- [ ] Активность/урон/рейтинги → награда EnchantCharges
+## Реализованные системы (v1.7+)
+- **Daily/Weekly Tasks v2.0**: Server SSOT, 5 daily + 6 grind + invite tasks
+- **Activity Points (AP)**: 0-160 AP/день, милестоны 30/60/100 с наградами
+- **14-Day Check-In**: Streak календарь с ежедневными наградами
 
 ## Enchant System v1.2 (текущая)
 - EnchantCharges: из сундуков (Wooden:1-2, Bronze:2-4, Silver:4-8, Gold:8-15)
