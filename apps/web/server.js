@@ -89,6 +89,9 @@ const DAMPENING_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // Update multiplier every 5
 // Game finished flag
 let gameFinished = false;
 
+// Debug mode: after boss 4, always spawn boss 1 (Serpent)
+let debugMode = false;
+
 let bossState = {
   id: 'default',
   name: 'Serpent',
@@ -103,7 +106,7 @@ let bossState = {
   icon: '🐍',
   image: '/assets/bosses/boss_1.png',
   bossIndex: 1,
-  totalBosses: 100, // Будет 100 боссов!
+  totalBosses: 4, // 4 уникальных босса, потом debug mode
   // Rewards
   goldReward: 1000,
   expReward: 1000000,
@@ -285,7 +288,7 @@ async function loadBossState(prisma) {
       icon: boss.icon,           // Из шаблона (не из БД!)
       image: boss.image || null, // Из шаблона
       bossIndex: state.currentBossIndex + 1,
-      totalBosses: 100,
+      totalBosses: 4,
       goldReward: boss.goldReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
@@ -1166,9 +1169,9 @@ function getBossStats(index) {
 // Backwards compatibility wrapper
 const DEFAULT_BOSSES = new Proxy([], {
   get(target, prop) {
-    if (prop === 'length') return 100; // 100 bosses
+    if (prop === 'length') return 4; // 4 bosses (then debug mode)
     const index = parseInt(prop, 10);
-    if (!isNaN(index) && index >= 0 && index < 100) {
+    if (!isNaN(index) && index >= 0 && index < 4) {
       return getBossStats(index);
     }
     return undefined;
@@ -1180,21 +1183,22 @@ const DEFAULT_BOSSES = new Proxy([], {
 let currentBossIndex = 0;
 
 async function respawnBoss(prisma, forceNext = true) {
-  // Check if game is finished (boss 100 already killed)
+  // Check if game is finished
   if (gameFinished) {
     console.log('[Boss] Game finished - no more bosses to spawn');
     return false;
   }
 
-  console.log(`[Boss] respawnBoss called with forceNext=${forceNext}, currentIndex=${currentBossIndex}`);
+  console.log(`[Boss] respawnBoss called with forceNext=${forceNext}, currentIndex=${currentBossIndex}, debugMode=${debugMode}`);
 
-  // Check if this is boss 100 transition
+  // Check if this is boss 4 transition → enable debug mode
   const nextBossIndex = forceNext ? currentBossIndex + 1 : currentBossIndex;
-  if (nextBossIndex >= 100) {
-    gameFinished = true;
-    console.log('[Boss] 🎉 GAME FINISHED! All 100 bosses defeated!');
-    addLog('info', 'boss', '🎉 GAME FINISHED! All 100 bosses defeated!');
-    return false;
+  if (nextBossIndex >= 4 && !debugMode) {
+    debugMode = true;
+    console.log('[Boss] 🔧 DEBUG MODE ENABLED! All 4 bosses defeated. Spawning boss 1 forever.');
+    addLog('info', 'boss', '🔧 DEBUG MODE: All 4 bosses defeated, now spawning boss 1');
+    // Reset to boss 0 (Serpent)
+    currentBossIndex = -1; // Will become 0 after increment
   }
 
   const now = Date.now();
@@ -1238,7 +1242,7 @@ async function respawnBoss(prisma, forceNext = true) {
         icon: boss.iconUrl || dbBossTemplate?.icon || '👹',
         image: dbBossTemplate?.image || null, // FIX: Set image from template
         bossIndex: currentBossIndex + 1,
-        totalBosses: 100,
+        totalBosses: 4,
         // Dampening state - reset for new boss
         bossStartAt: now,
         bossTargetEndAt: now + BOSS_MIN_DURATION_MS,
@@ -1270,7 +1274,7 @@ async function respawnBoss(prisma, forceNext = true) {
         icon: boss.icon,
         image: boss.image || null,
         bossIndex: currentBossIndex + 1,
-        totalBosses: 100,
+        totalBosses: 4,
         goldReward: boss.goldReward,
         expReward: boss.expReward,
         tonReward: boss.tonReward || 10,
@@ -1302,7 +1306,7 @@ async function respawnBoss(prisma, forceNext = true) {
       icon: boss.icon,
       image: boss.image || null,
       bossIndex: 1,
-      totalBosses: 100,
+      totalBosses: 4,
       goldReward: boss.goldReward,
       expReward: boss.expReward,
       tonReward: boss.tonReward || 10,
@@ -3243,7 +3247,7 @@ app.prepare().then(async () => {
       icon: bossState.icon || '👹',
       image: bossState.image || '/assets/bosses/boss_single.png',
       bossIndex: bossState.bossIndex ?? 1,
-      totalBosses: bossState.totalBosses ?? 100,
+      totalBosses: bossState.totalBosses ?? 4,
       // Respawn timer info
       isRespawning: bossRespawnAt !== null,
       respawnAt: bossRespawnAt ? bossRespawnAt.getTime() : null,
@@ -7664,7 +7668,7 @@ app.prepare().then(async () => {
       icon: bossState.icon || '👹',
       image: bossState.image || '/assets/bosses/boss_single.png',
       bossIndex: bossState.bossIndex ?? 1,
-      totalBosses: bossState.totalBosses ?? 100,
+      totalBosses: bossState.totalBosses ?? 4,
       playersOnline: onlineUsers.size,
       prizePool: {
         ton: bossState.tonReward ?? 10,
@@ -7692,7 +7696,7 @@ app.prepare().then(async () => {
         // Game finished - boss 100 was the last
         io.emit('game:finished', {
           message: '🎉 Congratulations! All 100 bosses defeated!',
-          totalBosses: 100,
+          totalBosses: 4,
         });
         console.log('[Boss] 🎉 Game finished event sent to all clients');
         return;

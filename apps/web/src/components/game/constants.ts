@@ -4,7 +4,7 @@
 
 import type { Skill } from './types';
 
-export const APP_VERSION = 'v1.6.0';
+export const APP_VERSION = 'v1.6.1';
 
 export const BUFF_ICONS: Record<string, string> = {
   haste: '⚡',
@@ -35,7 +35,7 @@ export const INITIAL_BOSS_STATE = {
   maxHp: 1,
   defense: 0,
   bossIndex: 0,
-  totalBosses: 100,
+  totalBosses: 4,
 };
 
 export const INITIAL_PLAYER_STATE = {
