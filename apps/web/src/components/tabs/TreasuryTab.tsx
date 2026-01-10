@@ -32,7 +32,11 @@ interface ClaimedReward {
   rewards: {
     gold: number;
     equipment?: EquipmentReward;
-    enchantScrolls?: number;
+    enchantCharges?: number;      // v1.2: charges instead of scrolls
+    protectionDrop?: number;      // v1.2: protection from gold chests
+    crystals?: number;            // v1.6: bonus crystals
+    tickets?: number;             // v1.6: lottery tickets
+    keyDrop?: ChestType | null;   // v1.6: key type dropped
   };
 }
 
@@ -77,7 +81,7 @@ interface PendingReward {
 const CHEST_CONFIG: Record<ChestType, { icon: string; name: string; nameRu: string; color: string; bgColor: string; borderColor: string; duration: number }> = {
   WOODEN: { icon: '🪵', name: 'Wooden', nameRu: 'Деревянный', color: 'text-amber-600', bgColor: 'bg-amber-900/30', borderColor: 'border-amber-700', duration: 5 * 60 * 1000 },
   BRONZE: { icon: '🟫', name: 'Bronze', nameRu: 'Бронзовый', color: 'text-orange-400', bgColor: 'bg-orange-900/30', borderColor: 'border-orange-600', duration: 30 * 60 * 1000 },
-  SILVER: { icon: '🪙', name: 'Silver', nameRu: 'Серебряный', color: 'text-gray-300', bgColor: 'bg-gray-500/30', borderColor: 'border-gray-400', duration: 4 * 60 * 60 * 1000 },
+  SILVER: { icon: '🥈', name: 'Silver', nameRu: 'Серебряный', color: 'text-gray-300', bgColor: 'bg-gray-500/30', borderColor: 'border-gray-400', duration: 4 * 60 * 60 * 1000 },
   GOLD: { icon: '🟨', name: 'Gold', nameRu: 'Золотой', color: 'text-yellow-400', bgColor: 'bg-yellow-600/30', borderColor: 'border-yellow-500', duration: 8 * 60 * 60 * 1000 },
 };
 
@@ -518,7 +522,7 @@ export default function TreasuryTab() {
             <div className="flex gap-1 flex-wrap text-[10px]">
               <span className="text-amber-600">{lootStats.totalChests.WOODEN}🪵</span>
               <span className="text-orange-400">{lootStats.totalChests.BRONZE}🟫</span>
-              <span className="text-gray-300">{lootStats.totalChests.SILVER}🪙</span>
+              <span className="text-gray-300">{lootStats.totalChests.SILVER}🥈</span>
               <span className="text-yellow-400">{lootStats.totalChests.GOLD}🟨</span>
             </div>
           </div>
@@ -590,7 +594,7 @@ export default function TreasuryTab() {
                     )}
                     {reward.chestsSilver > 0 && (
                       <span className="bg-gray-600/40 px-2 py-0.5 rounded text-gray-300">
-                        {reward.chestsSilver}🪙
+                        {reward.chestsSilver}🥈
                       </span>
                     )}
                     {reward.chestsGold > 0 && (
