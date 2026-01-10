@@ -1877,10 +1877,10 @@ app.prepare().then(async () => {
     console.log(`[Startup] Boss loaded from DB: ${bossState.name} HP=${bossState.currentHp}/${bossState.maxHp}`);
   }
 
-  // Periodic boss state save (every 3 seconds - frequent saves prevent data loss on deploy)
+  // Periodic boss state save (every 1 second - frequent saves prevent data loss on deploy)
   setInterval(() => {
     saveBossState(prisma);
-  }, 3000);
+  }, 1000);
 
   const server = createServer(async (req, res) => {
     try {
