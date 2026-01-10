@@ -525,6 +525,15 @@ export default function PhaserGame() {
       setPlayerState(p => ({ ...p, ether: data.ether }));
     });
 
+    // Shop purchase success - sync ether, gold, potions
+    socket.on('shop:success', (data: { gold?: number; ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+      setPlayerState(p => ({
+        ...p,
+        gold: data.gold ?? p.gold,
+        ether: data.ether ?? p.ether,
+      }));
+    });
+
     // Exhaustion
     socket.on('hero:exhausted', (data: { until: number; duration: number }) => {
       setPlayerState(p => ({ ...p, exhaustedUntil: data.until, stamina: 0 }));
@@ -705,6 +714,7 @@ export default function PhaserGame() {
       socket.off('activity:status');
       socket.off('autoAttack:toggle:ack');
       socket.off('ether:toggle:ack');
+      socket.off('shop:success');
       socket.off('meditation:collected');
       socket.off('ether:craft:success');
       socket.off('level:up');

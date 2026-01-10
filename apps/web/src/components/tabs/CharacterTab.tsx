@@ -1275,6 +1275,13 @@ export default function CharacterTab() {
       }));
     };
 
+    // Sync ether when purchased from shop
+    const handleShopSuccess = (data: { ether?: number }) => {
+      if (data.ether !== undefined) {
+        setConsumables(prev => ({ ...prev, ether: data.ether! }));
+      }
+    };
+
     // Handle level up (boss kill rewards)
     const handleLevelUp = (data: { level: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
       setHeroState(prev => {
@@ -1371,6 +1378,7 @@ export default function CharacterTab() {
     socket.on('tap:result', handleTapResult);
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('player:state', handlePlayerState);
+    socket.on('shop:success', handleShopSuccess);
     socket.on('level:up', handleLevelUp);
     socket.on('skill:upgrade-success', handleSkillUpgrade);
     socket.on('skill:tier-success', handleTierActivate);
@@ -1385,6 +1393,7 @@ export default function CharacterTab() {
       socket.off('tap:result', handleTapResult);
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('player:state', handlePlayerState);
+      socket.off('shop:success', handleShopSuccess);
       socket.off('level:up', handleLevelUp);
       socket.off('skill:upgrade-success', handleSkillUpgrade);
       socket.off('skill:tier-success', handleTierActivate);
