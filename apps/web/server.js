@@ -5918,21 +5918,26 @@ app.prepare().then(async () => {
 
           const keyField = `key${keyType.charAt(0).toUpperCase() + keyType.slice(1)}`;
           player.gold -= cost;
-          player[keyField] = (player[keyField] || 0) + 1;
 
-          await prisma.user.update({
+          // FIX: Используем increment вместо абсолютного значения
+          // чтобы не перезаписать существующие ключи
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
               gold: BigInt(player.gold),
-              [keyField]: player[keyField],
+              [keyField]: { increment: 1 },
             },
+            select: { keyWooden: true, keyBronze: true, keySilver: true, keyGold: true },
           });
 
           console.log(`[Shop] ${player.telegramId} bought ${keyType} key for ${cost} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            [keyField]: player[keyField],
+            keyWooden: updatedUser.keyWooden,
+            keyBronze: updatedUser.keyBronze,
+            keySilver: updatedUser.keySilver,
+            keyGold: updatedUser.keyGold,
           });
         } else if (data.type === 'enchant') {
           // Buy enchant charge
