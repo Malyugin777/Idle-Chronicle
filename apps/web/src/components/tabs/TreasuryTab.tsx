@@ -66,6 +66,7 @@ interface PendingReward {
   chestsBronze: number;
   chestsSilver: number;
   chestsGold: number;
+  lotteryTickets: number;
   badgeId: string | null;
   badgeDuration: number | null;
   createdAt: number;
@@ -588,6 +589,11 @@ export default function TreasuryTab() {
                         {reward.badgeId === 'slayer'
                           ? (lang === 'ru' ? '⚔️ Убийца' : '⚔️ Slayer')
                           : (lang === 'ru' ? '🏆 Элита' : '🏆 Elite')} ({reward.badgeDuration}{lang === 'ru' ? 'д' : 'd'})
+                      </span>
+                    )}
+                    {reward.lotteryTickets > 0 && (
+                      <span className="bg-yellow-500/30 px-2 py-0.5 rounded text-yellow-300">
+                        {reward.lotteryTickets}🎟️
                       </span>
                     )}
                   </div>

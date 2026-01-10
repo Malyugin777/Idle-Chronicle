@@ -194,6 +194,7 @@ interface PlayerStats {
   attackSpeed: number;
   gold: number;
   ancientCoin?: number;
+  lotteryTickets?: number;
   // Consumables
   ether?: number;
   etherDust?: number;
@@ -1477,6 +1478,9 @@ export default function CharacterTab() {
                 </span>
                 <span className="text-sm text-purple-400 font-bold flex items-center gap-1">
                   <Gem size={14} /> {stats.ancientCoin || 0}
+                </span>
+                <span className="text-sm text-yellow-300 font-bold flex items-center gap-1">
+                  🎟️ {stats.lotteryTickets || 0}
                 </span>
               </div>
             </div>

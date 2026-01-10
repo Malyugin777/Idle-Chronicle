@@ -24,6 +24,7 @@ interface TaskCardProps {
 function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Language }) {
   const getRewardText = (reward: TaskReward): string => {
     const labels: Record<string, { ru: string; en: string }> = {
+      gold: { ru: 'Золото', en: 'Gold' },
       ether: { ru: 'Эфир', en: 'Ether' },
       woodChest: { ru: 'Дерев. сундук', en: 'Wood Chest' },
       crystals: { ru: 'Кристаллы', en: 'Crystals' },
@@ -33,11 +34,16 @@ function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Languag
       chestBooster: { ru: 'Ускоритель', en: 'Booster' },
     };
     const label = labels[reward.type]?.[lang] || reward.type;
+    // Format gold amount with K suffix
+    if (reward.type === 'gold' && reward.amount >= 1000) {
+      return `${(reward.amount / 1000).toFixed(0)}K`;
+    }
     return reward.amount > 1 ? `${label} x${reward.amount}` : label;
   };
 
   const getRewardIcon = (type: string): string => {
     const icons: Record<string, string> = {
+      gold: '🪙',
       ether: '✨',
       woodChest: '📦',
       crystals: '💎',

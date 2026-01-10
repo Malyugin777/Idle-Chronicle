@@ -1372,59 +1372,69 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
   // C) Top-3 special rewards with badges
   // ═══════════════════════════════════════════════════════════
 
-  // Helper: Calculate chest rewards based on rank (per TZ)
+  // Helper: Calculate chest + lottery ticket rewards based on rank (per TZ)
+  // Participation: 2 Wooden + 1 Ticket for all eligible
+  // Ranking: additional chests + tickets for top players
   const getChestRewardsByRank = (rank, isEligible) => {
-    if (!isEligible) return { wooden: 0, bronze: 0, silver: 0, gold: 0, crystals: 0, badge: null, badgeDays: null };
+    if (!isEligible) return { wooden: 0, bronze: 0, silver: 0, gold: 0, crystals: 0, lotteryTickets: 0, badge: null, badgeDays: null };
 
-    let wooden = 2; // Base reward for all eligible players
+    let wooden = 2;        // Base participation reward
     let bronze = 0;
     let silver = 0;
     let gold = 0;
+    let lotteryTickets = 1; // Base 1 ticket for all eligible
     let badge = null;
     let badgeDays = null;
 
     if (rank === 1) {
-      // #1: 1 Gold + 2 Silver + 2 Bronze + "Slayer" badge (7 days)
+      // #1: 1 Gold + 2 Silver + 2 Bronze + 10 extra tickets + "Slayer" badge (7 days)
       gold += 1;
       silver += 2;
       bronze += 2;
+      lotteryTickets += 10;
       badge = 'slayer';
       badgeDays = 7;
     } else if (rank === 2) {
-      // #2: 1 Gold + 1 Silver + 2 Bronze + "Elite" badge (7 days)
+      // #2: 1 Gold + 1 Silver + 2 Bronze + 6 extra tickets + "Elite" badge (7 days)
       gold += 1;
       silver += 1;
       bronze += 2;
+      lotteryTickets += 6;
       badge = 'elite';
       badgeDays = 7;
     } else if (rank === 3) {
-      // #3: 1 Gold + 1 Silver + 1 Bronze + "Elite" badge (3 days)
+      // #3: 1 Gold + 1 Silver + 1 Bronze + 4 extra tickets + "Elite" badge (3 days)
       gold += 1;
       silver += 1;
       bronze += 1;
+      lotteryTickets += 4;
       badge = 'elite';
       badgeDays = 3;
     } else if (rank >= 4 && rank <= 10) {
-      // Top 4-10: 1 Silver + 1 Bronze
+      // Top 4-10: 1 Silver + 1 Bronze + 2 extra tickets
       silver += 1;
       bronze += 1;
+      lotteryTickets += 2;
     } else if (rank >= 11 && rank <= 25) {
-      // Top 11-25: 1 Silver
+      // Top 11-25: 1 Silver + 1 extra ticket
       silver += 1;
+      lotteryTickets += 1;
     } else if (rank >= 26 && rank <= 50) {
-      // Top 26-50: 1 Bronze + 1 Wooden
+      // Top 26-50: 1 Bronze + 1 Wooden + 1 extra ticket
       bronze += 1;
       wooden += 1;
+      lotteryTickets += 1;
     } else if (rank >= 51 && rank <= 100) {
-      // Top 51-100: 1 Bronze
+      // Top 51-100: 1 Bronze + 1 extra ticket
       bronze += 1;
+      lotteryTickets += 1;
     }
-    // 101+: only base reward (2 wooden)
+    // 101+: only base reward (2 wooden + 1 ticket)
 
     // Crystal bonus: Gold +10, Silver +5
     const crystals = (gold * 10) + (silver * 5);
 
-    return { wooden, bronze, silver, gold, crystals, badge, badgeDays };
+    return { wooden, bronze, silver, gold, crystals, lotteryTickets, badge, badgeDays };
   };
 
   // Distribute rewards to all participants
@@ -1442,10 +1452,11 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
     const isFinalBlow = entry.odamage === finalBlowPlayer.odamage;
     const isTopDamage = entry.odamage === topDamagePlayer?.odamage;
 
-    // Eligibility: любой с >0.001% урона получает награду (убрано условие 30 сек активности)
-    const isEligibleForReward = damagePercent > 0.00001; // 0.001%
+    // Eligibility: entry.isEligible already set by activity tracking (60s OR 20 actions)
+    // Anti-AFK: новичок с маленьким уроном но активный - eligible
+    const isEligibleForReward = entry.isEligible;
 
-    // Calculate chest rewards
+    // Calculate chest rewards (includes lottery tickets)
     const chestRewards = getChestRewardsByRank(rank, isEligibleForReward);
 
     rewards.push({
@@ -1548,9 +1559,11 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
       }
 
       // Create PendingReward for eligible players (TZ Этап 2)
+      // Includes: chests + lottery tickets + crystals + badges
       if (entry.isEligible) {
         const totalChests = chestRewards.wooden + chestRewards.bronze + chestRewards.silver + chestRewards.gold;
-        if (totalChests > 0 || chestRewards.badge) {
+        const hasReward = totalChests > 0 || chestRewards.lotteryTickets > 0 || chestRewards.badge;
+        if (hasReward) {
           try {
             await prisma.pendingReward.create({
               data: {
@@ -1565,11 +1578,12 @@ async function handleBossKill(io, prisma, killerPlayer, killerSocketId) {
                 chestsSilver: chestRewards.silver,
                 chestsGold: chestRewards.gold,
                 crystals: chestRewards.crystals,
+                lotteryTickets: chestRewards.lotteryTickets,
                 badgeId: chestRewards.badge,
                 badgeDuration: chestRewards.badgeDays,
               },
             });
-            console.log(`[Reward] Created pending reward for ${entry.visitorName} (rank ${rank}): ${chestRewards.wooden}W ${chestRewards.bronze}B ${chestRewards.silver}S ${chestRewards.gold}G +${chestRewards.crystals}💎`);
+            console.log(`[Reward] Created pending reward for ${entry.visitorName} (rank ${rank}): ${chestRewards.wooden}W ${chestRewards.bronze}B ${chestRewards.silver}S ${chestRewards.gold}G +${chestRewards.lotteryTickets}🎟️ +${chestRewards.crystals}💎`);
           } catch (e) {
             // Might be duplicate - that's OK
             if (!e.message.includes('Unique constraint')) {
@@ -3299,6 +3313,8 @@ app.prepare().then(async () => {
             keyBronze: user.keyBronze ?? 0,
             keySilver: user.keySilver ?? 0,
             keyGold: user.keyGold ?? 0,
+            // Lottery Tickets (from DB)
+            lotteryTickets: user.lotteryTickets ?? 0,
             // Session stats (from memory, not DB)
             sessionDamage: player.sessionDamage || 0,
           });
@@ -3335,10 +3351,12 @@ app.prepare().then(async () => {
       player.activityTime += timeSinceLastPing;
       player.lastActivityPing = now;
 
-      // Check if eligible (30 seconds = 30000ms)
-      if (!player.isEligible && player.activityTime >= 30000) {
+      // Check if eligible: 60 seconds OR 20 actions (taps + skills)
+      // Anti-AFK: новичок с маленьким уроном но активный - eligible
+      const actions = player.sessionClicks || 0;
+      if (!player.isEligible && (player.activityTime >= 60000 || actions >= 20)) {
         player.isEligible = true;
-        console.log(`[Activity] ${player.odamageN} is now eligible for boss rewards (${Math.floor(player.activityTime / 1000)}s)`);
+        console.log(`[Activity] ${player.odamageN} is now eligible (time: ${Math.floor(player.activityTime / 1000)}s, actions: ${actions})`);
       }
 
       // Send back activity status
@@ -3402,6 +3420,7 @@ app.prepare().then(async () => {
             chestsBronze: r.chestsBronze,
             chestsSilver: r.chestsSilver,
             chestsGold: r.chestsGold,
+            lotteryTickets: r.lotteryTickets || 0,
             crystals: r.crystals || 0,
             badgeId: r.badgeId,
             badgeDuration: r.badgeDuration,
@@ -3518,6 +3537,17 @@ app.prepare().then(async () => {
           player.ancientCoin = (player.ancientCoin || 0) + crystalsAwarded;
         }
 
+        // Award lottery tickets (all at once, no slot limits)
+        let ticketsAwarded = 0;
+        if (reward.lotteryTickets > 0) {
+          ticketsAwarded = reward.lotteryTickets;
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { lotteryTickets: { increment: ticketsAwarded } },
+          });
+          player.lotteryTickets = (player.lotteryTickets || 0) + ticketsAwarded;
+        }
+
         // Create badge if awarded (on first claim)
         let badgeAwarded = null;
         if (reward.badgeId && reward.badgeDuration) {
@@ -3548,6 +3578,7 @@ app.prepare().then(async () => {
             chestsSilver: 0,
             chestsGold: 0,
             crystals: 0,
+            lotteryTickets: 0,
             badgeId: null,
             badgeDuration: null,
             claimed: true,
@@ -3560,13 +3591,14 @@ app.prepare().then(async () => {
           console.log(`[Rewards] ${player.odamageN} discarded ${totalRemaining} chests (${remainingWooden}W ${remainingBronze}B ${remainingSilver}S ${remainingGold}G)`);
         }
 
-        console.log(`[Rewards] ${player.odamageN} claimed ${totalToTake} chests, ${totalRemaining} remaining, +${crystalsAwarded}💎`);
+        console.log(`[Rewards] ${player.odamageN} claimed ${totalToTake} chests +${ticketsAwarded}🎟️ +${crystalsAwarded}💎`);
 
         socket.emit('rewards:claimed', {
           rewardId,
           chestsCreated: totalToTake,
           chestsDiscarded: totalRemaining,
           crystalsAwarded,
+          ticketsAwarded,
           badgeAwarded,
           fullyClaimed: true, // Always fully claimed now (remaining discarded)
         });
@@ -3908,6 +3940,7 @@ app.prepare().then(async () => {
           // Currency
           gold: Number(user.gold),
           ancientCoin: user.ancientCoin || 0,
+          lotteryTickets: user.lotteryTickets ?? 0,
           // Mana (из памяти, не из БД — избегаем рассинхронизации)
           mana: player.mana,
           maxMana: player.maxMana,
@@ -5886,44 +5919,38 @@ app.prepare().then(async () => {
             },
           });
         } else if (data.type === 'key') {
-          // Buy chest key
-          const KEY_COSTS = {
-            wooden: 500,
-            bronze: 1000,
-            silver: 2000,
-            gold: 4000,
-          };
+          // Buy chest key - 999 crystals for ANY key type
+          const KEY_COST_CRYSTALS = 999;
 
           const keyType = data.keyType;
-          const cost = KEY_COSTS[keyType];
-          if (!cost) {
+          const validKeyTypes = ['wooden', 'bronze', 'silver', 'gold'];
+          if (!validKeyTypes.includes(keyType)) {
             socket.emit('shop:error', { message: 'Invalid key type' });
             return;
           }
 
-          if (player.gold < cost) {
-            socket.emit('shop:error', { message: 'Not enough gold' });
+          if ((player.ancientCoin || 0) < KEY_COST_CRYSTALS) {
+            socket.emit('shop:error', { message: 'Not enough crystals' });
             return;
           }
 
           const keyField = `key${keyType.charAt(0).toUpperCase() + keyType.slice(1)}`;
-          player.gold -= cost;
+          player.ancientCoin = (player.ancientCoin || 0) - KEY_COST_CRYSTALS;
 
-          // FIX: Используем increment вместо абсолютного значения
-          // чтобы не перезаписать существующие ключи
+          // Используем increment для ключей, decrement для кристаллов
           const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              gold: BigInt(player.gold),
+              ancientCoin: { decrement: KEY_COST_CRYSTALS },
               [keyField]: { increment: 1 },
             },
-            select: { keyWooden: true, keyBronze: true, keySilver: true, keyGold: true },
+            select: { keyWooden: true, keyBronze: true, keySilver: true, keyGold: true, ancientCoin: true },
           });
 
-          console.log(`[Shop] ${player.telegramId} bought ${keyType} key for ${cost} gold`);
+          console.log(`[Shop] ${player.telegramId} bought ${keyType} key for ${KEY_COST_CRYSTALS} crystals`);
 
           socket.emit('shop:success', {
-            gold: player.gold,
+            crystals: updatedUser.ancientCoin,
             keyWooden: updatedUser.keyWooden,
             keyBronze: updatedUser.keyBronze,
             keySilver: updatedUser.keySilver,
@@ -6195,6 +6222,10 @@ app.prepare().then(async () => {
 
         for (const reward of rewards) {
           switch (reward.type) {
+            case 'gold':
+              // Gold from tasks - основной источник голды
+              updateData.gold = { increment: BigInt(reward.amount) };
+              break;
             case 'ether':
             case 'etherPack':
               updateData.ether = { increment: reward.amount };

@@ -115,6 +115,9 @@ model User {
   keySilver       Int      @default(0)
   keyGold         Int      @default(0)
 
+  // Lottery Tickets (Wheel of Fortune)
+  lotteryTickets  Int      @default(0)
+
   // ═══ ACTIVE SKILLS SYSTEM v1.4 ═══
   // Legacy skill levels (kept for backward compat, will migrate to mastery)
   skillFireball   Int      @default(1)   // Unlocked from start
@@ -201,6 +204,9 @@ model PendingReward {
 
   // Crystal bonus (Gold +10, Silver +5)
   crystals      Int      @default(0)
+
+  // Lottery tickets (Wheel of Fortune)
+  lotteryTickets Int     @default(0)
 
   // Badge reward (if top-3)
   badgeId       String?  // "slayer" or "elite"
