@@ -40,7 +40,8 @@
       "Bash(npm run lint)",
       "Bash(ls:*)",
       "Bash(npx next build)",
-      "Bash(timeout 5 node:*)"
+      "Bash(timeout 5 node:*)",
+      "Bash(npx prisma validate:*)"
     ]
   }
 }
