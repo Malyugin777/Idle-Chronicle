@@ -170,6 +170,10 @@ model User {
   referralValid   Boolean  @default(false)  // Has this user met minAction (1k dmg or 50 taps)?
   totalInvites    Int      @default(0)      // How many valid invites this user made
 
+  // 14-Day Check-In Calendar (streak ladder)
+  checkInDay      Int      @default(1)      // Current streak day (1-14)
+  checkInLastDate String?                   // Last claimed date (YYYY-MM-DD)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -665,6 +669,15 @@ model DailyTaskProgress {
 
   // Claimed flags (JSON object: {taskId: true})
   claimedTasks    Json    @default("{}")
+
+  // Completed tasks (JSON object: {taskId: true}) - for AP tracking
+  completedTasks  Json    @default("{}")
+
+  // Activity Points (AP) System
+  ap              Int     @default(0)
+  apClaimed30     Boolean @default(false)
+  apClaimed60     Boolean @default(false)
+  apClaimed100    Boolean @default(false)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

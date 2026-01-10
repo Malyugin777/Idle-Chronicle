@@ -850,6 +850,57 @@ const WEEKLY_TASKS = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────
+// ACTIVITY POINTS (AP) — awarded when tasks are completed
+// Base: 80 AP, Grind: 50 AP, Invite: 30 AP = Max 160 AP
+// ─────────────────────────────────────────────────────────
+const AP_VALUES = {
+  // Base tasks (80 AP total)
+  D1_login: 10,
+  D2_bossDamage: 20,
+  D3_taps: 15,
+  D4_skills: 15,
+  D5_chest: 20,
+  // Grind tasks (50 AP for active pair)
+  G1_bossGrind: 30,   // Pair 0 - harder
+  G5_enchant: 20,     // Pair 0 - easier
+  G2_tapGrind: 20,    // Pair 1 - easier
+  G4_openChests: 30,  // Pair 1 - harder
+  G3_skillGrind: 20,  // Pair 2 - easier
+  G6_dismantle: 30,   // Pair 2 - harder
+  // Invite task (30 AP)
+  I1_invite: 30,
+};
+
+// AP Milestone rewards
+const AP_MILESTONES = {
+  30: { type: 'gold', amount: 5000 },
+  60: { type: 'tickets', amount: 2 },
+  100: { type: 'bronzeChest', amount: 1 },
+};
+
+// ─────────────────────────────────────────────────────────
+// 14-DAY CHECK-IN CALENDAR (streak ladder)
+// ─────────────────────────────────────────────────────────
+const CHECK_IN_REWARDS = [
+  // Day 1-7
+  { day: 1, type: 'crystals', amount: 5, icon: '💎' },
+  { day: 2, type: 'tickets', amount: 1, icon: '🎟️' },
+  { day: 3, type: 'woodenChest', amount: 2, icon: '🪵' },
+  { day: 4, type: 'protectionCharges', amount: 1, icon: '🛡️' },
+  { day: 5, type: 'crystals', amount: 10, icon: '💎' },
+  { day: 6, type: 'enchantCharges', amount: 2, icon: '⚡' },
+  { day: 7, type: 'bronzeChest', amount: 1, icon: '🟫' },
+  // Day 8-14
+  { day: 8, type: 'crystals', amount: 20, icon: '💎' },
+  { day: 9, type: 'woodenChest', amount: 4, icon: '🪵' },
+  { day: 10, type: 'tickets', amount: 5, icon: '🎟️' },
+  { day: 11, type: 'protectionCharges', amount: 2, icon: '🛡️' },
+  { day: 12, type: 'silverChest', amount: 1, icon: '🪙' },
+  { day: 13, type: 'crystals', amount: 30, icon: '💎' },
+  { day: 14, type: 'goldChest', amount: 1, icon: '🟨' },
+];
+
 // Helper: Get today's active grind tasks (2 tasks based on rotation)
 function getTodaysGrindTasks() {
   const pairIndex = getGrindRotationIndex();
@@ -878,9 +929,11 @@ async function getOrCreateDailyProgress(prisma, odamage, dateKey = getDateKey())
         dateKey,
         loginDone: true, // Auto-mark login on first access of the day
         claimedTasks: {},
+        completedTasks: {},
+        ap: 10, // D1_login is auto-completed, so start with 10 AP
       },
     });
-    console.log(`[Tasks] Created daily progress for ${odamage} on ${dateKey}`);
+    console.log(`[Tasks] Created daily progress for ${odamage} on ${dateKey} (login AP: +10)`);
   }
 
   return progress;
@@ -940,6 +993,13 @@ async function incrementDailyCounter(prisma, odamage, counterName, amount = 1) {
     });
   }
 
+  // Check and award AP for newly completed tasks
+  try {
+    await checkAndAwardAP(prisma, odamage, updatedDaily);
+  } catch (e) {
+    console.error('[AP] Error awarding AP:', e.message);
+  }
+
   return updatedDaily;
 }
 
@@ -958,6 +1018,86 @@ function countChestRewardsInTask(task) {
     }
   }
   return count;
+}
+
+// Helper: Check task completion and award AP (called after counter updates)
+async function checkAndAwardAP(prisma, odamage, dailyProgress) {
+  const dateKey = getDateKey();
+  const completedTasks = dailyProgress.completedTasks || {};
+  const todaysTasks = getAllTodaysDailyTasks();
+
+  let apGained = 0;
+  const newlyCompleted = [];
+
+  for (const task of todaysTasks) {
+    // Skip if already awarded AP for this task
+    if (completedTasks[task.id]) continue;
+
+    // Check if task is now completed
+    const { type, target } = task.condition;
+    let progress = 0;
+
+    switch (type) {
+      case 'login':
+        progress = dailyProgress.loginDone ? 1 : 0;
+        break;
+      case 'taps':
+        progress = dailyProgress.taps;
+        break;
+      case 'bossDamage':
+        progress = dailyProgress.bossDamage;
+        break;
+      case 'skillUses':
+        progress = dailyProgress.skillUses;
+        break;
+      case 'chestsOpened':
+        progress = dailyProgress.chestsOpened;
+        break;
+      case 'enchantAttempts':
+        progress = dailyProgress.enchantAttempts;
+        break;
+      case 'dismantleCount':
+        progress = dailyProgress.dismantleCount;
+        break;
+      // inviteValid is handled separately (not in daily counters)
+    }
+
+    if (progress >= target) {
+      const apValue = AP_VALUES[task.id] || 0;
+      if (apValue > 0) {
+        apGained += apValue;
+        newlyCompleted.push(task.id);
+        console.log(`[AP] ${odamage} completed ${task.id} -> +${apValue} AP`);
+      }
+    }
+  }
+
+  // Update if any AP was gained
+  if (apGained > 0 || newlyCompleted.length > 0) {
+    const newCompletedTasks = { ...completedTasks };
+    for (const taskId of newlyCompleted) {
+      newCompletedTasks[taskId] = true;
+    }
+
+    await prisma.dailyTaskProgress.update({
+      where: { odamage_dateKey: { odamage, dateKey } },
+      data: {
+        ap: { increment: apGained },
+        completedTasks: newCompletedTasks,
+      },
+    });
+
+    return apGained;
+  }
+
+  return 0;
+}
+
+// Helper: Get yesterday's date key
+function getYesterdayDateKey() {
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  return yesterday.toISOString().split('T')[0];
 }
 
 // Starter equipment set (Novice Set)
@@ -7102,6 +7242,298 @@ app.prepare().then(async () => {
       } catch (err) {
         console.error('[Tasks] Claim error:', err.message, err.stack);
         socket.emit('tasks:error', { message: 'Failed to claim rewards' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // ACTIVITY POINTS (AP) — milestone rewards
+    // ═══════════════════════════════════════════════════════════
+
+    // AP:STATUS - Get current AP and milestone status
+    socket.on('ap:status', async () => {
+      if (!player.odamage) {
+        socket.emit('ap:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      try {
+        const dateKey = getDateKey();
+        const dailyProgress = await getOrCreateDailyProgress(prisma, player.odamage, dateKey);
+
+        socket.emit('ap:data', {
+          ap: dailyProgress.ap,
+          milestones: {
+            30: { required: 30, reward: AP_MILESTONES[30], claimed: dailyProgress.apClaimed30 },
+            60: { required: 60, reward: AP_MILESTONES[60], claimed: dailyProgress.apClaimed60 },
+            100: { required: 100, reward: AP_MILESTONES[100], claimed: dailyProgress.apClaimed100 },
+          },
+        });
+      } catch (err) {
+        console.error('[AP] Status error:', err.message);
+        socket.emit('ap:error', { message: 'Failed to get AP status' });
+      }
+    });
+
+    // AP:CLAIM - Claim a milestone reward
+    socket.on('ap:claim', async (data) => {
+      if (!player.odamage) {
+        socket.emit('ap:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { threshold } = data;
+      if (![30, 60, 100].includes(threshold)) {
+        socket.emit('ap:error', { message: 'Invalid threshold' });
+        return;
+      }
+
+      try {
+        const dateKey = getDateKey();
+        const dailyProgress = await getOrCreateDailyProgress(prisma, player.odamage, dateKey);
+
+        // Check if enough AP
+        if (dailyProgress.ap < threshold) {
+          socket.emit('ap:error', { message: `Need ${threshold} AP (have ${dailyProgress.ap})` });
+          return;
+        }
+
+        // Check if already claimed
+        const claimedField = `apClaimed${threshold}`;
+        if (dailyProgress[claimedField]) {
+          socket.emit('ap:error', { message: 'Already claimed' });
+          return;
+        }
+
+        const reward = AP_MILESTONES[threshold];
+
+        // For chest rewards, check slots
+        if (reward.type === 'bronzeChest') {
+          const user = await prisma.user.findUnique({
+            where: { id: player.odamage },
+            select: { chestSlots: true },
+          });
+          const currentChests = await prisma.chest.count({ where: { userId: player.odamage } });
+          const freeSlots = (user?.chestSlots || 5) - currentChests;
+
+          if (freeSlots < reward.amount) {
+            socket.emit('ap:error', { message: 'No free chest slots' });
+            return;
+          }
+
+          // Create chest
+          await prisma.chest.create({
+            data: {
+              userId: player.odamage,
+              chestType: 'BRONZE',
+              openingDuration: 30 * 60 * 1000, // 30 min
+            },
+          });
+        } else if (reward.type === 'gold') {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { gold: { increment: BigInt(reward.amount) } },
+          });
+        } else if (reward.type === 'tickets') {
+          await prisma.user.update({
+            where: { id: player.odamage },
+            data: { lotteryTickets: { increment: reward.amount } },
+          });
+        }
+
+        // Mark as claimed
+        const updateData = {};
+        updateData[claimedField] = true;
+        await prisma.dailyTaskProgress.update({
+          where: { odamage_dateKey: { odamage: player.odamage, dateKey } },
+          data: updateData,
+        });
+
+        console.log(`[AP] ${player.odamage} claimed ${threshold} AP milestone`);
+        socket.emit('ap:claimed', { threshold });
+
+        // Refresh AP status
+        socket.emit('ap:status');
+      } catch (err) {
+        console.error('[AP] Claim error:', err.message);
+        socket.emit('ap:error', { message: 'Failed to claim AP reward' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // CHECK-IN CALENDAR (14-day streak)
+    // ═══════════════════════════════════════════════════════════
+
+    // CHECKIN:STATUS - Get current check-in status
+    socket.on('checkin:status', async () => {
+      if (!player.odamage) {
+        socket.emit('checkin:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { checkInDay: true, checkInLastDate: true, chestSlots: true },
+        });
+
+        const todayKey = getDateKey();
+        const yesterdayKey = getYesterdayDateKey();
+        const lastDate = user?.checkInLastDate || null;
+        const currentDay = user?.checkInDay || 1;
+
+        // Determine canClaimToday
+        const canClaimToday = lastDate !== todayKey;
+
+        // Determine streak status
+        let streakBroken = false;
+        if (lastDate && lastDate !== todayKey && lastDate !== yesterdayKey) {
+          // Missed a day - streak will reset on next claim
+          streakBroken = true;
+        }
+
+        // Count current chests for slot info
+        const currentChests = await prisma.chest.count({ where: { userId: player.odamage } });
+        const freeSlots = (user?.chestSlots || 5) - currentChests;
+
+        socket.emit('checkin:data', {
+          currentDay,
+          lastDate,
+          canClaimToday,
+          streakBroken,
+          freeSlots,
+          rewards: CHECK_IN_REWARDS,
+        });
+      } catch (err) {
+        console.error('[CheckIn] Status error:', err.message);
+        socket.emit('checkin:error', { message: 'Failed to get check-in status' });
+      }
+    });
+
+    // CHECKIN:CLAIM - Claim today's check-in reward
+    socket.on('checkin:claim', async () => {
+      if (!player.odamage) {
+        socket.emit('checkin:error', { message: 'Not authenticated' });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { checkInDay: true, checkInLastDate: true, chestSlots: true },
+        });
+
+        const todayKey = getDateKey();
+        const yesterdayKey = getYesterdayDateKey();
+        const lastDate = user?.checkInLastDate || null;
+
+        // Already claimed today
+        if (lastDate === todayKey) {
+          socket.emit('checkin:error', { message: 'Already claimed today' });
+          return;
+        }
+
+        // Calculate new day
+        let newDay = user?.checkInDay || 1;
+
+        if (lastDate === yesterdayKey) {
+          // Consecutive day - increment (wrap at 14)
+          newDay = (newDay % 14) + 1;
+        } else if (lastDate && lastDate !== todayKey) {
+          // Missed a day - reset to 1
+          newDay = 1;
+          console.log(`[CheckIn] ${player.odamage} streak reset (last: ${lastDate})`);
+        }
+        // If lastDate is null, this is first claim, stay at day 1
+
+        // Get reward for the day
+        const reward = CHECK_IN_REWARDS.find(r => r.day === newDay);
+        if (!reward) {
+          socket.emit('checkin:error', { message: 'Reward not found' });
+          return;
+        }
+
+        // Check chest slots if reward is a chest
+        const chestTypes = ['woodenChest', 'bronzeChest', 'silverChest', 'goldChest'];
+        if (chestTypes.includes(reward.type)) {
+          const currentChests = await prisma.chest.count({ where: { userId: player.odamage } });
+          const freeSlots = (user?.chestSlots || 5) - currentChests;
+
+          if (freeSlots < reward.amount) {
+            socket.emit('checkin:error', { message: `Need ${reward.amount} free chest slot(s)` });
+            return;
+          }
+
+          // Create chests
+          const chestTypeMap = {
+            woodenChest: 'WOODEN',
+            bronzeChest: 'BRONZE',
+            silverChest: 'SILVER',
+            goldChest: 'GOLD',
+          };
+          const durationMap = {
+            WOODEN: 5 * 60 * 1000,
+            BRONZE: 30 * 60 * 1000,
+            SILVER: 4 * 60 * 60 * 1000,
+            GOLD: 8 * 60 * 60 * 1000,
+          };
+
+          const chestType = chestTypeMap[reward.type];
+          for (let i = 0; i < reward.amount; i++) {
+            await prisma.chest.create({
+              data: {
+                userId: player.odamage,
+                chestType: chestType,
+                openingDuration: durationMap[chestType],
+              },
+            });
+          }
+        } else {
+          // Non-chest rewards
+          const userUpdate = {};
+          switch (reward.type) {
+            case 'crystals':
+              userUpdate.ancientCoin = { increment: reward.amount };
+              break;
+            case 'tickets':
+              userUpdate.lotteryTickets = { increment: reward.amount };
+              break;
+            case 'enchantCharges':
+              userUpdate.enchantCharges = { increment: reward.amount };
+              break;
+            case 'protectionCharges':
+              userUpdate.protectionCharges = { increment: reward.amount };
+              break;
+          }
+
+          if (Object.keys(userUpdate).length > 0) {
+            await prisma.user.update({
+              where: { id: player.odamage },
+              data: userUpdate,
+            });
+          }
+        }
+
+        // Update check-in progress
+        await prisma.user.update({
+          where: { id: player.odamage },
+          data: {
+            checkInDay: newDay,
+            checkInLastDate: todayKey,
+          },
+        });
+
+        console.log(`[CheckIn] ${player.odamage} claimed Day ${newDay}: ${reward.type} x${reward.amount}`);
+
+        socket.emit('checkin:claimed', {
+          day: newDay,
+          reward,
+        });
+
+        // Refresh status
+        socket.emit('checkin:status');
+      } catch (err) {
+        console.error('[CheckIn] Claim error:', err.message);
+        socket.emit('checkin:error', { message: 'Failed to claim check-in reward' });
       }
     });
 
