@@ -1621,8 +1621,8 @@
           </div>
           <p>Completely removes a user and all their data (equipment, chests, tasks, etc.)</p>
           <div class="form-group">
-            <label>Telegram ID</label>
-            <input type="text" id="deleteUserTelegramId" placeholder="Enter Telegram ID">
+            <label>User ID (odamage) или Telegram ID</label>
+            <input type="text" id="deleteUserId" placeholder="cmk... (odamage) или 123456789 (telegram)">
           </div>
           <div class="form-group">
             <label>Password (1993)</label>
@@ -2447,26 +2447,29 @@
 
     // Delete single user
     async function deleteSingleUser() {
-      const telegramId = document.getElementById('deleteUserTelegramId').value.trim();
+      const userId = document.getElementById('deleteUserId').value.trim();
       const password = document.getElementById('deleteUserPassword').value;
       const resultDiv = document.getElementById('deleteUserResult');
 
-      if (!telegramId) {
-        alert('Enter Telegram ID');
+      if (!userId) {
+        alert('Enter User ID or Telegram ID');
         return;
       }
       if (password !== '1993') {
         alert('Invalid password');
         return;
       }
-      if (!confirm(`Delete user with Telegram ID: ${telegramId}?`)) return;
+      if (!confirm(`Delete user: ${userId}?`)) return;
       if (!confirm('This will delete ALL user data. Continue?')) return;
 
+      // Detect if it's odamage (starts with 'c' or contains letters) or telegramId (only numbers)
+      const isOdamage = /[a-z]/i.test(userId);
+      const payload = isOdamage
+        ? { odamage: userId, confirmPassword: '1993' }
+        : { telegramId: userId, confirmPassword: '1993' };
+
       try {
-        const data = await api('danger/delete-user', 'POST', {
-          telegramId: telegramId,
-          confirmPassword: '1993'
-        });
+        const data = await api('danger/delete-user', 'POST', payload);
         if (data.success) {
           resultDiv.innerHTML = `<div class="alert alert-success">✅ User deleted: ${data.deleted.username || data.deleted.telegramId}</div>`;
           loadUsers();
