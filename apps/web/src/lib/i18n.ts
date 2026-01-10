@@ -44,14 +44,6 @@ export const translations = {
       topParticipants: 'Top Participants',
       yourDamage: 'Your damage',
     },
-    // Offline earnings
-    offline: {
-      welcomeBack: 'Welcome Back!',
-      awayFor: 'You were away for',
-      hours: 'hours',
-      earnings: 'Offline Earnings',
-      collect: 'Collect',
-    },
     // Character tab
     character: {
       notAuth: 'Not authenticated',
@@ -231,14 +223,6 @@ export const translations = {
       bonus: 'бонус',
       topParticipants: 'Лучшие Участники',
       yourDamage: 'Твой урон',
-    },
-    // Offline earnings
-    offline: {
-      welcomeBack: 'С возвращением!',
-      awayFor: 'Тебя не было',
-      hours: 'часов',
-      earnings: 'Оффлайн Награда',
-      collect: 'Забрать',
     },
     // Character tab
     character: {

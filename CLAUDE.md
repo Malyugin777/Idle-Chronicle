@@ -130,17 +130,6 @@ Rank 101+:  только базовые 2 Wooden
 | Rare | 16-18 | 5-7 | +60-80% к статам |
 | Epic | 20-24 | 8-10 | +100-140% к статам |
 
-## Мёртвый код (не удалять без разрешения)
-- `calculateOfflineEarnings()` в server.js
-- `calculateOfflineProgress()` в StatsService.js
-- `offlineEarnings` state в PhaserGame.tsx
-- `offline:earnings` socket listener
-- переводы `offline.*` в i18n.ts
-
-## Legacy поля (НЕ удалять, для обратной совместимости)
-- User: `matOre`, `matLeather`, `matCoal`
-- User: `scrollEnchantWeapon`, `scrollEnchantArmor`, `scrollProtection`
-
 ## TODO для будущих ТЗ
 - [ ] Дейлики с наградами EnchantCharges
 - [ ] Активность/урон/рейтинги → награда EnchantCharges

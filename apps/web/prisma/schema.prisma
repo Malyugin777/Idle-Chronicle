@@ -87,16 +87,11 @@ model User {
   // Resets to 0 when Epic drops
   pityCounter         Int  @default(0)
 
-  // Enchant scrolls (legacy)
-  enchantScrolls  Int      @default(0)    // Свитки заточки (old)
+  // Enchant scrolls (дропаются из сундуков)
+  enchantScrolls  Int      @default(0)
 
   // Crafting Materials
   matEnchantDust  Int      @default(0)    // Пыль энчанта (от разбора шмота)
-
-  // Crafting Scrolls
-  scrollEnchantWeapon  Int @default(0)    // Свиток энчанта оружия
-  scrollEnchantArmor   Int @default(0)    // Свиток энчанта брони
-  scrollProtection     Int @default(0)    // Свиток защиты
 
   // Enchant System v1.2
   enchantCharges       Int @default(10)   // Заряды для заточки (из сундуков)

@@ -2,7 +2,19 @@
 // SETS DATABASE - Система сетовых бонусов
 // ═══════════════════════════════════════════════════════════
 
-import { ItemStats } from './items';
+// Item stats type (for set bonuses)
+export interface ItemStats {
+  pAtk?: number;
+  pDef?: number;
+  mAtk?: number;
+  mDef?: number;
+  crit?: number;
+  atkSpd?: number;
+  mpMax?: number;
+  staminaMax?: number;
+  power?: number;
+  agility?: number;
+}
 
 export interface SetBonus {
   pieces: number;       // Сколько частей нужно (3, 5...)

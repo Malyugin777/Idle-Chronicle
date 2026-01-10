@@ -1,8 +1,7 @@
 // ═══════════════════════════════════════════════════════════
-// TASKS CONFIG - Конфигурация задач (Session + Daily)
+// TASKS CONFIG - Конфигурация ежедневных задач
 // ═══════════════════════════════════════════════════════════
 
-export type TaskType = 'session' | 'daily';
 export type RewardType =
   | 'ether'       // Эфир (x2 урон)
   | 'woodChest'   // Wooden chest
@@ -20,29 +19,17 @@ export interface TaskReward {
 
 export interface TaskDefinition {
   id: string;
-  type: TaskType;
   nameRu: string;
   nameEn: string;
   descRu: string;
   descEn: string;
   icon: string;
-  // Условие выполнения
   condition: {
-    type: 'taps' | 'damage' | 'trial' | 'chestsOpened' | 'skillCasts' | 'login';
+    type: 'taps' | 'damage' | 'chestsOpened' | 'skillCasts' | 'login';
     target: number;
   };
   rewards: TaskReward[];
 }
-
-// ═══════════════════════════════════════════════════════════
-// TRIAL THRESHOLD (DPS-чек)
-// ═══════════════════════════════════════════════════════════
-export const TRIAL_THRESHOLD = 10000; // 10k урона за сессию
-
-// ═══════════════════════════════════════════════════════════
-// SESSION TASKS (убраны - все задачи теперь daily)
-// ═══════════════════════════════════════════════════════════
-export const SESSION_TASKS: TaskDefinition[] = [];
 
 // ═══════════════════════════════════════════════════════════
 // DAILY TASKS (сбрасываются в полночь)
@@ -50,7 +37,6 @@ export const SESSION_TASKS: TaskDefinition[] = [];
 export const DAILY_TASKS: TaskDefinition[] = [
   {
     id: 'dailyLogin',
-    type: 'daily',
     nameRu: 'Логин',
     nameEn: 'Daily Login',
     descRu: 'Зайди в игру',
@@ -61,7 +47,6 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'clicker',
-    type: 'daily',
     nameRu: 'Кликер',
     nameEn: 'Clicker',
     descRu: 'Сделай 50 тапов',
@@ -72,7 +57,6 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'meatgrinder',
-    type: 'daily',
     nameRu: 'Мясорубка',
     nameEn: 'Meatgrinder',
     descRu: 'Нанеси 10,000 урона',
@@ -83,7 +67,6 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'dailyDamage',
-    type: 'daily',
     nameRu: 'Дневной урон',
     nameEn: 'Daily Damage',
     descRu: 'Нанеси 100,000 урона за день',
@@ -94,7 +77,6 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'chestHunter',
-    type: 'daily',
     nameRu: 'Охотник за сундуками',
     nameEn: 'Chest Hunter',
     descRu: 'Открой 3 сундука',
@@ -109,7 +91,6 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'caster',
-    type: 'daily',
     nameRu: 'Кастер',
     nameEn: 'Caster',
     descRu: 'Используй умения 30 раз',
@@ -120,21 +101,17 @@ export const DAILY_TASKS: TaskDefinition[] = [
   },
   {
     id: 'chestBoost',
-    type: 'daily',
     nameRu: 'Ускоритель сундуков',
     nameEn: 'Chest Accelerator',
     descRu: 'Открой 1 сундук',
     descEn: 'Open 1 chest',
     icon: '⚡',
     condition: { type: 'chestsOpened', target: 1 },
-    rewards: [{ type: 'chestBooster', amount: 1, duration: 30 * 60 * 1000 }], // 30 min
+    rewards: [{ type: 'chestBooster', amount: 1, duration: 30 * 60 * 1000 }],
   },
 ];
 
-// Все задачи
-export const ALL_TASKS = [...SESSION_TASKS, ...DAILY_TASKS];
-
 // Получить задачу по ID
 export function getTaskById(id: string): TaskDefinition | undefined {
-  return ALL_TASKS.find(t => t.id === id);
+  return DAILY_TASKS.find(t => t.id === id);
 }

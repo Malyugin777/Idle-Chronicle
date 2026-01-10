@@ -4,12 +4,9 @@
 // ═══════════════════════════════════════════════════════════
 
 import {
-  SESSION_TASKS,
   DAILY_TASKS,
-  ALL_TASKS,
   TaskDefinition,
   TaskReward,
-  TRIAL_THRESHOLD,
 } from './tasks';
 
 const STORAGE_KEY = 'ic_task_state_v1';
@@ -29,7 +26,6 @@ interface TaskCounters {
   damageTotal: number;
   skillCasts: number;
   chestsOpened: number;
-  sessionTrialDamage: number; // DPS-чек (сбрасывается при reload)
 }
 
 interface Buffs {
@@ -54,7 +50,7 @@ type TaskEventListener = (state: TaskState) => void;
 
 function getDefaultState(): TaskState {
   const tasks: Record<string, TaskProgress> = {};
-  for (const task of ALL_TASKS) {
+  for (const task of DAILY_TASKS) {
     tasks[task.id] = { progress: 0, completed: false, claimed: false };
   }
 
@@ -65,7 +61,6 @@ function getDefaultState(): TaskState {
       damageTotal: 0,
       skillCasts: 0,
       chestsOpened: 0,
-      sessionTrialDamage: 0,
     },
     tasks,
     buffs: {},
@@ -87,8 +82,6 @@ class TaskManager {
   constructor() {
     this.state = this.load();
     this.checkDailyReset();
-    // Trial damage сбрасывается при reload страницы
-    this.state.counters.sessionTrialDamage = 0;
     this.save();
   }
 
@@ -104,7 +97,7 @@ class TaskManager {
       if (saved) {
         const parsed = JSON.parse(saved) as TaskState;
         // Ensure all tasks exist
-        for (const task of ALL_TASKS) {
+        for (const task of DAILY_TASKS) {
           if (!parsed.tasks[task.id]) {
             parsed.tasks[task.id] = { progress: 0, completed: false, claimed: false };
           }
@@ -141,18 +134,12 @@ class TaskManager {
         this.state.tasks[task.id] = { progress: 0, completed: false, claimed: false };
       }
 
-      // Reset session tasks too (for MVP simplicity)
-      for (const task of SESSION_TASKS) {
-        this.state.tasks[task.id] = { progress: 0, completed: false, claimed: false };
-      }
-
       // Reset counters
       this.state.counters = {
         taps: 0,
         damageTotal: 0,
         skillCasts: 0,
         chestsOpened: 0,
-        sessionTrialDamage: 0,
       };
 
       // Mark daily login as completed
@@ -173,7 +160,6 @@ class TaskManager {
 
   recordDamage(amount: number): void {
     this.state.counters.damageTotal += amount;
-    this.state.counters.sessionTrialDamage += amount;
     this.checkTaskCompletion();
     this.save();
     this.notifyListeners();
@@ -216,7 +202,7 @@ class TaskManager {
   // ─────────────────────────────────────────────────────────
 
   private checkTaskCompletion(): void {
-    for (const task of ALL_TASKS) {
+    for (const task of DAILY_TASKS) {
       const taskState = this.state.tasks[task.id];
       if (taskState.completed) continue;
 
@@ -229,9 +215,6 @@ class TaskManager {
           break;
         case 'damage':
           progress = this.state.counters.damageTotal;
-          break;
-        case 'trial':
-          progress = this.state.counters.sessionTrialDamage;
           break;
         case 'skillCasts':
           progress = this.state.counters.skillCasts;
@@ -274,7 +257,7 @@ class TaskManager {
       return null;
     }
 
-    const task = ALL_TASKS.find(t => t.id === taskId);
+    const task = DAILY_TASKS.find(t => t.id === taskId);
     if (!task) return null;
 
     // Mark as claimed BEFORE applying rewards (idempotency)
@@ -306,13 +289,6 @@ class TaskManager {
 
   getTaskProgress(taskId: string): TaskProgress | undefined {
     return this.state.tasks[taskId];
-  }
-
-  getSessionTasks(): Array<TaskDefinition & TaskProgress> {
-    return SESSION_TASKS.map(t => ({
-      ...t,
-      ...this.state.tasks[t.id],
-    }));
   }
 
   getDailyTasks(): Array<TaskDefinition & TaskProgress> {
@@ -367,5 +343,5 @@ export function getTaskManager(): TaskManager {
   return taskManagerInstance;
 }
 
-export { SESSION_TASKS, DAILY_TASKS, ALL_TASKS };
+export { DAILY_TASKS };
 export type { TaskDefinition, TaskReward };

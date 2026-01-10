@@ -107,7 +107,6 @@ export default function PhaserGame() {
   // Overlays
   const [victoryData, setVictoryData] = useState<VictoryData | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(0);
-  const [offlineEarnings, setOfflineEarnings] = useState<{ gold: number; hours: number } | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeStep, setWelcomeStep] = useState(0); // 0, 1, 2, 3 for 4-screen carousel
   const [starterItems, setStarterItems] = useState<StarterItem[]>([]);
@@ -538,11 +537,6 @@ export default function PhaserGame() {
       ]);
     });
 
-    // Offline earnings
-    socket.on('offline:earnings', (data: { gold: number; hours: number }) => {
-      setOfflineEarnings(data);
-    });
-
     // Boss killed
     socket.on('boss:killed', (data: any) => {
       setVictoryData({
@@ -692,7 +686,6 @@ export default function PhaserGame() {
       socket.off('buff:success');
       socket.off('hero:exhausted');
       socket.off('damage:feed');
-      socket.off('offline:earnings');
       socket.off('boss:killed');
       socket.off('boss:respawn');
       socket.off('player:data');
@@ -1339,25 +1332,6 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* OFFLINE EARNINGS OVERLAY */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {offlineEarnings && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="bg-l2-panel rounded-lg p-6 m-4 max-w-sm text-center">
-            <div className="text-l2-gold text-lg font-bold mb-2">{t.offline.welcomeBack}</div>
-            <div className="bg-black/30 rounded-lg p-4 mb-4">
-              <div className="text-2xl font-bold text-l2-gold">
-                +{offlineEarnings.gold.toLocaleString()} {t.character.gold}
-              </div>
-            </div>
-            <button
-              onClick={() => setOfflineEarnings(null)}
-              className="w-full py-3 bg-l2-gold text-black font-bold rounded-lg"
-            >
-              {t.offline.collect}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DROP TABLE OVERLAY */}
       {/* ═══════════════════════════════════════════════════════════ */}

@@ -1,23 +1,9 @@
-// Types (models.ts has uppercase ItemType/Rarity for Prisma)
+// Types
 export * from './types';
 export * from './constants';
-// Data exports lowercase ItemType/Rarity for items.ts
-// We use explicit exports to avoid conflicts with types/models.ts
+
+// Data exports (sets.ts + enchant.ts)
 export {
-  // items.ts
-  Slot,
-  ItemType as DataItemType,
-  Rarity as DataRarity,
-  ItemStats,
-  ItemDefinition,
-  ITEMS,
-  getItemByCode,
-  getSetItems,
-  getConsumables,
-  getEquipment,
-  getConsumableByDbField,
-  SLOT_ORDER,
-  SLOT_ICONS,
   // sets.ts
   SetBonus,
   SetDefinition,
@@ -25,12 +11,11 @@ export {
   getActiveSetBonuses,
   calculateSetBonuses,
   getSetProgress,
-  // lootTables.ts
-  ChestType,
-  ChestConfig,
-  CHESTS,
-  CHEST_UI,
-  RarityStyle,
-  RARITY_STYLES,
-  rollItemRarity,
+  // enchant.ts
+  ENCHANT_CHANCES,
+  ENCHANT_SAFE_LEVEL,
+  ENCHANT_BONUS_PER_LEVEL,
+  getEnchantChance,
+  isInSafeZone,
+  calculateEnchantBonus,
 } from './data';

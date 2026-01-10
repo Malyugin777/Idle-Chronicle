@@ -241,52 +241,6 @@ function isExhausted(exhaustedUntil) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// OFFLINE PROGRESS
-// ═══════════════════════════════════════════════════════════
-
-const MAX_OFFLINE_HOURS = 4; // Кап 4 часа
-
-/**
- * Рассчитывает оффлайн-прогресс
- * @param {Object} user - { attackSpeed, physicalPower, lastOnline }
- * @returns {Object} { offlineHours, totalDamage, goldEarned, expEarned, attacksSimulated }
- */
-function calculateOfflineProgress(user) {
-  const now = Date.now();
-  const lastOnline = user.lastOnline instanceof Date ? user.lastOnline.getTime() : user.lastOnline;
-  const offlineMs = now - lastOnline;
-  const offlineSeconds = Math.min(offlineMs / 1000, MAX_OFFLINE_HOURS * 3600);
-
-  if (offlineSeconds < 60) {
-    // Меньше минуты - нет награды
-    return { offlineHours: 0, totalDamage: 0, goldEarned: 0, expEarned: 0, attacksSimulated: 0 };
-  }
-
-  // Рассчитываем сколько авто-атак произошло бы
-  const attackInterval = getAttackInterval(user.attackSpeed || 300);
-  const attacksPerSecond = 1000 / attackInterval;
-  const totalAttacks = Math.floor(offlineSeconds * attacksPerSecond);
-
-  // Урон
-  const damagePerAttack = calculateBaseDamage(user.physicalPower || 10);
-  const totalDamage = totalAttacks * damagePerAttack;
-
-  // Gold (1 gold per 100 damage)
-  const goldEarned = Math.floor(totalDamage / 100);
-
-  // Exp (1 exp per 50 damage)
-  const expEarned = Math.floor(totalDamage / 50);
-
-  return {
-    offlineHours: Math.round(offlineSeconds / 3600 * 10) / 10,
-    totalDamage,
-    goldEarned,
-    expEarned,
-    attacksSimulated: totalAttacks,
-  };
-}
-
-// ═══════════════════════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════════════════════
 
@@ -297,7 +251,6 @@ module.exports = {
   STAMINA_REGEN_PER_SEC,
   EXHAUSTION_DURATION_MS,
   MIN_AUTO_ATTACK_INTERVAL_MS,
-  MAX_OFFLINE_HOURS,
 
   // Functions
   calculateDerived,
@@ -308,7 +261,6 @@ module.exports = {
   getStaminaCost,
   createExhaustionUntil,
   isExhausted,
-  calculateOfflineProgress,
 
   // Helpers
   clamp,

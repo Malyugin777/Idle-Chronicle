@@ -957,24 +957,6 @@ function getManaRegenCost(currentRegen) {
   return Math.floor(1000 * Math.pow(2, level));
 }
 
-// Offline progress constants (L2: использует StatsService для расчёта)
-// Legacy function kept for backward compatibility, but uses StatsService internally
-function calculateOfflineEarnings(player, lastOnline) {
-  // Use StatsService for L2-style offline progress (4 hour cap)
-  const progress = StatsService.calculateOfflineProgress({
-    lastOnline: lastOnline,
-    attackSpeed: player.attackSpeed || 300,
-    physicalPower: player.physicalPower || 15,
-  });
-
-  return {
-    gold: progress.goldEarned,
-    hours: progress.offlineHours,
-    damage: progress.totalDamage,
-    exp: progress.expEarned,
-  };
-}
-
 // ═══════════════════════════════════════════════════════════
 // EQUIPMENT STATS CALCULATION
 // ═══════════════════════════════════════════════════════════
@@ -5800,19 +5782,22 @@ app.prepare().then(async () => {
           }
 
           player.gold -= totalCost;
-          player.ether = (player.ether || 0) + quantity;
 
-          await prisma.user.update({
+          // FIX: Используем increment вместо абсолютного значения
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
               gold: BigInt(player.gold),
-              ether: player.ether,
+              ether: { increment: quantity },
             },
+            select: { ether: true },
           });
+
+          console.log(`[Shop] ${player.telegramId} bought ${quantity} ether for ${totalCost} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            ether: player.ether,
+            ether: updatedUser.ether,
           });
         } else if (data.type === 'buff') {
           const buffId = data.buffId;
@@ -5829,19 +5814,24 @@ app.prepare().then(async () => {
 
           player.gold -= cost;
           const potionKey = `potion${buffId.charAt(0).toUpperCase() + buffId.slice(1)}`;
-          player[potionKey] = (player[potionKey] || 0) + 1;
 
-          await prisma.user.update({
+          // FIX: Используем increment вместо абсолютного значения
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
               gold: BigInt(player.gold),
-              [potionKey]: player[potionKey],
+              [potionKey]: { increment: 1 },
             },
+            select: { potionHaste: true, potionAcumen: true, potionLuck: true },
           });
+
+          console.log(`[Shop] ${player.telegramId} bought ${buffId} potion for ${cost} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            [potionKey]: player[potionKey],
+            potionHaste: updatedUser.potionHaste,
+            potionAcumen: updatedUser.potionAcumen,
+            potionLuck: updatedUser.potionLuck,
           });
         } else if (data.type === 'debug-sword') {
           // DEBUG: Бесплатный меч 1500 pAtk для тестирования
@@ -5949,21 +5939,22 @@ app.prepare().then(async () => {
           }
 
           player.gold -= ENCHANT_COST;
-          player.enchantCharges = (player.enchantCharges || 0) + 1;
 
-          await prisma.user.update({
+          // FIX: Используем increment вместо абсолютного значения
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
               gold: BigInt(player.gold),
-              enchantCharges: player.enchantCharges,
+              enchantCharges: { increment: 1 },
             },
+            select: { enchantCharges: true },
           });
 
           console.log(`[Shop] ${player.telegramId} bought enchant charge for ${ENCHANT_COST} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            enchantCharges: player.enchantCharges,
+            enchantCharges: updatedUser.enchantCharges,
           });
         }
       } catch (err) {
@@ -6109,29 +6100,34 @@ app.prepare().then(async () => {
         return;
       }
 
-      player.etherDust -= dustNeeded;
-      player.gold -= goldNeeded;
-      player.ether += amount * MEDITATION.craftRecipe.etherOutput;
+      const etherGained = amount * MEDITATION.craftRecipe.etherOutput;
 
       try {
-        await prisma.user.update({
+        // FIX: Используем increment/decrement для безопасности
+        const updatedUser = await prisma.user.update({
           where: { id: player.odamage },
           data: {
-            etherDust: player.etherDust,
-            gold: BigInt(player.gold),
-            ether: player.ether,
+            etherDust: { decrement: dustNeeded },
+            gold: { decrement: BigInt(goldNeeded) },
+            ether: { increment: etherGained },
           },
+          select: { ether: true, etherDust: true, gold: true },
+        });
+
+        player.etherDust = updatedUser.etherDust;
+        player.gold = Number(updatedUser.gold);
+        player.ether = updatedUser.ether;
+
+        socket.emit('ether:craft:success', {
+          ether: updatedUser.ether,
+          etherDust: updatedUser.etherDust,
+          gold: Number(updatedUser.gold),
+          crafted: amount,
         });
       } catch (err) {
         console.error('[Ether] Craft error:', err.message);
+        socket.emit('ether:craft:error', { message: 'Craft failed' });
       }
-
-      socket.emit('ether:craft:success', {
-        ether: player.ether,
-        etherDust: player.etherDust,
-        gold: player.gold,
-        crafted: amount,
-      });
     });
 
     // CRAFT ALL: Convert all possible dust to ether
@@ -6149,30 +6145,34 @@ app.prepare().then(async () => {
 
       const dustNeeded = amount * MEDITATION.craftRecipe.dustCost;
       const goldNeeded = amount * MEDITATION.craftRecipe.goldCost;
-
-      player.etherDust -= dustNeeded;
-      player.gold -= goldNeeded;
-      player.ether += amount * MEDITATION.craftRecipe.etherOutput;
+      const etherGained = amount * MEDITATION.craftRecipe.etherOutput;
 
       try {
-        await prisma.user.update({
+        // FIX: Используем increment/decrement для безопасности
+        const updatedUser = await prisma.user.update({
           where: { id: player.odamage },
           data: {
-            etherDust: player.etherDust,
-            gold: BigInt(player.gold),
-            ether: player.ether,
+            etherDust: { decrement: dustNeeded },
+            gold: { decrement: BigInt(goldNeeded) },
+            ether: { increment: etherGained },
           },
+          select: { ether: true, etherDust: true, gold: true },
+        });
+
+        player.etherDust = updatedUser.etherDust;
+        player.gold = Number(updatedUser.gold);
+        player.ether = updatedUser.ether;
+
+        socket.emit('ether:craft:success', {
+          ether: updatedUser.ether,
+          etherDust: updatedUser.etherDust,
+          gold: Number(updatedUser.gold),
+          crafted: amount,
         });
       } catch (err) {
         console.error('[Ether] CraftAll error:', err.message);
+        socket.emit('ether:craft:error', { message: 'Craft failed' });
       }
-
-      socket.emit('ether:craft:success', {
-        ether: player.ether,
-        etherDust: player.etherDust,
-        gold: player.gold,
-        crafted: amount,
-      });
     });
 
     // TASKS CLAIM - обработка наград за задачи
