@@ -13,186 +13,32 @@ import ForgeModal from './ForgeModal';
 import EnchantModal from './EnchantModal';
 
 // ═══════════════════════════════════════════════════════════
-// PHASER GAME + REACT UI
-//
-// Phaser: Boss sprite + damage numbers + effects ONLY
-// React: ALL UI (bars, buttons, feed, overlays)
-//
-// See docs/ARCHITECTURE.md
+// Extracted types and components
 // ═══════════════════════════════════════════════════════════
-
-const APP_VERSION = 'v1.5.0';
-
-interface BossState {
-  name: string;
-  nameRu?: string;
-  icon: string;
-  image?: string;
-  hp: number;
-  maxHp: number;
-  defense: number;
-  bossIndex: number;
-  totalBosses: number;
-}
-
-interface StarterItem {
-  name: string;
-  icon: string;
-  slot: string;
-}
-
-interface PlayerState {
-  stamina: number;
-  maxStamina: number;
-  mana: number;
-  maxMana: number;
-  exhaustedUntil: number | null;
-  gold: number;
-  ether: number;
-  etherDust: number;
-  // HUD fields
-  level: number;
-  crystals: number;
-  photoUrl: string | null;
-  firstName: string;
-  // Skill levels (0 = locked)
-  skillFireball: number;
-  skillIceball: number;
-  skillLightning: number;
-  // Participation Score
-  ps: number;
-  psCap: number;
-}
-
-interface MeditationData {
-  pendingDust: number;
-  offlineMinutes: number;
-}
-
-interface Skill {
-  id: string;
-  name: string;
-  nameRu?: string;
-  icon: string;
-  manaCost: number;
-  cooldown: number;
-  lastUsed: number;
-  color: string;
-}
-
-interface DamageFeedItem {
-  playerName: string;
-  damage: number;
-  isCrit: boolean;
-  timestamp: number;
-}
-
-interface VictoryData {
-  bossName: string;
-  bossIcon: string;
-  finalBlowBy: string;
-  topDamageBy: string;
-  respawnAt: number;
-}
-
-interface PendingReward {
-  id: string;
-  bossName: string;
-  bossIcon: string;
-  rank: number | null;
-  chestsWooden: number;
-  chestsBronze: number;
-  chestsSilver: number;
-  chestsGold: number;
-  crystals: number;
-  badgeId?: string;
-}
-
-interface SlotInfo {
-  max: number;
-  used: number;
-  free: number;
-  nextPrice: number;
-  crystals: number;
-}
-
-interface ChestSelection {
-  wooden: number;
-  bronze: number;
-  silver: number;
-  gold: number;
-}
-
-interface ActiveBuff {
-  type: 'haste' | 'acumen' | 'luck';
-  value: number;
-  expiresAt: number;
-}
-
-const BUFF_ICONS: Record<string, string> = {
-  haste: '⚡',
-  acumen: '🔥',
-  luck: '🍀',
-};
-
-const BUFF_DURATIONS: Record<string, number> = {
-  haste: 30000,
-  acumen: 30000,
-  luck: 60000,
-};
-
-const SKILLS: Skill[] = [
-  { id: 'fireball', name: 'Fireball', nameRu: 'Огненный шар', icon: '🔥', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-orange-500' },
-  { id: 'iceball', name: 'Ice Ball', nameRu: 'Ледяной шар', icon: '❄️', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-cyan-400' },
-  { id: 'lightning', name: 'Lightning', nameRu: 'Молния', icon: '⚡', manaCost: 100, cooldown: 10000, lastUsed: 0, color: 'border-yellow-400' },
-];
-
-const COOLDOWNS_KEY = 'battle_skill_cooldowns';
-
-// BuffIcon component with circular progress
-function BuffIcon({ buff }: { buff: ActiveBuff }) {
-  const [remaining, setRemaining] = useState(0);
-  const duration = BUFF_DURATIONS[buff.type] || 30000;
-
-  useEffect(() => {
-    const update = () => setRemaining(Math.max(0, buff.expiresAt - Date.now()));
-    update();
-    const interval = setInterval(update, 100);
-    return () => clearInterval(interval);
-  }, [buff.expiresAt]);
-
-  const percent = (remaining / duration) * 100;
-  const radius = 14;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - percent / 100);
-
-  return (
-    <div className="relative w-9 h-9">
-      {/* SVG circular progress */}
-      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36">
-        <circle
-          cx="18" cy="18" r={radius}
-          fill="rgba(0,0,0,0.7)"
-          stroke="rgba(255,255,255,0.2)"
-          strokeWidth="2"
-        />
-        <circle
-          cx="18" cy="18" r={radius}
-          fill="none"
-          stroke="#fbbf24"
-          strokeWidth="2"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className="transition-all duration-100"
-        />
-      </svg>
-      {/* Icon centered */}
-      <span className="absolute inset-0 flex items-center justify-center text-lg">
-        {BUFF_ICONS[buff.type]}
-      </span>
-    </div>
-  );
-}
+import type {
+  BossState,
+  PlayerState,
+  Skill,
+  DamageFeedItem,
+  VictoryData,
+  PendingReward,
+  SlotInfo,
+  ChestSelection,
+  ActiveBuff,
+  MeditationData,
+  StarterItem,
+  LoadingState,
+} from './types';
+import {
+  APP_VERSION,
+  SKILLS,
+  COOLDOWNS_KEY,
+  INITIAL_BOSS_STATE,
+  INITIAL_PLAYER_STATE,
+  INITIAL_SLOT_INFO,
+  formatCompact,
+} from './constants';
+import { TopHUD, SkillBar, LoadingScreen } from './ui';
 
 export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -210,37 +56,10 @@ export default function PhaserGame() {
   const [playersOnline, setPlayersOnline] = useState(0);
 
   // Boss - initial values 0 so bars show 0% until real data arrives
-  const [bossState, setBossState] = useState<BossState>({
-    name: 'Loading...',
-    nameRu: '',
-    icon: '⏳',
-    hp: 0,
-    maxHp: 1,
-    defense: 0,
-    bossIndex: 0,
-    totalBosses: 100,
-  });
+  const [bossState, setBossState] = useState<BossState>(INITIAL_BOSS_STATE);
 
   // Player - initial values 0 so bars show 0% until real data arrives
-  const [playerState, setPlayerState] = useState<PlayerState>({
-    stamina: 0,
-    maxStamina: 1,
-    mana: 0,
-    maxMana: 1,
-    exhaustedUntil: null,
-    gold: 0,
-    ether: 0,
-    etherDust: 0,
-    level: 1,
-    crystals: 0,
-    photoUrl: null,
-    firstName: '',
-    skillFireball: 1,
-    skillIceball: 0,
-    skillLightning: 0,
-    ps: 0,
-    psCap: 24,
-  });
+  const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
 
   // Ether auto-use toggle (persisted in localStorage)
   const [autoUseEther, setAutoUseEther] = useState<boolean>(() => {
@@ -295,7 +114,7 @@ export default function PhaserGame() {
   const [starterOpening, setStarterOpening] = useState(false);
   const [showDropTable, setShowDropTable] = useState(false);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
-  const [slotInfo, setSlotInfo] = useState<SlotInfo>({ max: 5, used: 0, free: 5, nextPrice: 50, crystals: 0 });
+  const [slotInfo, setSlotInfo] = useState<SlotInfo>(INITIAL_SLOT_INFO);
   const [chestSelection, setChestSelection] = useState<ChestSelection>({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
   const [claimingReward, setClaimingReward] = useState(false);
   const [buyingSlot, setBuyingSlot] = useState(false);
@@ -934,147 +753,23 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* TOP HUD - Player info + Resources */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
-        {/* Row 1: Avatar + Nickname + Level | Currency */}
-        <div className="flex items-center justify-between mb-1">
-          {/* Left: Avatar + Nickname with Level badge */}
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              {playerState.photoUrl ? (
-                <img
-                  src={playerState.photoUrl}
-                  alt=""
-                  className="w-9 h-9 rounded-lg border-2 border-amber-500/70 shadow-lg shadow-amber-500/20"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-lg border-2 border-amber-500/70 bg-gray-900/90 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                  <span className="text-base">👤</span>
-                </div>
-              )}
-              {/* Level badge */}
-              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-600 to-amber-500 px-1 py-0.5 rounded text-[9px] font-bold text-white shadow-md border border-amber-400/50">
-                {playerState.level}
-              </div>
-            </div>
-            {/* Nickname */}
-            <span className="text-sm font-bold text-white/90 max-w-[100px] truncate">
-              {playerState.firstName || 'Player'}
-            </span>
-          </div>
-
-          {/* Right: Gold + Crystals */}
-          <div className="flex items-center gap-2">
-            {/* Gold */}
-            <div className="flex items-center gap-1 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2 py-1 rounded-lg border border-amber-600/40">
-              <span className="text-xs">🪙</span>
-              <span className="text-xs font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
-            </div>
-            {/* Crystals */}
-            <div className="flex items-center gap-1 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2 py-1 rounded-lg border border-purple-500/40">
-              <Gem className="text-purple-400" size={12} />
-              <span className="text-xs font-bold text-purple-300">{playerState.crystals}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Online + Version */}
-        <div className="flex items-center gap-2 px-1 mb-1 text-[9px]">
-          <div className="flex items-center gap-1">
-            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-gray-500">
-              {connected ? `${playersOnline} ${t.game.online}` : t.game.connecting}
-            </span>
-          </div>
-          <span
-            className="text-gray-600 cursor-pointer hover:text-gray-400"
-            onClick={() => setShowDebug(true)}
-          >
-            {APP_VERSION}
-          </span>
-        </div>
-
-        {/* Row 3: Boss Progress */}
-        <div className="flex items-center gap-1.5 px-1 mb-1.5 text-[10px]">
-          <span className="text-amber-500/80">⚔️</span>
-          <span className="text-gray-300 font-medium">
-            {lang === 'ru' ? 'Босс' : 'Boss'} {bossState.bossIndex} / {bossState.totalBosses}
-          </span>
-        </div>
-
-        {/* Row 4: Resource Bars (55%) + Buffs + Tasks Button */}
-        <div className="flex items-center gap-2">
-          {/* Bars Column (narrowed to ~55%) */}
-          <div className="w-[55%] flex flex-col gap-1">
-            {/* Stamina Bar (Yellow, top) */}
-            <div className="h-4 bg-gray-900/80 rounded-md overflow-hidden relative border border-yellow-500/30 shadow-inner">
-              <div
-                className={`h-full transition-all duration-200 ${
-                  exhausted
-                    ? 'bg-gradient-to-r from-red-600 to-red-400'
-                    : staminaPercent < 25
-                      ? 'bg-gradient-to-r from-orange-600 to-orange-400'
-                      : 'bg-gradient-to-r from-yellow-500 to-yellow-400'
-                }`}
-                style={{ width: `${staminaPercent}%` }}
-              />
-              <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white font-bold drop-shadow-lg">
-                <span className="mr-1">⚡</span>
-                <span className="text-yellow-200">{lang === 'ru' ? 'Стамина' : 'Stamina'}</span>
-                <span className="ml-auto">{Math.floor(playerState.stamina)}/{playerState.maxStamina}</span>
-              </span>
-            </div>
-
-            {/* Mana Bar (Blue, bottom) - with flash on insufficient */}
-            <div className={`h-4 bg-gray-900/80 rounded-md overflow-hidden relative border shadow-inner transition-all ${
-              manaFlash ? 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]' : 'border-blue-500/30'
-            }`}>
-              <div
-                className={`h-full transition-all duration-200 ${
-                  manaFlash ? 'bg-gradient-to-r from-red-600 to-red-400' : 'bg-gradient-to-r from-blue-600 to-blue-400'
-                }`}
-                style={{ width: `${manaPercent}%` }}
-              />
-              <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white font-bold drop-shadow-lg">
-                <span className="mr-1">💧</span>
-                <span className={manaFlash ? 'text-red-200' : 'text-blue-200'}>MP</span>
-                <span className="ml-auto">{Math.floor(playerState.mana)}/{playerState.maxMana}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* PS indicator + Buffs (right of bars) */}
-          <div className="flex-1 flex flex-wrap gap-1.5 justify-end items-center">
-            {/* Participation Score indicator */}
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold ${
-              playerState.ps >= playerState.psCap
-                ? 'bg-green-900/60 border border-green-500/50 text-green-300'
-                : playerState.ps > 0
-                  ? 'bg-purple-900/60 border border-purple-500/50 text-purple-300'
-                  : 'bg-gray-800/60 border border-gray-600/50 text-gray-400'
-            }`}>
-              <span>⭐</span>
-              <span>PS: {playerState.ps}/{playerState.psCap}</span>
-            </div>
-            {/* Active Buffs */}
-            {activeBuffs.map(buff => (
-              <BuffIcon key={buff.type} buff={buff} />
-            ))}
-          </div>
-
-          {/* Tasks Button */}
-          <button
-            onClick={() => setShowTasks(true)}
-            className="relative w-10 h-10 bg-gray-900/80 rounded-lg border-2 border-gray-600
-                       flex items-center justify-center active:scale-90 transition-all
-                       hover:border-amber-500/50 hover:bg-gray-800/80 flex-shrink-0"
-          >
-            <span className="text-lg">🎯</span>
-            {hasClaimable && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-400" />
-            )}
-          </button>
-        </div>
-      </div>
+      <TopHUD
+        playerState={playerState}
+        connected={connected}
+        playersOnline={playersOnline}
+        bossIndex={bossState.bossIndex}
+        totalBosses={bossState.totalBosses}
+        staminaPercent={staminaPercent}
+        manaPercent={manaPercent}
+        manaFlash={manaFlash}
+        exhausted={exhausted}
+        activeBuffs={activeBuffs}
+        hasClaimable={hasClaimable}
+        lang={lang}
+        t={t}
+        onShowDebug={() => setShowDebug(true)}
+        onShowTasks={() => setShowTasks(true)}
+      />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* FLOATING BOSS HP BAR or COUNTDOWN (centered, premium design) */}
@@ -1276,168 +971,20 @@ export default function PhaserGame() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) - Premium Design */}
+      {/* BOTTOM UI - Action Bar (AUTO + Skills + Ether) */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pb-2 pt-4 px-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
-        {/* Action Bar Container */}
-        <div className="flex justify-center items-center gap-1.5 bg-gradient-to-b from-gray-800/40 to-gray-900/60 rounded-xl p-2 border border-gray-700/30 shadow-lg">
-          {/* AUTO Button (Smart Auto-Hunt) - Premium with pulse when ON */}
-          <button
-            onClick={toggleAutoAttack}
-            className={`
-              relative w-14 h-14 rounded-lg
-              ${autoAttack
-                ? 'bg-gradient-to-b from-green-600 to-green-800 border-2 border-green-400 shadow-[0_0_20px_rgba(34,197,94,0.6)] animate-auto-pulse'
-                : 'bg-gradient-to-b from-gray-700/50 to-gray-900/80 border-2 border-gray-600/50'}
-              flex flex-col items-center justify-center gap-0
-              transition-all active:scale-95
-            `}
-          >
-            <span className="text-base drop-shadow-md">{autoAttack ? '⚡' : '▶️'}</span>
-            <span className={`text-[8px] font-bold uppercase tracking-wider ${autoAttack ? 'text-green-200' : 'text-gray-400'}`}>
-              {autoAttack ? (lang === 'ru' ? 'АВТО' : 'ON') : 'AUTO'}
-            </span>
-            {autoAttack && (
-              <>
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/20 pointer-events-none" />
-                <div className="absolute -inset-0.5 rounded-lg border border-green-400/50 animate-ping opacity-30" />
-              </>
-            )}
-          </button>
-
-          {/* Separator */}
-          <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
-
-          {skills.map(skill => {
-            const now = Date.now();
-            const remaining = Math.max(0, skill.cooldown - (now - skill.lastUsed));
-            const onCooldown = remaining > 0;
-            // Check if real data loaded (maxHp > 1 means server sent boss:state)
-            const dataLoaded = bossState.maxHp > 1;
-
-            // Skill unlock requirements: fireball@1, iceball@2, lightning@3
-            const SKILL_UNLOCK_LEVELS: Record<string, number> = { fireball: 1, iceball: 2, lightning: 3 };
-            const requiredLevel = SKILL_UNLOCK_LEVELS[skill.id] || 1;
-            const isUnlocked = playerState.level >= requiredLevel;
-
-            // Get skill level
-            const skillLevelMap: Record<string, number> = {
-              fireball: playerState.skillFireball,
-              iceball: playerState.skillIceball,
-              lightning: playerState.skillLightning,
-            };
-            const skillLevel = skillLevelMap[skill.id] || 0;
-
-            const canUse = dataLoaded && isUnlocked && !onCooldown && playerState.mana >= skill.manaCost && bossState.hp > 0;
-
-            // Skill-specific gradient colors
-            const skillGradient = skill.id === 'fireball'
-              ? 'from-orange-700/70 to-red-900/90'
-              : skill.id === 'iceball'
-                ? 'from-cyan-700/70 to-blue-900/90'
-                : 'from-yellow-600/70 to-amber-900/90';
-            const skillGlow = skill.id === 'fireball'
-              ? 'shadow-[0_0_12px_rgba(249,115,22,0.4)]'
-              : skill.id === 'iceball'
-                ? 'shadow-[0_0_12px_rgba(34,211,238,0.4)]'
-                : 'shadow-[0_0_12px_rgba(250,204,21,0.4)]';
-
-            return (
-              <button
-                key={skill.id}
-                onClick={() => useSkill(skill)}
-                disabled={!canUse}
-                className={`
-                  relative w-12 h-12 rounded-lg ${skill.color}
-                  ${!isUnlocked
-                    ? 'bg-gradient-to-b from-gray-900/80 to-black/90 opacity-40'
-                    : canUse
-                      ? `bg-gradient-to-b ${skillGradient} ${skillGlow}`
-                      : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 opacity-50'}
-                  flex flex-col items-center justify-center gap-0
-                  transition-all
-                  ${pressedSkill === skill.id ? 'skill-btn-press scale-95' : ''}
-                `}
-              >
-                <span className="text-base drop-shadow-lg">{skill.icon}</span>
-                {/* MP Cost - always visible when unlocked */}
-                {isUnlocked && (
-                  <span className={`text-[8px] font-bold ${
-                    playerState.mana >= skill.manaCost ? 'text-blue-300' : 'text-red-400'
-                  }`}>
-                    MP:{skill.manaCost}
-                  </span>
-                )}
-                {/* Locked overlay */}
-                {!isUnlocked && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
-                    <span className="text-[10px] font-bold text-gray-400">Lv.{requiredLevel}</span>
-                  </div>
-                )}
-                {/* Skill level badge */}
-                {isUnlocked && skillLevel > 0 && (
-                  <div className="absolute -top-1 -right-1 bg-gradient-to-b from-blue-600 to-blue-800 px-1 py-0.5 rounded text-[8px] font-bold text-white border border-blue-400/50">
-                    {skillLevel}
-                  </div>
-                )}
-                {/* Shine effect when available */}
-                {canUse && !onCooldown && (
-                  <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
-                )}
-                {onCooldown && isUnlocked && (
-                  <>
-                    <div
-                      className="absolute inset-0 bg-black/75 rounded-lg"
-                      style={{ height: `${(remaining / skill.cooldown) * 100}%`, top: 'auto', bottom: 0 }}
-                    />
-                    <span className="absolute text-sm font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                      {Math.ceil(remaining / 1000)}
-                    </span>
-                  </>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Separator */}
-          <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600/50 to-transparent" />
-
-          {/* Ether Slot (x2 damage) - Premium */}
-          <button
-            onClick={toggleAutoEther}
-            className={`
-              relative w-12 h-12 rounded-lg
-              ${autoUseEther && playerState.ether > 0
-                ? 'bg-gradient-to-b from-cyan-600/70 to-cyan-900/90 border-2 border-cyan-400/60 shadow-[0_0_14px_rgba(34,211,238,0.4)]'
-                : playerState.ether > 0
-                  ? 'bg-gradient-to-b from-purple-700/50 to-purple-900/80 border-2 border-purple-500/40'
-                  : 'bg-gradient-to-b from-gray-800/50 to-gray-900/80 border-2 border-gray-600/50 opacity-50'}
-              flex flex-col items-center justify-center
-              transition-all active:scale-95
-            `}
-          >
-            <span className="text-xl drop-shadow-lg">✨</span>
-            {/* Ether count badge */}
-            <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-b from-purple-600 to-purple-800 px-1.5 py-0.5 rounded-md border border-purple-400/50 shadow-md">
-              <span className="text-[9px] font-bold text-white">
-                {playerState.ether > 999 ? '999+' : playerState.ether}
-              </span>
-            </div>
-            {/* Shine effect when active */}
-            {autoUseEther && playerState.ether > 0 && (
-              <>
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
-                <span className="absolute bottom-1 text-[7px] text-cyan-300 font-bold uppercase tracking-wider">Auto</span>
-              </>
-            )}
-            {playerState.ether === 0 && (
-              <div className="absolute inset-0 bg-black/70 rounded-lg flex items-center justify-center">
-                <span className="text-xs text-red-400 font-bold">0</span>
-              </div>
-            )}
-          </button>
-        </div>
-      </div>
+      <SkillBar
+        skills={skills}
+        playerState={playerState}
+        bossState={bossState}
+        autoAttack={autoAttack}
+        autoUseEther={autoUseEther}
+        pressedSkill={pressedSkill}
+        lang={lang}
+        onToggleAutoAttack={toggleAutoAttack}
+        onToggleAutoEther={toggleAutoEther}
+        onUseSkill={useSkill}
+      />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* EXHAUSTED OVERLAY */}
@@ -1961,34 +1508,7 @@ export default function PhaserGame() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* LOADING OVERLAY - Shows while data loading */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {isLoading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-[#2a313b] to-[#0e141b]">
-          <div className="text-center">
-            <div className="text-4xl mb-4">⚔️</div>
-            <h1 className="text-2xl font-bold text-l2-gold mb-2">Idle Chronicle</h1>
-            <p className="text-gray-400 text-sm mb-6">
-              {lang === 'ru' ? 'Загрузка...' : 'Loading...'}
-            </p>
-            <div className="flex justify-center items-center gap-2">
-              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-l2-gold rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-            <div className="mt-6 text-xs text-gray-500 space-y-1">
-              <div className={loadingState.auth ? 'text-green-400' : 'text-gray-500'}>
-                {loadingState.auth ? '✓' : '○'} {lang === 'ru' ? 'Авторизация' : 'Authentication'}
-              </div>
-              <div className={loadingState.boss ? 'text-green-400' : 'text-gray-500'}>
-                {loadingState.boss ? '✓' : '○'} {lang === 'ru' ? 'Данные босса' : 'Boss data'}
-              </div>
-              <div className={loadingState.player ? 'text-green-400' : 'text-gray-500'}>
-                {loadingState.player ? '✓' : '○'} {lang === 'ru' ? 'Данные игрока' : 'Player data'}
-              </div>
-            </div>
-            <div className="mt-4 text-[10px] text-gray-600">{APP_VERSION}</div>
-          </div>
-        </div>
-      )}
+      {isLoading && <LoadingScreen loadingState={loadingState} lang={lang} />}
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DEBUG MODAL - Tap version to open */}
