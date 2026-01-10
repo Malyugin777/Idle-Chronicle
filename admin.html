@@ -1614,6 +1614,24 @@
           <div id="dbPushResult" style="margin-top: 12px;"></div>
         </div>
 
+        <!-- Delete Single User -->
+        <div class="card" style="border-color: var(--warning);">
+          <div class="card-header">
+            <h3 style="color: var(--warning);">🗑️ Delete Single User</h3>
+          </div>
+          <p>Completely removes a user and all their data (equipment, chests, tasks, etc.)</p>
+          <div class="form-group">
+            <label>Telegram ID</label>
+            <input type="text" id="deleteUserTelegramId" placeholder="Enter Telegram ID">
+          </div>
+          <div class="form-group">
+            <label>Password (1993)</label>
+            <input type="password" id="deleteUserPassword" placeholder="Enter 1993 to enable">
+          </div>
+          <button class="btn btn-danger" onclick="deleteSingleUser()">🗑️ Delete User</button>
+          <div id="deleteUserResult" style="margin-top: 10px;"></div>
+        </div>
+
         <!-- Destructive Actions -->
         <div class="card" style="border-color: var(--danger);">
           <div class="card-header">
@@ -2425,6 +2443,39 @@
       const data = await api('danger/reset-boss', 'POST', { confirmPassword: '1993' });
       alert(data.success ? 'Boss reset' : 'Error: ' + data.error);
       if (data.success) loadBossInfo();
+    }
+
+    // Delete single user
+    async function deleteSingleUser() {
+      const telegramId = document.getElementById('deleteUserTelegramId').value.trim();
+      const password = document.getElementById('deleteUserPassword').value;
+      const resultDiv = document.getElementById('deleteUserResult');
+
+      if (!telegramId) {
+        alert('Enter Telegram ID');
+        return;
+      }
+      if (password !== '1993') {
+        alert('Invalid password');
+        return;
+      }
+      if (!confirm(`Delete user with Telegram ID: ${telegramId}?`)) return;
+      if (!confirm('This will delete ALL user data. Continue?')) return;
+
+      try {
+        const data = await api('danger/delete-user', 'POST', {
+          telegramId: telegramId,
+          confirmPassword: '1993'
+        });
+        if (data.success) {
+          resultDiv.innerHTML = `<div class="alert alert-success">✅ User deleted: ${data.deleted.username || data.deleted.telegramId}</div>`;
+          loadUsers();
+        } else {
+          resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+        }
+      } catch (e) {
+        resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${e.message}</div>`;
+      }
     }
 
     // DB Push - sync schema
