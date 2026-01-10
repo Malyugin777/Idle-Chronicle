@@ -3059,6 +3059,62 @@ app.prepare().then(async () => {
           return;
         }
 
+        // Danger zone: Delete single user completely
+        if (parsedUrl.pathname === '/api/admin/danger/delete-user' && req.method === 'POST') {
+          const body = await parseBody();
+          if (body.confirmPassword !== RESET_PASSWORD) {
+            sendJson({ success: false, error: 'Invalid reset password' }, 403);
+            return;
+          }
+
+          const { odamage, telegramId } = body;
+          if (!odamage && !telegramId) {
+            sendJson({ success: false, error: 'Provide odamage or telegramId' }, 400);
+            return;
+          }
+
+          // Find user
+          const user = odamage
+            ? await prisma.user.findUnique({ where: { id: odamage } })
+            : await prisma.user.findUnique({ where: { telegramId: BigInt(telegramId) } });
+
+          if (!user) {
+            sendJson({ success: false, error: 'User not found' }, 404);
+            return;
+          }
+
+          const userId = user.id;
+
+          // Delete all related data (cascade should handle most, but be explicit)
+          await prisma.dailyTaskProgress.deleteMany({ where: { odamage: userId } });
+          await prisma.weeklyTaskProgress.deleteMany({ where: { odamage: userId } });
+          await prisma.pendingReward.deleteMany({ where: { userId } });
+          await prisma.userBadge.deleteMany({ where: { userId } });
+          await prisma.userEquipment.deleteMany({ where: { userId } });
+          await prisma.userTask.deleteMany({ where: { odamage: userId } });
+          await prisma.chest.deleteMany({ where: { userId } });
+          await prisma.activeBuff.deleteMany({ where: { userId } });
+          await prisma.inventoryItem.deleteMany({ where: { userId } });
+          await prisma.damageLog.deleteMany({ where: { odamage: userId } });
+
+          // Delete user
+          await prisma.user.delete({ where: { id: userId } });
+
+          // Remove from online users
+          for (const [socketId, player] of onlineUsers.entries()) {
+            if (player.odamage === userId) {
+              onlineUsers.delete(socketId);
+            }
+          }
+
+          // Remove from session leaderboard
+          sessionLeaderboard.delete(userId);
+
+          addLog('warn', 'system', `User ${user.username || user.telegramId} DELETED by admin`);
+          sendJson({ success: true, deleted: { odamage: userId, telegramId: user.telegramId.toString(), username: user.username } });
+          return;
+        }
+
         // Danger zone: Reset boss
         if (parsedUrl.pathname === '/api/admin/danger/reset-boss' && req.method === 'POST') {
           const body = await parseBody();
