@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "echo '=== PRISMA GENERATE ===' && prisma generate && echo '=== PRISMA DB PUSH ===' && prisma db push --skip-generate && echo '=== NEXT BUILD ===' && next build && echo '=== BUILD COMPLETE ==='",
+    "build": "prisma generate && prisma db push --accept-data-loss && next build",
     "start": "NODE_ENV=production node server.js",
     "lint": "next lint",
     "db:push": "prisma db push",
