@@ -391,7 +391,7 @@ export default function PhaserGame() {
       }
     });
 
-    // Player state (stamina/mana regen from server)
+    // Player state (stamina/mana regen from server + currencies from task claims)
     socket.on('player:state', (data: any) => {
       setPlayerState(p => ({
         ...p,
@@ -400,6 +400,8 @@ export default function PhaserGame() {
         mana: data.mana ?? p.mana,
         maxMana: data.maxMana ?? p.maxMana,
         exhaustedUntil: data.exhaustedUntil ?? p.exhaustedUntil,
+        gold: data.gold ?? p.gold,
+        crystals: data.ancientCoin ?? p.crystals,
       }));
     });
 
@@ -1112,7 +1114,7 @@ export default function PhaserGame() {
                   <div className="space-y-1.5 mb-3">
                     {[
                       { key: 'gold', label: '🟨 Gold', count: reward.chestsGold, color: 'yellow' },
-                      { key: 'silver', label: '🪙 Silver', count: reward.chestsSilver, color: 'gray' },
+                      { key: 'silver', label: '🥈 Silver', count: reward.chestsSilver, color: 'gray' },
                       { key: 'bronze', label: '🟫 Bronze', count: reward.chestsBronze, color: 'orange' },
                       { key: 'wooden', label: '🪵 Wooden', count: reward.chestsWooden, color: 'amber' },
                     ].filter(c => c.count > 0).map(chest => (
@@ -1391,11 +1393,11 @@ export default function PhaserGame() {
             <div className="space-y-1 text-sm">
               <div className="bg-yellow-500/20 rounded-lg p-2 border border-yellow-500/30">
                 <div className="text-yellow-400 font-bold">🥇 1 место</div>
-                <div className="text-gray-300 text-xs">1🟨 + 2🪙 + 2🟫 + 2🪵 + Slayer 7д</div>
+                <div className="text-gray-300 text-xs">1🟨 + 2🥈 + 2🟫 + 2🪵 + Slayer 7д</div>
               </div>
               <div className="bg-gray-400/20 rounded-lg p-2 border border-gray-400/30">
                 <div className="text-gray-300 font-bold">🥈 2 место</div>
-                <div className="text-gray-400 text-xs">1🟨 + 1🪙 + 2🟫 + 2🪵 + Elite 7д</div>
+                <div className="text-gray-400 text-xs">1🟨 + 1🥈 + 2🟫 + 2🪵 + Elite 7д</div>
               </div>
               <div className="bg-orange-500/20 rounded-lg p-2 border border-orange-500/30">
                 <div className="text-orange-400 font-bold">🥉 3 место</div>

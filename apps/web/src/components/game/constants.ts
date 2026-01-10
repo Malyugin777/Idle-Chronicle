@@ -4,7 +4,56 @@
 
 import type { Skill } from './types';
 
-export const APP_VERSION = 'v1.7.3';
+export const APP_VERSION = 'v1.7.5';
+
+// ═══════════════════════════════════════════════════════════
+// STANDARDIZED ICONS - Use these everywhere for consistency
+// ═══════════════════════════════════════════════════════════
+
+// Валюты и ресурсы
+export const CURRENCY_ICONS = {
+  gold: '🪙',
+  crystals: '💎',
+  tickets: '🎟️',
+  ether: '✨',
+  etherDust: '🌫️',
+  protection: '🛡️',
+  enchantCharge: '⚡',
+} as const;
+
+// Сундуки
+export const CHEST_ICONS = {
+  WOODEN: '🪵',
+  BRONZE: '🟫',
+  SILVER: '🥈',
+  GOLD: '🟨',
+} as const;
+
+// Ключи
+export const KEY_ICONS = {
+  WOODEN: '🗝️',
+  BRONZE: '🔑',
+  SILVER: '🔐',
+  GOLD: '🔑',
+} as const;
+
+// Цвета для Tailwind
+export const CURRENCY_COLORS = {
+  gold: 'text-amber-400',
+  crystals: 'text-purple-400',
+  tickets: 'text-yellow-400',
+  ether: 'text-cyan-400',
+  etherDust: 'text-purple-300',
+  protection: 'text-purple-400',
+  enchantCharge: 'text-blue-400',
+} as const;
+
+export const CHEST_COLORS = {
+  WOODEN: 'text-amber-600',
+  BRONZE: 'text-orange-400',
+  SILVER: 'text-gray-300',
+  GOLD: 'text-yellow-400',
+} as const;
 
 export const BUFF_ICONS: Record<string, string> = {
   haste: '⚡',
