@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
-import { Flame, Zap, Clover, Coins, Sparkles, Key, Gem, ArrowRightLeft } from 'lucide-react';
+import { Flame, Zap, Clover, Coins, Sparkles, Key, Gem } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 interface ShopState {
@@ -138,12 +138,6 @@ export default function ShopTab() {
     getSocket().emit('shop:buy', { type: 'enchant' });
   };
 
-  const handleExchange = (amount: number) => {
-    if (buying || amount <= 0) return;
-    setBuying('exchange');
-    getSocket().emit('shop:buy', { type: 'exchange', amount });
-  };
-
   const etherCost = 200; // 200 gold per 100 ether
   const canAffordEther = shopState.gold >= etherCost;
 
@@ -169,57 +163,6 @@ export default function ShopTab() {
           </span>
         </div>
         <span className="text-gray-400">{t.shop.gold}</span>
-      </div>
-
-      {/* Exchange Gold → Crystals */}
-      <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <ArrowRightLeft size={16} className="text-purple-400" />
-          <h3 className="text-sm text-gray-400">{lang === 'ru' ? 'Обмен валюты' : 'Currency Exchange'}</h3>
-        </div>
-        <p className="text-xs text-gray-500 mb-3">
-          {lang === 'ru' ? '🪙 Gold → 💎 Crystals (1:1)' : '🪙 Gold → 💎 Crystals (1:1)'}
-        </p>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-l2-gold">
-            <Coins size={16} />
-            <span className="font-bold">{shopState.gold.toLocaleString()}</span>
-          </div>
-          <ArrowRightLeft size={14} className="text-gray-500" />
-          <div className="flex items-center gap-1 text-purple-400">
-            <Gem size={16} />
-            <span className="font-bold">{shopState.crystals.toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div className="flex gap-2 mt-3">
-          {[100, 1000, 10000].map((amount) => (
-            <button
-              key={amount}
-              onClick={() => handleExchange(amount)}
-              disabled={shopState.gold < amount || buying === 'exchange'}
-              className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all ${
-                shopState.gold >= amount
-                  ? 'bg-purple-600 text-white hover:bg-purple-500 active:scale-95'
-                  : 'bg-gray-700 text-gray-500'
-              }`}
-            >
-              {buying === 'exchange' ? '...' : `${amount >= 1000 ? `${amount / 1000}K` : amount}`}
-            </button>
-          ))}
-          <button
-            onClick={() => handleExchange(shopState.gold)}
-            disabled={shopState.gold < 1 || buying === 'exchange'}
-            className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all ${
-              shopState.gold >= 1
-                ? 'bg-purple-600 text-white hover:bg-purple-500 active:scale-95'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            {lang === 'ru' ? 'Всё' : 'All'}
-          </button>
-        </div>
       </div>
 
       {/* Ether Section */}

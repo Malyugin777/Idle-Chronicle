@@ -5989,33 +5989,6 @@ app.prepare().then(async () => {
             gold: player.gold,
             enchantCharges: updatedUser.enchantCharges,
           });
-        } else if (data.type === 'exchange') {
-          // Exchange gold to crystals 1:1
-          const amount = Math.max(1, Math.floor(data.amount || 0));
-
-          if (player.gold < amount) {
-            socket.emit('shop:error', { message: 'Not enough gold' });
-            return;
-          }
-
-          player.gold -= amount;
-          player.ancientCoin = (player.ancientCoin || 0) + amount;
-
-          const updatedUser = await prisma.user.update({
-            where: { id: player.odamage },
-            data: {
-              gold: { decrement: BigInt(amount) },
-              ancientCoin: { increment: amount },
-            },
-            select: { gold: true, ancientCoin: true },
-          });
-
-          console.log(`[Shop] ${player.telegramId} exchanged ${amount} gold for ${amount} crystals`);
-
-          socket.emit('shop:success', {
-            gold: Number(updatedUser.gold),
-            crystals: updatedUser.ancientCoin,
-          });
         }
       } catch (err) {
         console.error('[Shop] Error:', err.message);
