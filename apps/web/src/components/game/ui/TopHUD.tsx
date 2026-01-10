@@ -16,11 +16,9 @@ interface TopHUDProps {
   manaFlash: boolean;
   exhausted: boolean;
   activeBuffs: ActiveBuff[];
-  hasClaimable: boolean;
   lang: 'ru' | 'en';
   t: any;
   onShowDebug: () => void;
-  onShowTasks: () => void;
 }
 
 export default function TopHUD({
@@ -34,11 +32,9 @@ export default function TopHUD({
   manaFlash,
   exhausted,
   activeBuffs,
-  hasClaimable,
   lang,
   t,
   onShowDebug,
-  onShowTasks,
 }: TopHUDProps) {
   return (
     <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 via-black/70 to-transparent pb-6 pt-2 px-3">
@@ -69,17 +65,30 @@ export default function TopHUD({
           </span>
         </div>
 
-        {/* Right: Gold + Crystals */}
-        <div className="flex items-center gap-2">
+        {/* Right: PS + Gold + Crystals */}
+        <div className="flex items-center gap-1.5">
+          {/* PS (Participation Score) */}
+          <div className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border ${
+            playerState.ps >= playerState.psCap
+              ? 'bg-gradient-to-r from-green-900/60 to-green-800/40 border-green-500/50'
+              : playerState.ps > 0
+                ? 'bg-gradient-to-r from-purple-900/60 to-purple-800/40 border-purple-500/40'
+                : 'bg-gradient-to-r from-gray-800/60 to-gray-700/40 border-gray-600/40'
+          }`}>
+            <span className="text-[10px]">⭐</span>
+            <span className={`text-[10px] font-bold ${
+              playerState.ps >= playerState.psCap ? 'text-green-300' : playerState.ps > 0 ? 'text-purple-300' : 'text-gray-400'
+            }`}>{playerState.ps}/{playerState.psCap}</span>
+          </div>
           {/* Gold */}
-          <div className="flex items-center gap-1 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-2 py-1 rounded-lg border border-amber-600/40">
-            <span className="text-xs">🪙</span>
-            <span className="text-xs font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
+          <div className="flex items-center gap-1 bg-gradient-to-r from-amber-900/60 to-amber-800/40 px-1.5 py-1 rounded-lg border border-amber-600/40">
+            <span className="text-[10px]">🪙</span>
+            <span className="text-[10px] font-bold text-amber-300">{formatCompact(playerState.gold)}</span>
           </div>
           {/* Crystals */}
-          <div className="flex items-center gap-1 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-2 py-1 rounded-lg border border-purple-500/40">
-            <Gem className="text-purple-400" size={12} />
-            <span className="text-xs font-bold text-purple-300">{playerState.crystals}</span>
+          <div className="flex items-center gap-1 bg-gradient-to-r from-purple-900/60 to-purple-800/40 px-1.5 py-1 rounded-lg border border-purple-500/40">
+            <Gem className="text-purple-400" size={10} />
+            <span className="text-[10px] font-bold text-purple-300">{playerState.crystals}</span>
           </div>
         </div>
       </div>
@@ -149,37 +158,12 @@ export default function TopHUD({
           </div>
         </div>
 
-        {/* PS indicator + Buffs (right of bars) */}
+        {/* Active Buffs (right of bars) */}
         <div className="flex-1 flex flex-wrap gap-1.5 justify-end items-center">
-          {/* Participation Score indicator */}
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold ${
-            playerState.ps >= playerState.psCap
-              ? 'bg-green-900/60 border border-green-500/50 text-green-300'
-              : playerState.ps > 0
-                ? 'bg-purple-900/60 border border-purple-500/50 text-purple-300'
-                : 'bg-gray-800/60 border border-gray-600/50 text-gray-400'
-          }`}>
-            <span>⭐</span>
-            <span>PS: {playerState.ps}/{playerState.psCap}</span>
-          </div>
-          {/* Active Buffs */}
           {activeBuffs.map(buff => (
             <BuffIcon key={buff.type} buff={buff} />
           ))}
         </div>
-
-        {/* Tasks Button */}
-        <button
-          onClick={onShowTasks}
-          className="relative w-10 h-10 bg-gray-900/80 rounded-lg border-2 border-gray-600
-                     flex items-center justify-center active:scale-90 transition-all
-                     hover:border-amber-500/50 hover:bg-gray-800/80 flex-shrink-0"
-        >
-          <span className="text-lg">🎯</span>
-          {hasClaimable && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-400" />
-          )}
-        </button>
       </div>
     </div>
   );

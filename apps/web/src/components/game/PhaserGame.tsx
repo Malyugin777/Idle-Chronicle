@@ -764,11 +764,9 @@ export default function PhaserGame() {
         manaFlash={manaFlash}
         exhausted={exhausted}
         activeBuffs={activeBuffs}
-        hasClaimable={hasClaimable}
         lang={lang}
         t={t}
         onShowDebug={() => setShowDebug(true)}
-        onShowTasks={() => setShowTasks(true)}
       />
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -926,6 +924,21 @@ export default function PhaserGame() {
         <span className="text-[7px] text-purple-300 font-bold mt-0.5">
           {lang === 'ru' ? 'ЗАТОЧКА' : 'ENCHANT'}
         </span>
+      </button>
+      {/* Tasks Button */}
+      <button
+        onClick={() => setShowTasks(true)}
+        className="absolute top-[23rem] left-2 z-10 w-12 h-12 bg-gradient-to-b from-cyan-700/60 to-cyan-900/80
+                   rounded-lg border border-cyan-600/50 flex flex-col items-center justify-center
+                   active:scale-90 transition-all hover:border-cyan-500/70 shadow-lg shadow-cyan-900/30"
+      >
+        <span className="text-xl">🎯</span>
+        <span className="text-[7px] text-cyan-300 font-bold mt-0.5">
+          {lang === 'ru' ? 'ЗАДАНИЯ' : 'TASKS'}
+        </span>
+        {hasClaimable && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-400" />
+        )}
       </button>
 
       {/* ═══════════════════════════════════════════════════════════ */}
