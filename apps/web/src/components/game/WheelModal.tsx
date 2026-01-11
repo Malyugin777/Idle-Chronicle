@@ -294,23 +294,25 @@ class WheelScene extends Phaser.Scene {
     this.lastSegmentIndex = -1;
 
     const numSegments = this.segments.length;
-    const sliceAngle = 360 / numSegments;
+    const sliceAngle = 360 / numSegments; // 36° for 10 segments
 
-    // CENTER of segment N is at (N + 0.5) * sliceAngle from starting position
+    // Segment N center is at (N + 0.5) * sliceAngle CLOCKWISE from TOP
+    // To bring it under the pointer (at TOP), wheel must rotate CLOCKWISE by that amount
+    // In Phaser, positive angle = clockwise rotation
     const segmentCenterOffset = (targetIndex + 0.5) * sliceAngle;
-    const targetAngle = -segmentCenterOffset;
 
-    // Random offset within segment (±35% from center)
+    // Random offset within segment (±35% from center, stay inside segment)
     const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.7;
 
-    // Normalize target to [0, -360) range
-    const normalizedTarget = ((targetAngle + randomOffset) % 360 + 360) % 360 - 360;
+    // Target angle (positive = clockwise)
+    const targetAngle = segmentCenterOffset + randomOffset;
 
-    // 5-7 full rotations
+    // Normalize to [0, 360) then add full rotations (5-7 spins clockwise)
+    const normalizedTarget = ((targetAngle % 360) + 360) % 360;
     const rotations = 5 + Math.floor(Math.random() * 3);
-    const finalAngle = normalizedTarget - rotations * 360;
+    const finalAngle = normalizedTarget + rotations * 360;
 
-    console.log(`[Wheel] Target: ${this.segments[targetIndex]?.label}, final=${finalAngle.toFixed(1)}°`);
+    console.log(`[Wheel] Target: ${this.segments[targetIndex]?.label} (idx ${targetIndex}), angle=${finalAngle.toFixed(1)}°`);
 
     // Main spin with tick tracking
     this.tweens.add({
@@ -321,7 +323,7 @@ class WheelScene extends Phaser.Scene {
       onUpdate: () => {
         // Track current segment for tick effect
         const currentAngle = this.wheelContainer.angle;
-        const normalizedAngle = (((-currentAngle) % 360) + 360) % 360;
+        const normalizedAngle = ((currentAngle % 360) + 360) % 360;
         const currentSegment = Math.floor(normalizedAngle / sliceAngle) % numSegments;
 
         if (currentSegment !== this.lastSegmentIndex && this.lastSegmentIndex !== -1) {
