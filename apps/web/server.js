@@ -3883,7 +3883,29 @@ app.prepare().then(async () => {
             manaRegen: user.manaRegen,
             stamina: player.stamina,
             maxStamina: player.maxStamina,
-            // Skills
+            // SP & Skills
+            sp: user.sp || 0,
+            skillFireball: user.skillFireball || 1,
+            skillIceball: user.skillIceball || 0,
+            skillLightning: user.skillLightning || 0,
+            // Skill Mastery v1.4
+            skillFireballMastery: user.skillFireballMastery || 0,
+            skillIceballMastery: user.skillIceballMastery || 0,
+            skillLightningMastery: user.skillLightningMastery || 0,
+            skillFireballCasts: user.skillFireballCasts || 0,
+            skillIceballCasts: user.skillIceballCasts || 0,
+            skillLightningCasts: user.skillLightningCasts || 0,
+            skillFireballTiers: user.skillFireballTiers || [],
+            skillIceballTiers: user.skillIceballTiers || [],
+            skillLightningTiers: user.skillLightningTiers || [],
+            // Passive Skills
+            passiveArcanePower: user.passiveArcanePower || 0,
+            passiveCritFocus: user.passiveCritFocus || 0,
+            passiveCritPower: user.passiveCritPower || 0,
+            passiveStaminaTraining: user.passiveStaminaTraining || 0,
+            passiveManaFlow: user.passiveManaFlow || 0,
+            passiveEtherEfficiency: user.passiveEtherEfficiency || 0,
+            // Combat skills
             tapsPerSecond: user.tapsPerSecond,
             autoAttackSpeed: user.autoAttackSpeed,
             isFirstLogin: user.isFirstLogin,
@@ -4522,9 +4544,10 @@ app.prepare().then(async () => {
           username: user.username,
           firstName: user.firstName,
           level: user.level,
-          // EXP
+          // EXP & SP
           exp: Number(user.exp),
           expToNext: expToNext,
+          sp: user.sp || 0,
           // Legacy stats
           str: user.str,
           dex: user.dex,

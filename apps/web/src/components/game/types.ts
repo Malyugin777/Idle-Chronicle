@@ -36,6 +36,7 @@ export interface PlayerState {
   skillFireball: number;
   skillIceball: number;
   skillLightning: number;
+  sp: number;
   ps: number;
   psCap: number;
 }

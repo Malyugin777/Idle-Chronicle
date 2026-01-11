@@ -4,7 +4,7 @@
 
 import type { Skill } from './types';
 
-export const APP_VERSION = 'v1.8.12';
+export const APP_VERSION = 'v1.8.13';
 
 // ═══════════════════════════════════════════════════════════
 // STANDARDIZED ICONS - Use these everywhere for consistency
@@ -103,6 +103,7 @@ export const INITIAL_PLAYER_STATE = {
   skillFireball: 1,
   skillIceball: 0,
   skillLightning: 0,
+  sp: 0,
   ps: 0,
   psCap: 24,
 };

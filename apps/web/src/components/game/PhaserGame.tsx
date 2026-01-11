@@ -482,6 +482,7 @@ export default function PhaserGame() {
         skillFireball: data.skillFireball ?? 1,
         skillIceball: data.skillIceball ?? 0,
         skillLightning: data.skillLightning ?? 0,
+        sp: data.sp ?? 0,
         ps: data.ps ?? 0,
         psCap: data.psCap ?? 24,
       });
@@ -531,11 +532,12 @@ export default function PhaserGame() {
     });
 
     // Level up (after boss kill)
-    socket.on('level:up', (data: { level: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
+    socket.on('level:up', (data: { level: number; exp: number; sp: number; xpGain: number; spGain: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
       console.log('[Level] Level up!', data);
       setPlayerState(p => ({
         ...p,
         level: data.level,
+        sp: data.sp,
         skillFireball: data.skillFireball,
         skillIceball: data.skillIceball,
         skillLightning: data.skillLightning,

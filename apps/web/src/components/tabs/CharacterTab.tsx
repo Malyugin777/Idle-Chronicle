@@ -1303,7 +1303,7 @@ export default function CharacterTab() {
     };
 
     // Handle level up (boss kill rewards)
-    const handleLevelUp = (data: { level: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
+    const handleLevelUp = (data: { level: number; sp: number; skillFireball: number; skillIceball: number; skillLightning: number }) => {
       setHeroState(prev => {
         if (!prev.baseStats) return prev;
         return {
@@ -1311,6 +1311,7 @@ export default function CharacterTab() {
           baseStats: {
             ...prev.baseStats,
             level: data.level,
+            sp: data.sp,
             skillFireball: data.skillFireball,
             skillIceball: data.skillIceball,
             skillLightning: data.skillLightning,
