@@ -6257,23 +6257,24 @@ app.prepare().then(async () => {
 
       try {
         player[stat] += 1;
-        player.gold -= cost;
 
         // Recalculate BASE pAtk (WITHOUT equipment)
         // Formula from CLAUDE.md: P.Atk = 10 + (СИЛ-10)*1
         player.basePAtk = 10 + Math.max(0, player.str - 10);
         player.critChance = Math.min(0.75, BASE_CRIT_CHANCE + player.luck * STAT_EFFECTS.luck);
 
-        // Save BASE pAtk to DB (not total with equipment!)
-        await prisma.user.update({
+        // SSOT: Use decrement for gold, sync memory from DB result
+        const updated = await prisma.user.update({
           where: { id: player.odamage },
           data: {
             [stat]: player[stat],
-            gold: BigInt(player.gold),
-            pAtk: player.basePAtk,  // FIX: Save BASE pAtk, not total!
+            gold: { decrement: BigInt(cost) },
+            pAtk: player.basePAtk,
             critChance: player.critChance,
           },
+          select: { gold: true },
         });
+        player.gold = Number(updated.gold);
 
         // Recalculate total pAtk including equipment
         await recalculateEquipmentStats(player, prisma);
@@ -6313,15 +6314,17 @@ app.prepare().then(async () => {
 
       try {
         player.tapsPerSecond += 1;
-        player.gold -= cost;
 
-        await prisma.user.update({
+        // SSOT: Use decrement for gold
+        const updated = await prisma.user.update({
           where: { id: player.odamage },
           data: {
             tapsPerSecond: player.tapsPerSecond,
-            gold: BigInt(player.gold),
+            gold: { decrement: BigInt(cost) },
           },
+          select: { gold: true },
         });
+        player.gold = Number(updated.gold);
 
         socket.emit('upgrade:success', {
           stat: 'tapsPerSecond',
@@ -6355,15 +6358,17 @@ app.prepare().then(async () => {
 
       try {
         player.autoAttackSpeed += 1;
-        player.gold -= cost;
 
-        await prisma.user.update({
+        // SSOT: Use decrement for gold
+        const updated = await prisma.user.update({
           where: { id: player.odamage },
           data: {
             autoAttackSpeed: player.autoAttackSpeed,
-            gold: BigInt(player.gold),
+            gold: { decrement: BigInt(cost) },
           },
+          select: { gold: true },
         });
+        player.gold = Number(updated.gold);
 
         socket.emit('upgrade:success', {
           stat: 'autoAttackSpeed',
@@ -6402,15 +6407,17 @@ app.prepare().then(async () => {
         } else {
           player.manaRegen += 1;
         }
-        player.gold -= cost;
 
-        await prisma.user.update({
+        // SSOT: Use decrement for gold
+        const updated = await prisma.user.update({
           where: { id: player.odamage },
           data: {
             manaRegen: player.manaRegen,
-            gold: BigInt(player.gold),
+            gold: { decrement: BigInt(cost) },
           },
+          select: { gold: true },
         });
+        player.gold = Number(updated.gold);
 
         socket.emit('upgrade:success', {
           stat: 'manaRegen',
@@ -6565,23 +6572,23 @@ app.prepare().then(async () => {
             return;
           }
 
-          player.gold -= totalCost;
-
-          // FIX: Используем increment вместо абсолютного значения
+          // SSOT: Use decrement for gold, increment for ether
           const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              gold: BigInt(player.gold),
+              gold: { decrement: BigInt(totalCost) },
               ether: { increment: quantity },
             },
-            select: { ether: true },
+            select: { gold: true, ether: true },
           });
+          player.gold = Number(updatedUser.gold);
+          player.ether = updatedUser.ether;
 
           console.log(`[Shop] ${player.telegramId} bought ${quantity} ether for ${totalCost} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            ether: updatedUser.ether,
+            ether: player.ether,
           });
         } else if (data.type === 'buff') {
           const buffId = data.buffId;
@@ -6596,26 +6603,29 @@ app.prepare().then(async () => {
             return;
           }
 
-          player.gold -= cost;
           const potionKey = `potion${buffId.charAt(0).toUpperCase() + buffId.slice(1)}`;
 
-          // FIX: Используем increment вместо абсолютного значения
+          // SSOT: Use decrement for gold, increment for potion
           const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              gold: BigInt(player.gold),
+              gold: { decrement: BigInt(cost) },
               [potionKey]: { increment: 1 },
             },
-            select: { potionHaste: true, potionAcumen: true, potionLuck: true },
+            select: { gold: true, potionHaste: true, potionAcumen: true, potionLuck: true },
           });
+          player.gold = Number(updatedUser.gold);
+          player.potionHaste = updatedUser.potionHaste;
+          player.potionAcumen = updatedUser.potionAcumen;
+          player.potionLuck = updatedUser.potionLuck;
 
           console.log(`[Shop] ${player.telegramId} bought ${buffId} potion for ${cost} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            potionHaste: updatedUser.potionHaste,
-            potionAcumen: updatedUser.potionAcumen,
-            potionLuck: updatedUser.potionLuck,
+            potionHaste: player.potionHaste,
+            potionAcumen: player.potionAcumen,
+            potionLuck: player.potionLuck,
           });
         } else if (data.type === 'debug-sword') {
           // DEBUG: Бесплатный меч 1500 pAtk для тестирования
@@ -6716,23 +6726,23 @@ app.prepare().then(async () => {
             return;
           }
 
-          player.gold -= ENCHANT_COST;
-
-          // FIX: Используем increment вместо абсолютного значения
+          // SSOT: Use decrement for gold, increment for enchantCharges
           const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              gold: BigInt(player.gold),
+              gold: { decrement: BigInt(ENCHANT_COST) },
               enchantCharges: { increment: 1 },
             },
-            select: { enchantCharges: true },
+            select: { gold: true, enchantCharges: true },
           });
+          player.gold = Number(updatedUser.gold);
+          player.enchantCharges = updatedUser.enchantCharges;
 
           console.log(`[Shop] ${player.telegramId} bought enchant charge for ${ENCHANT_COST} gold`);
 
           socket.emit('shop:success', {
             gold: player.gold,
-            enchantCharges: updatedUser.enchantCharges,
+            enchantCharges: player.enchantCharges,
           });
         }
       } catch (err) {
@@ -8707,14 +8717,14 @@ app.prepare().then(async () => {
 
       if (player.odamage) {
         try {
+          // SSOT: НЕ сохраняем gold - он всегда синхронизирован через транзакции
           const updateData = {
             // L2 Stamina (NEW)
             stamina: Math.floor(player.stamina),
             exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
             // Legacy mana
             mana: Math.floor(player.mana),
-            gold: BigInt(player.gold),
-            // Ether & consumables
+            // Ether & consumables (volatile state, not transactional)
             autoEther: player.autoEther,
             ether: player.ether,
             etherDust: player.etherDust,
@@ -9128,14 +9138,15 @@ app.prepare().then(async () => {
 
       if (player.odamage && damageDelta > 0) {
         try {
+          // SSOT: НЕ сохраняем gold - он всегда синхронизирован через транзакции
           await prisma.user.update({
             where: { id: player.odamage },
             data: {
-              gold: BigInt(player.gold),
-              // L2 Stamina (NEW)
+              // L2 Stamina (volatile state)
               stamina: Math.floor(player.stamina),
               exhaustedUntil: player.exhaustedUntil ? new Date(player.exhaustedUntil) : null,
               mana: Math.floor(player.mana),
+              // Stats (delta increment)
               totalDamage: { increment: BigInt(damageDelta) },
               totalClicks: { increment: BigInt(clicksDelta) },
             },
@@ -9209,17 +9220,17 @@ app.prepare().then(async () => {
 
         if (player.odamage && damageDelta > 0) {
           try {
+            // SSOT: НЕ сохраняем gold - он всегда синхронизирован через транзакции
             await prisma.user.update({
               where: { id: player.odamage },
               data: {
-                gold: BigInt(player.gold),
                 stamina: Math.floor(player.stamina),
                 mana: Math.floor(player.mana),
                 totalDamage: { increment: BigInt(damageDelta) },
                 totalClicks: { increment: BigInt(clicksDelta) },
               },
             });
-            console.log(`[Shutdown] Saved user ${player.odamageN}: delta=${damageDelta}`);
+            console.log(`[Shutdown] Saved user ${player.odamage}: delta=${damageDelta}`);
           } catch (e) {
             console.error(`[Shutdown] Error saving ${player.odamage}:`, e.message);
           }
