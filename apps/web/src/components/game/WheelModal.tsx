@@ -24,8 +24,22 @@ interface WheelModalProps {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PHASER WHEEL SCENE - Premium visuals with CanvasTexture
+// PHASER WHEEL SCENE - Real premium wheel with visible segments
 // ═══════════════════════════════════════════════════════════
+
+// Bright, saturated colors for segments (override server colors)
+const SEGMENT_COLORS = [
+  '#F59E0B', // amber
+  '#8B5CF6', // violet
+  '#EF4444', // red
+  '#10B981', // emerald
+  '#3B82F6', // blue
+  '#EC4899', // pink
+  '#F97316', // orange
+  '#06B6D4', // cyan
+  '#A855F7', // purple
+  '#22C55E', // green
+];
 
 class WheelScene extends Phaser.Scene {
   private wheelContainer!: Phaser.GameObjects.Container;
@@ -51,11 +65,11 @@ class WheelScene extends Phaser.Scene {
   create() {
     const centerX = 160;
     const centerY = 160;
-    const radius = 125;
+    const radius = 120;
     const numSegments = this.segments.length;
     const sliceAngle = (Math.PI * 2) / numSegments;
 
-    // Create wheel texture via offscreen canvas (gradients + premium look)
+    // Create wheel texture via offscreen canvas
     const wheelTexture = this.createWheelTexture(radius, numSegments);
     this.textures.addCanvas('wheel', wheelTexture);
 
@@ -66,51 +80,67 @@ class WheelScene extends Phaser.Scene {
     const wheelSprite = this.add.image(0, 0, 'wheel');
     this.wheelContainer.add(wheelSprite);
 
-    // Add labels on top of wheel
+    // Add labels INSIDE each segment (NOT along circumference!)
     this.segments.forEach((segment, i) => {
       const midAngle = i * sliceAngle - Math.PI / 2 + sliceAngle / 2;
-      const labelRadius = radius * 0.62;
+      const labelRadius = radius * 0.6;
       const labelX = Math.cos(midAngle) * labelRadius;
       const labelY = Math.sin(midAngle) * labelRadius;
 
+      // Make text almost horizontal - only slight tilt towards center
+      // Calculate angle to make text readable (pointing outward from center)
+      let textAngle = midAngle + Math.PI / 2;
+      // Flip text on bottom half so it's not upside down
+      if (midAngle > 0 && midAngle < Math.PI) {
+        textAngle += Math.PI;
+      }
+
       const label = this.add.text(labelX, labelY, segment.label, {
-        fontSize: '16px',
+        fontSize: '18px',
         fontFamily: 'Arial Black, sans-serif',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 5,
-        shadow: { offsetX: 1, offsetY: 2, color: '#000', blur: 4, fill: true },
+        strokeThickness: 6,
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 4, fill: true },
       });
       label.setOrigin(0.5, 0.5);
-      label.setRotation(midAngle + Math.PI / 2);
+      label.setRotation(textAngle);
       this.wheelContainer.add(label);
     });
 
-    // Golden center hub with depth
+    // Golden center hub ("bolt") with 3D depth
     const hub = this.add.graphics();
-    // Outer dark ring
     hub.fillStyle(0x1f2937, 1);
-    hub.fillCircle(0, 0, 26);
-    // Gold gradient ring
-    hub.lineStyle(6, 0xb45309, 1);
-    hub.strokeCircle(0, 0, 24);
-    hub.lineStyle(3, 0xfbbf24, 1);
+    hub.fillCircle(0, 0, 28);
+    // Bronze outer ring
+    hub.lineStyle(8, 0x78350f, 1);
+    hub.strokeCircle(0, 0, 26);
+    // Gold middle ring
+    hub.lineStyle(4, 0xb45309, 1);
     hub.strokeCircle(0, 0, 22);
-    // Inner gold center
+    hub.lineStyle(2, 0xfbbf24, 1);
+    hub.strokeCircle(0, 0, 18);
+    // Inner gold button
     hub.fillStyle(0xfbbf24, 1);
-    hub.fillCircle(0, 0, 12);
-    hub.fillStyle(0xfef3c7, 0.6);
-    hub.fillCircle(-3, -3, 5); // Highlight
+    hub.fillCircle(0, 0, 14);
+    // Highlight on button
+    hub.fillStyle(0xfef3c7, 0.7);
+    hub.fillCircle(-4, -4, 6);
+    // Small center dot
+    hub.fillStyle(0x92400e, 1);
+    hub.fillCircle(0, 0, 4);
     this.wheelContainer.add(hub);
 
-    // Outer decorative golden frame (3D effect)
+    // Outer decorative golden frame (thick 3D effect)
     const frame = this.add.graphics();
-    frame.lineStyle(10, 0x78350f, 1); // Dark bronze base
-    frame.strokeCircle(centerX, centerY, radius + 8);
-    frame.lineStyle(6, 0xb45309, 1); // Bronze middle
-    frame.strokeCircle(centerX, centerY, radius + 5);
-    frame.lineStyle(3, 0xfbbf24, 1); // Gold highlight
+    frame.lineStyle(12, 0x451a03, 1); // Dark brown base
+    frame.strokeCircle(centerX, centerY, radius + 10);
+    frame.lineStyle(8, 0x78350f, 1); // Bronze
+    frame.strokeCircle(centerX, centerY, radius + 6);
+    frame.lineStyle(4, 0xb45309, 1); // Bronze highlight
     frame.strokeCircle(centerX, centerY, radius + 2);
+    frame.lineStyle(2, 0xfbbf24, 1); // Gold inner edge
+    frame.strokeCircle(centerX, centerY, radius);
 
     // Win highlight overlay (hidden initially)
     this.winHighlight = this.add.graphics();
@@ -119,15 +149,10 @@ class WheelScene extends Phaser.Scene {
     // Premium pointer with 3D effect
     this.pointer = this.add.graphics();
     this.drawPointer(1);
-
-    // Add gloss overlay on wheel (subtle shine)
-    const gloss = this.add.graphics();
-    gloss.fillStyle(0xffffff, 0.08);
-    gloss.fillEllipse(centerX - 20, centerY - 30, radius * 1.2, radius * 0.7);
   }
 
   private createWheelTexture(radius: number, numSegments: number): HTMLCanvasElement {
-    const size = radius * 2 + 20;
+    const size = radius * 2 + 40;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -136,19 +161,22 @@ class WheelScene extends Phaser.Scene {
     const cy = size / 2;
     const sliceAngle = (Math.PI * 2) / numSegments;
 
-    // Draw each segment with radial gradient
+    // Draw each segment with BRIGHT colors and gradient
     this.segments.forEach((segment, i) => {
       const startAngle = i * sliceAngle - Math.PI / 2;
       const endAngle = startAngle + sliceAngle;
-      const midAngle = startAngle + sliceAngle / 2;
 
-      // Create radial gradient (lighter center, darker edge)
-      const baseColor = segment.color;
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0, this.lightenColor(baseColor, 30));
-      grad.addColorStop(0.5, baseColor);
-      grad.addColorStop(1, this.darkenColor(baseColor, 25));
+      // Use bright colors (override server's dark colors)
+      const baseColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
 
+      // Create radial gradient (bright center, slightly darker edge)
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
+      grad.addColorStop(0, this.lightenColor(baseColor, 50));
+      grad.addColorStop(0.4, this.lightenColor(baseColor, 20));
+      grad.addColorStop(0.7, baseColor);
+      grad.addColorStop(1, this.darkenColor(baseColor, 30));
+
+      // Draw segment
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, startAngle, endAngle);
@@ -156,29 +184,49 @@ class WheelScene extends Phaser.Scene {
       ctx.fillStyle = grad;
       ctx.fill();
 
+      // White inner arc (highlight near center)
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.35, startAngle + 0.05, endAngle - 0.05);
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
       // Segment divider (dark line)
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + Math.cos(startAngle) * radius, cy + Math.sin(startAngle) * radius);
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 3;
       ctx.stroke();
 
-      // Inner light line on divider
+      // Light edge on divider
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(startAngle) * 5, cy + Math.sin(startAngle) * 5);
-      ctx.lineTo(cx + Math.cos(startAngle) * (radius - 5), cy + Math.sin(startAngle) * (radius - 5));
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.moveTo(cx + Math.cos(startAngle + 0.02) * 30, cy + Math.sin(startAngle + 0.02) * 30);
+      ctx.lineTo(cx + Math.cos(startAngle + 0.02) * (radius - 5), cy + Math.sin(startAngle + 0.02) * (radius - 5));
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
       ctx.lineWidth = 1;
       ctx.stroke();
     });
 
-    // Outer ring shadow
+    // Inner shadow ring
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 4;
+    ctx.arc(cx, cy, radius * 0.32, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 6;
     ctx.stroke();
+
+    // Gloss overlay (top half shine)
+    const glossGrad = ctx.createLinearGradient(cx, cy - radius, cx, cy);
+    glossGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
+    glossGrad.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+    glossGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius - 2, -Math.PI, 0);
+    ctx.lineTo(cx + radius - 2, cy);
+    ctx.arc(cx, cy, radius * 0.35, 0, -Math.PI, true);
+    ctx.closePath();
+    ctx.fillStyle = glossGrad;
+    ctx.fill();
 
     return canvas;
   }
