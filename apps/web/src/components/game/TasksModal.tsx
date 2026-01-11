@@ -322,18 +322,17 @@ function CheckInModal({
         </div>
 
         {/* Today's Reward */}
-        {todayReward && (
-          <div className="p-3 border-t border-white/10">
-            <div className="text-center text-sm text-gray-400 mb-2">
-              {lang === 'ru' ? 'Награда сегодня:' : "Today's reward:"}
-            </div>
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <span className="text-3xl">{todayReward.icon}</span>
-              <span className="text-lg text-white">x{todayReward.amount}</span>
-            </div>
-
-            {canClaimToday ? (
-              needsSlots ? (
+        <div className="p-3 border-t border-white/10">
+          {canClaimToday && todayReward ? (
+            <>
+              <div className="text-center text-sm text-gray-400 mb-2">
+                {lang === 'ru' ? 'Награда сегодня:' : "Today's reward:"}
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span className="text-3xl">{todayReward.icon}</span>
+                <span className="text-lg text-white">x{todayReward.amount}</span>
+              </div>
+              {needsSlots ? (
                 <div className="text-center text-orange-400 text-sm">
                   {lang === 'ru' ? 'Нужен свободный слот сундука' : 'Need free chest slot'}
                 </div>
@@ -345,14 +344,20 @@ function CheckInModal({
                 >
                   {claiming ? '...' : lang === 'ru' ? 'Забрать' : 'Claim'}
                 </button>
-              )
-            ) : (
-              <div className="text-center text-green-400 text-sm">
-                {lang === 'ru' ? 'Уже получено сегодня!' : 'Already claimed today!'}
+              )}
+            </>
+          ) : (
+            <div className="text-center">
+              <div className="text-3xl mb-2">✅</div>
+              <div className="text-green-400 font-bold mb-1">
+                {lang === 'ru' ? 'Награда получена!' : 'Reward claimed!'}
               </div>
-            )}
-          </div>
-        )}
+              <div className="text-gray-500 text-sm">
+                {lang === 'ru' ? 'Возвращайся завтра' : 'Come back tomorrow'}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
