@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
+import { usePlayerStore } from '@/stores/playerStore';
 import { Package, Gem, Coins, Lock, X, ScrollText, Hammer } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import ChestOpenModal from '../modals/ChestOpenModal';
@@ -92,8 +93,20 @@ export default function TreasuryTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
-  const [crystals, setCrystals] = useState(0);
-  const [gold, setGold] = useState(0);
+  // v1.8.20: Use Zustand store for resources (no more player:get needed)
+  const resources = usePlayerStore(state => state.resources);
+  const setResources = usePlayerStore(state => state.setResources);
+
+  // Derived values from store
+  const crystals = resources.crystals;
+  const gold = resources.gold;
+  const chestKeys: ChestKeys = {
+    keyWooden: resources.keyWooden,
+    keyBronze: resources.keyBronze,
+    keySilver: resources.keySilver,
+    keyGold: resources.keyGold,
+  };
+
   const [chests, setChests] = useState<Chest[]>([]);
   const [lootStats, setLootStats] = useState<LootStats>({
     totalGoldEarned: 0,
@@ -112,12 +125,6 @@ export default function TreasuryTab() {
   const [rewardSelection, setRewardSelection] = useState<{ wooden: number; bronze: number; silver: number; gold: number }>({ wooden: 0, bronze: 0, silver: 0, gold: 0 });
   const [showForge, setShowForge] = useState(false);
   const [usingKey, setUsingKey] = useState<string | null>(null); // Track which chest is being opened with key
-  const [chestKeys, setChestKeys] = useState<ChestKeys>({
-    keyWooden: 0,
-    keyBronze: 0,
-    keySilver: 0,
-    keyGold: 0,
-  });
 
   // Update timer every second
   useEffect(() => {
@@ -129,11 +136,11 @@ export default function TreasuryTab() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Request chest data and player gold
+    // Request chest data (gold/crystals come from Zustand store)
     socket.emit('chest:get');
     socket.emit('loot:stats:get');
     socket.emit('rewards:get'); // TZ Этап 2: Request pending rewards
-    socket.emit('player:get'); // Для получения gold
+    // v1.8.20: Removed player:get - resources come from Zustand store
 
     // Define all handlers as named functions for proper cleanup
     const handleChestData = (data: { chests: Chest[] }) => {
@@ -166,7 +173,7 @@ export default function TreasuryTab() {
         c.id === data.chestId ? { ...c, openingDuration: data.newDuration } : c
       ));
       if (data.crystals !== undefined) {
-        setCrystals(data.crystals);
+        setResources({ crystals: data.crystals });
       }
       setSelectedChest(prev => prev?.id === data.chestId ? { ...prev, openingDuration: data.newDuration } : prev);
     };
@@ -181,7 +188,7 @@ export default function TreasuryTab() {
         chestSlots: data.chestSlots,
         nextPrice: data.nextPrice ?? prev.nextPrice,
       }));
-      setCrystals(data.crystals);
+      setResources({ crystals: data.crystals });
       setSelectedLockedSlot(null);
     };
 
@@ -225,43 +232,8 @@ export default function TreasuryTab() {
       setClaimingRewardId(null);
     };
 
-    const handleAuthSuccess = (data: any) => {
-      setCrystals(data.ancientCoin || 0);
-      setGold(data.gold || 0);
-    };
-
-    const handlePlayerData = (data: any) => {
-      if (data) {
-        setCrystals(data.ancientCoin || 0);
-        setGold(data.gold || 0);
-        setChestKeys({
-          keyWooden: data.keyWooden || 0,
-          keyBronze: data.keyBronze || 0,
-          keySilver: data.keySilver || 0,
-          keyGold: data.keyGold || 0,
-        });
-      }
-    };
-
-    const handlePlayerKeys = (data: ChestKeys) => {
-      setChestKeys(data);
-    };
-
-    const handleEtherCraft = (data: { gold?: number }) => {
-      if (data.gold !== undefined) {
-        setGold(data.gold);
-      }
-    };
-
-    // Sync resources when task rewards are claimed
-    const handlePlayerState = (data: { ancientCoin?: number; gold?: number }) => {
-      if (data.ancientCoin !== undefined) {
-        setCrystals(data.ancientCoin);
-      }
-      if (data.gold !== undefined) {
-        setGold(data.gold);
-      }
-    };
+    // v1.8.20: Removed local handlers for auth:success, player:data, player:keys, ether:craft, player:state
+    // All resource updates now come from Zustand store populated by global useSocketListeners
 
     // Register all listeners
     socket.on('chest:data', handleChestData);
@@ -277,11 +249,8 @@ export default function TreasuryTab() {
     socket.on('rewards:available', handleRewardsAvailable);
     socket.on('rewards:claimed', handleRewardsClaimed);
     socket.on('rewards:error', handleRewardsError);
-    socket.on('auth:success', handleAuthSuccess);
-    socket.on('player:data', handlePlayerData);
-    socket.on('ether:craft:success', handleEtherCraft);
-    socket.on('player:state', handlePlayerState);
-    socket.on('player:keys', handlePlayerKeys);
+    // v1.8.20: Removed listeners for auth:success, player:data, ether:craft, player:state, player:keys
+    // Resources are now synced via Zustand store from global useSocketListeners
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners
@@ -298,13 +267,8 @@ export default function TreasuryTab() {
       socket.off('rewards:available', handleRewardsAvailable);
       socket.off('rewards:claimed', handleRewardsClaimed);
       socket.off('rewards:error', handleRewardsError);
-      socket.off('auth:success', handleAuthSuccess);
-      socket.off('player:data', handlePlayerData);
-      socket.off('ether:craft:success', handleEtherCraft);
-      socket.off('player:state', handlePlayerState);
-      socket.off('player:keys', handlePlayerKeys);
     };
-  }, []);
+  }, [setResources]);
 
   // Check if any chest is currently opening
   const openingChest = chests.find(c => {

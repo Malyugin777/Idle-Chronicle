@@ -1,0 +1,437 @@
+=================================================================
+IDLE CHRONICLE - ТЕХНИЧЕСКАЯ АРХИТЕКТУРА v1.8.19
+=================================================================
+
+=================================================================
+1. ОБЩАЯ АРХИТЕКТУРА
+=================================================================
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ КЛИЕНТ (Next.js 14 + Phaser 3)                              │
+│                                                             │
+│ PhaserGame.tsx (1762 строки, 32 useState, 4 useEffect)      │
+│  ├─ TopHUD (ресурсы, HP, баффы)                            │
+│  ├─ SkillBar (скиллы, AUTO, Ether)                         │
+│  ├─ Phaser Canvas (BattleScene)                            │
+│  └─ Модальные окна (6 штук)                                │
+│                                                             │
+│ Табы (независимые компоненты):                              │
+│  ├─ CharacterTab (статистика, экипировка)                  │
+│  ├─ TreasuryTab (сундуки, награды)                         │
+│  ├─ LeaderboardTab (рейтинги)                              │
+│  └─ ShopTab (покупки)                                      │
+└─────────────────┬───────────────────────────────────────────┘
+                  │ WebSocket (Socket.io)
+                  │ 63 события
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ СЕРВЕР (server.js - 9292 строки)                            │
+│                                                             │
+│ In-Memory State:                                            │
+│  ├─ bossState {} - текущий босс                            │
+│  ├─ onlineUsers Map<socketId → player>                     │
+│  ├─ sessionLeaderboard Map<odamage → data>                   │
+│  └─ previousBossSession - для лидерборда                   │
+│                                                             │
+│ Интервалы:                                                  │
+│  ├─ 250ms: broadcast boss:state                            │
+│  ├─ 1 сек: respawn check, regen, save                      │
+│  ├─ 5 мин: PS tick, dampening                              │
+│  └─ 10 сек: flush dirty players                            │
+└─────────────────┬───────────────────────────────────────────┘
+                  │ Prisma ORM
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ PostgreSQL (Prisma Schema - 716 строк)                      │
+│                                                             │
+│ Таблицы:                                                    │
+│  ├─ User (190+ полей) - SSOT для ресурсов                  │
+│  ├─ Equipment / UserEquipment                              │
+│  ├─ Chest - открывающиеся сундуки                          │
+│  ├─ PendingReward - награды за босса                       │
+│  ├─ BossSession - история                                  │
+│  ├─ DailyTaskProgress / WeeklyTaskProgress                 │
+│  ├─ UserBadge / ActiveBuff                                 │
+│  └─ GameState (singleton)                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+=================================================================
+2. SOCKET.IO СОБЫТИЯ (полный список)
+=================================================================
+
+АУТЕНТИФИКАЦИЯ (4):
+- auth                    → Telegram login
+- player:get              → Полные данные игрока
+- activity:ping           → Пинг активности (5 сек)
+- session:heartbeat       → Keep-alive
+
+БОЕВАЯ СИСТЕМА (6):
+- tap:batch               → Основной тап
+- skill:use               → Использование скилла
+- skill:upgrade           → Апгрейд за SP
+- skill:passive-upgrade   → Пассивные умения
+- autoAttack:toggle       → AUTO режим
+- ether:toggle            → Авто-эфир
+
+ЛИДЕРБОРД (3):
+- leaderboard:get         → Текущий босс
+- leaderboard:previous:get → Предыдущий босс
+- leaderboard:alltime:get → All-time
+
+СУНДУКИ (7):
+- chest:get               → Список сундуков
+- chest:open              → Начать открытие
+- chest:claim             → Забрать лут
+- chest:use-key           → Открыть ключом
+- chest:boost             → Ускорить
+- chest:delete            → Удалить
+- chest:buySlot           → Купить слот
+
+ЗЕЛЬЯ И МЕДИТАЦИЯ (4):
+- buff:use                → Использовать зелье
+- meditation:collect      → Собрать пыль
+- ether:craft             → Крафт эфира
+- ether:craftAll          → Крафт всего
+
+ЭКИПИРОВКА (5):
+- equipment:get           → Получить экипировку
+- equipment:equip         → Надеть
+- equipment:unequip       → Снять
+- loot:stats:get          → Инвентарь
+- inventory:get           → Инвентарь с фильтром
+
+АПГРЕЙДЫ (6):
+- upgrade:stat            → Апгрейд атрибута
+- upgrade:tapSpeed        → Тап-скорость
+- upgrade:autoAttack      → Авто-атака
+- upgrade:manaRegen       → Реген маны
+- slot:unlock             → Слот экипировки
+- firstLogin:complete     → Стартер-пак
+
+ЗАТОЧКА (7):
+- forge:get               → Данные кузницы
+- forge:salvage           → Разбор
+- forge:restore           → Восстановление
+- forge:abandon           → Удаление
+- enchant:try             → Попытка заточки
+- merge:preview           → Превью слияния
+- merge:attempt           → Слияние
+
+МАГАЗИН (2):
+- shop:buy                → Покупка
+- shop:buyProtection      → Покупка защиты
+
+ЗАДАНИЯ (6):
+- tasks:get               → Список задач
+- tasks:claim             → Забрать награду
+- ap:status               → Activity Points
+- ap:claim                → Забрать AP
+- checkin:status          → Check-in
+- checkin:claim           → Забрать check-in
+
+НАГРАДЫ (2):
+- rewards:get             → Pending rewards
+- rewards:claim           → Забрать
+
+СИСТЕМНЫЕ (3):
+- disconnect              → Сохранение
+- admin:resetFirstLogin   → Admin
+- starter:open            → Стартер пак
+
+=================================================================
+3. PHASERGAME.TSX - ДЕТАЛЬНЫЙ АНАЛИЗ
+=================================================================
+
+СОСТОЯНИЯ (32 useState):
+```typescript
+// Подключение
+lang, connected, playersOnline
+
+// Босс и игрок
+bossState, playerState
+
+// Эфир
+autoUseEther, autoAttack
+
+// Медитация
+meditationData, showMeditation, meditationShownRef
+
+// Скиллы
+skills
+
+// Боевая статистика
+damageFeed, sessionDamage, sessionClicks
+
+// Награды
+victoryData, respawnCountdown, pendingRewards
+slotInfo, chestSelection, claimingReward, claimError
+
+// Приветствие
+showWelcome, welcomeStep, starterItems, starterOpening
+
+// UI флаги
+showDropTable, staminaFlash, manaFlash
+activityStatus, currentRank, pressedSkill
+
+// Баффы
+activeBuffs
+
+// Модали
+showTasks, showForge, showEnchant
+
+// Другое
+hasClaimable, showDebug, showFps, loadingState
+```
+
+ЭФФЕКТЫ (4 useEffect):
+1. FPS Counter (опционально)
+2. ГЛАВНЫЙ ЭФФЕКТ (500+ строк) - socket.io, Phaser init
+3. Buff expiration checker (1 сек)
+4. Tasks claimable badge (30 сек)
+
+ПРОБЛЕМЫ:
+- Гигантский useEffect нужно разбить на 6+ smaller effects
+- Нет React.memo на TopHUD/SkillBar
+- formatCompact дублируется локально
+
+=================================================================
+4. ТАБЫ - СРАВНИТЕЛЬНЫЙ АНАЛИЗ
+=================================================================
+
+| Метрика          | CharacterTab | TreasuryTab | LeaderboardTab | ShopTab |
+|------------------|-------------|-------------|----------------|---------|
+| Строк            | 1826        | 1097        | 482            | 348     |
+| Socket событий   | 20+         | 22          | 5              | 6       |
+| Модальных окон   | 3           | 5           | 0              | 0       |
+| useEffect        | 5+          | 1           | 1              | 1       |
+| Периодический    | Нет         | По нажатию  | 2 сек          | На mount|
+
+ПРОБЛЕМЫ СИНХРОНИЗАЦИИ:
+- Каждый таб независимо запрашивает player:get
+- Нет live sync между табами
+- LeaderboardTab опрашивает слишком часто (2 сек)
+
+ДУБЛИРУЮЩИЙСЯ КОД:
+```typescript
+// Везде повторяется:
+const [lang] = useState(() => detectLanguage());
+const socket = getSocket();
+socket.emit('player:get');
+
+// Разные реализации formatNumber
+```
+
+=================================================================
+5. SERVER.JS - КЛЮЧЕВЫЕ СИСТЕМЫ
+=================================================================
+
+DAMPENING (анти-зерг):
+```javascript
+const BOSS_MIN_DURATION_MS = 24 * 60 * 60 * 1000;  // 24 часа
+const DAMPENING_MIN_MULT = 0.15;                    // -85% урона макс
+const DPS_EMA_ALPHA = 0.10;                         // EMA сглаживание
+```
+
+RAGE PHASES:
+```javascript
+{ hpPercent: 100, multiplier: 1.0 }  // Нормально
+{ hpPercent: 75, multiplier: 1.2 }   // +20% урон
+{ hpPercent: 50, multiplier: 1.5 }   // +50% урон
+{ hpPercent: 25, multiplier: 2.0 }   // +100% урон
+```
+
+PS (Participation Score):
+```javascript
+const PS_TICK_MS = 5 * 60 * 1000;      // +1 PS каждые 5 мин
+const PS_CAP_PER_BOSS = 24;            // Макс 24 за босса
+const BASE_PS_FULL = 6;                // 6 тиков = 100% вес
+```
+
+CHEST SLOTS:
+```javascript
+const CHEST_SLOT_PRICES = [50, 150, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
+// 5 бесплатно, потом по цене
+```
+
+=================================================================
+6. SSOT ПАТТЕРН (Single Source of Truth)
+=================================================================
+
+БД = ЕДИНСТВЕННЫЙ ИСТОЧНИК ПРАВДЫ для:
+- gold, ancientCoin, lotteryTickets
+- ether, etherDust
+- enchantCharges, protectionCharges
+- potionHaste, potionAcumen, potionLuck
+- keyWooden, keyBronze, keySilver, keyGold
+- exp, sp
+- totalDamage, totalClicks
+
+ПРАВИЛЬНЫЙ ПАТТЕРН:
+```javascript
+// 1. Изменяем в БД
+const updated = await prisma.user.update({
+  where: { id: odamage },
+  data: { gold: { decrement: BigInt(cost) } },
+  select: { gold: true },
+});
+
+// 2. Синхронизируем память ПОСЛЕ БД
+player.gold = Number(updated.gold);
+```
+
+НЕПРАВИЛЬНО:
+```javascript
+// НЕ делать так!
+player.gold -= cost;
+await prisma.user.update({ data: { gold: BigInt(player.gold) } });
+```
+
+DIRTY FLAGGING:
+```javascript
+player.ether -= 1;
+player.dirty = true;  // Пометить для сохранения
+
+// Каждые 10 сек flush:
+setInterval(async () => {
+  for (const [, player] of onlineUsers.entries()) {
+    if (player.dirty) await savePlayerResources(player);
+  }
+}, 10000);
+```
+
+=================================================================
+7. МОДАЛЬНЫЕ ОКНА
+=================================================================
+
+EnchantModal.tsx (644 строки):
+- 2 вкладки: Enchant, Broken
+- Socket: forge:get, enchant:try, forge:restore, forge:abandon
+- Показывает шансы заточки из shared/data/enchant.ts
+
+ForgeModal.tsx (917 строк):
+- 3 вкладки: Salvage, Merge, Craft
+- Socket: forge:get, forge:salvage, merge:preview, merge:attempt
+- Ether craft: 5 dust + 5 gold = 1 ether
+
+TasksModal.tsx (857 строк):
+- 2 вкладки: Daily, Weekly
+- AP Progress Bar с milestones (30/60/100)
+- Check-In Calendar (14 дней)
+- Socket: tasks:get, tasks:claim, ap:status, checkin:status
+
+ChestOpenModal.tsx (349 строк):
+- Анимация открытия (shake → burst → reveal)
+- Показывает награды с glow по редкости
+
+=================================================================
+8. PACKAGES/SHARED
+=================================================================
+
+data/enchant.ts:
+```typescript
+export const ENCHANT_CHANCES = {
+  0: 1.0,    // 100%
+  1: 1.0,
+  2: 1.0,
+  3: 1.0,    // Safe zone
+  4: 0.66,   // 66%
+  5: 0.55,
+  // ...
+  10: 0.25,
+};
+export const ENCHANT_SAFE_LEVEL = 3;
+export const ENCHANT_BONUS_PER_LEVEL = 0.03;  // +3%
+```
+
+data/sets.ts:
+```typescript
+export const SETS = {
+  adventurer: {
+    name: 'Adventurer',
+    bonus3: { pAtkPercent: 3 },
+    bonus6: { pAtkPercent: 5, pDefPercent: 5 },
+  },
+  // ...
+};
+```
+
+data/skills.ts:
+```typescript
+export const SKILLS = {
+  fireball: { unlockLevel: 1, manaCost: 100, cooldown: 10000, ... },
+  iceball: { unlockLevel: 2, ... },
+  lightning: { unlockLevel: 3, ... },
+};
+```
+
+ИСПОЛЬЗОВАНИЕ:
+- Frontend: import { ENCHANT_CHANCES } from '@shared/data'
+- Backend: const { ENCHANT_CHANCES } = require('@shared/data')
+
+ПРОБЛЕМА: server.js частично использует shared, частично хардкодит
+(TODO комментарии отмечают места для синхронизации)
+
+=================================================================
+9. ИЗВЕСТНЫЕ ПРОБЛЕМЫ
+=================================================================
+
+КРИТИЧЕСКИЕ:
+1. Гигантский useEffect в PhaserGame (500+ строк)
+2. Нет React.memo на TopHUD/SkillBar (лишние ререндеры)
+3. player:state дублируется в 8 местах на сервере
+4. LeaderboardTab опрашивает слишком часто (2 сек)
+
+СРЕДНИЕ:
+1. formatCompact дублируется (local vs constants)
+2. sessionLeaderboard не очищается при respawn
+3. Нет глобального state management
+4. onlineUsers может накапливаться
+
+НИЗКИЕ:
+1. serverUptime state - мёртвый код
+2. DEBUG_EQUIPMENT - удалить перед релизом
+3. isExhausted callback - можно inline
+
+=================================================================
+10. РЕКОМЕНДАЦИИ ПО РЕФАКТОРИНГУ
+=================================================================
+
+1. РАЗБИТЬ PHASERGAME USEEFFECT:
+   - Socket auth effect
+   - Boss state effect
+   - Player resources effect
+   - Combat system effect
+   - Rewards effect
+   - Buffs effect
+
+2. ДОБАВИТЬ REACT.MEMO:
+   - TopHUD
+   - SkillBar
+   - TaskCard
+   - ChestCard
+
+3. СОЗДАТЬ HELPER ДЛЯ PLAYER:STATE:
+```javascript
+function emitPlayerState(socket, player) {
+  socket.emit('player:state', {
+    stamina: player.stamina,
+    maxStamina: player.maxStamina,
+    // ...
+  });
+}
+```
+
+4. ГЛОБАЛЬНЫЙ STATE MANAGER:
+   - Zustand для ресурсов
+   - Один источник для всех табов
+
+5. ОПТИМИЗИРОВАТЬ ОПРОС:
+   - LeaderboardTab: 5-10 сек вместо 2
+   - Использовать WebSocket push вместо polling
+
+=================================================================
+ВЕРСИЯ: v1.8.19
+ДАТА: 2026-01-11
+=================================================================

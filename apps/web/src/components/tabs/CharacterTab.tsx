@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from '@/lib/socket';
+import { usePlayerStore } from '@/stores/playerStore';
 import { X, Sword, Shield, Crown, Shirt, Hand, Footprints, Gem, CircleDot } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 import { SETS, SetDefinition, SetBonus } from '@shared/data/sets';
@@ -1182,9 +1183,21 @@ export default function CharacterTab() {
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
   const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null);
-  const [consumables, setConsumables] = useState({ ether: 0, etherDust: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0, enchantCharges: 0, protectionCharges: 0, lotteryTickets: 0 });
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
+
+  // v1.8.20: Use Zustand store for consumables (no more local state)
+  const resources = usePlayerStore(state => state.resources);
+  const consumables = {
+    ether: resources.ether,
+    etherDust: resources.etherDust,
+    scrollHaste: resources.potionHaste,
+    scrollAcumen: resources.potionAcumen,
+    scrollLuck: resources.potionLuck,
+    enchantCharges: resources.enchantCharges,
+    protectionCharges: resources.protectionCharges,
+    lotteryTickets: resources.lotteryTickets,
+  };
 
   useEffect(() => {
     const socket = getSocket();
@@ -1197,16 +1210,7 @@ export default function CharacterTab() {
         newState.derivedStats = recalculateDerivedStats(newState);
         return newState;
       });
-      setConsumables({
-        ether: data.ether || 0,
-        etherDust: data.etherDust || 0,
-        scrollHaste: data.potionHaste || 0,  // Server sends potionHaste
-        scrollAcumen: data.potionAcumen || 0, // Server sends potionAcumen
-        scrollLuck: data.potionLuck || 0,     // Server sends potionLuck
-        enchantCharges: data.enchantCharges || 0,
-        protectionCharges: data.protectionCharges || 0,
-        lotteryTickets: data.lotteryTickets || 0,
-      });
+      // v1.8.20: Consumables now come from Zustand store, no local state to set
       setIsLoading(false);
     };
 
@@ -1242,33 +1246,15 @@ export default function CharacterTab() {
       });
     };
 
-    // FIX: Server sends potionHaste/potionAcumen/potionLuck directly, not in stats object
-    const handleBuffSuccess = (data: { buffId: string; expiresAt: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
-      setConsumables(prev => ({
-        ...prev,
-        scrollHaste: data.potionHaste ?? prev.scrollHaste,
-        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
-        scrollLuck: data.potionLuck ?? prev.scrollLuck,
-      }));
-    };
+    // v1.8.20: Removed handleBuffSuccess - potions synced via Zustand store
+    // v1.8.20: Removed handleTapResult - ether synced via Zustand store
 
-    // Sync ether when used in combat (from PhaserGame taps)
-    const handleTapResult = (data: { ether?: number }) => {
-      if (data.ether !== undefined) {
-        setConsumables(prev => ({ ...prev, ether: data.ether! }));
-      }
-    };
-
-    // Sync ether, etherDust, and gold when crafted
+    // Sync gold to heroState when crafted
     const handleEtherCraft = (data: { ether: number; etherDust?: number; gold?: number }) => {
-      setConsumables(prev => ({
-        ...prev,
-        ether: data.ether,
-        etherDust: data.etherDust ?? prev.etherDust,
-      }));
-      // Sync gold to heroState
+      // v1.8.20: ether/etherDust now synced via Zustand store
+      // Only sync gold to heroState for display
       if (data.gold !== undefined) {
-        const newGold = data.gold;
+        const newGold = data.gold; // Capture to ensure type is number
         setHeroState(prev => {
           if (!prev.baseStats) return prev;
           return {
@@ -1279,23 +1265,12 @@ export default function CharacterTab() {
       }
     };
 
-    // Sync consumables AND resources when task rewards are claimed or enchant/forge used
+    // Sync gold/sp to heroState for display (consumables now come from Zustand store)
     const handlePlayerState = (data: {
-      ether?: number; etherDust?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number;
-      enchantCharges?: number; protectionCharges?: number;
-      gold?: number; ancientCoin?: number; sp?: number; lotteryTickets?: number;
+      gold?: number; ancientCoin?: number; sp?: number;
     }) => {
-      setConsumables(prev => ({
-        ether: data.ether ?? prev.ether,
-        etherDust: data.etherDust ?? prev.etherDust,
-        scrollHaste: data.potionHaste ?? prev.scrollHaste,
-        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
-        scrollLuck: data.potionLuck ?? prev.scrollLuck,
-        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
-        protectionCharges: data.protectionCharges ?? prev.protectionCharges,
-        lotteryTickets: data.lotteryTickets ?? prev.lotteryTickets,
-      }));
-      // Also sync gold/crystals/sp to heroState
+      // v1.8.20: Consumables now synced via Zustand store
+      // Only sync gold/crystals/sp to heroState for display in skills popup
       if (data.gold !== undefined || data.ancientCoin !== undefined || data.sp !== undefined) {
         setHeroState(prev => {
           if (!prev.baseStats) return prev;
@@ -1312,27 +1287,12 @@ export default function CharacterTab() {
       }
     };
 
-    // Sync resources when purchased from shop
-    const handleShopSuccess = (data: {
-      gold?: number;
-      ether?: number;
-      enchantCharges?: number;
-      potionHaste?: number;
-      potionAcumen?: number;
-      potionLuck?: number;
-    }) => {
-      // Sync consumables
-      setConsumables(prev => ({
-        ...prev,
-        ether: data.ether ?? prev.ether,
-        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
-        scrollHaste: data.potionHaste ?? prev.scrollHaste,
-        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
-        scrollLuck: data.potionLuck ?? prev.scrollLuck,
-      }));
-      // Sync gold to heroState
+    // Sync gold to heroState when shop purchase (consumables from Zustand)
+    const handleShopSuccess = (data: { gold?: number }) => {
+      // v1.8.20: Consumables now synced via Zustand store
+      // Only sync gold to heroState for display
       if (data.gold !== undefined) {
-        const newGold = data.gold;
+        const newGold = data.gold; // Capture to ensure type is number
         setHeroState(prev => {
           if (!prev.baseStats) return prev;
           return {
@@ -1436,8 +1396,7 @@ export default function CharacterTab() {
     socket.on('player:data', handlePlayerData);
     socket.on('auth:success', handlePlayerData);
     socket.on('equipment:data', handleEquipmentData);
-    socket.on('buff:success', handleBuffSuccess);
-    socket.on('tap:result', handleTapResult);
+    // v1.8.20: Removed buff:success, tap:result - consumables sync via Zustand
     socket.on('ether:craft:success', handleEtherCraft);
     socket.on('player:state', handlePlayerState);
     socket.on('shop:success', handleShopSuccess);
@@ -1451,8 +1410,6 @@ export default function CharacterTab() {
       socket.off('player:data', handlePlayerData);
       socket.off('auth:success', handlePlayerData);
       socket.off('equipment:data', handleEquipmentData);
-      socket.off('buff:success', handleBuffSuccess);
-      socket.off('tap:result', handleTapResult);
       socket.off('ether:craft:success', handleEtherCraft);
       socket.off('player:state', handlePlayerState);
       socket.off('shop:success', handleShopSuccess);

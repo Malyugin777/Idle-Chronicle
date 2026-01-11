@@ -39,6 +39,7 @@ import {
   formatCompact as formatCompactUtil,
 } from './constants';
 import { TopHUD, SkillBar, LoadingScreen } from './ui';
+import DebugOverlay from './ui/DebugOverlay';
 
 // Socket listener hooks
 import {
@@ -1479,6 +1480,9 @@ export default function PhaserGame() {
           </div>
         </div>
       )}
+
+      {/* Debug Overlay - DEV ONLY */}
+      <DebugOverlay />
 
     </div>
   );

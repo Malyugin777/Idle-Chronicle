@@ -2,28 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
+import { usePlayerStore } from '@/stores/playerStore';
 import { Flame, Zap, Clover, Coins, Sparkles, Key, Gem } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
-
-interface ShopState {
-  gold: number;
-  crystals: number; // ancientCoin - для покупки ключей
-  ether: number;
-  potionHaste: number;
-  potionAcumen: number;
-  potionLuck: number;
-  // Keys
-  keyWooden: number;
-  keyBronze: number;
-  keySilver: number;
-  keyGold: number;
-  // Enchant
-  enchantCharges: number;
-}
 
 export default function ShopTab() {
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
+
+  // v1.8.20: Use Zustand store for resources (no more player:get needed)
+  const resources = usePlayerStore(state => state.resources);
+  const setResources = usePlayerStore(state => state.setResources);
 
   const BUFFS = [
     { id: 'haste', name: t.shop.haste, icon: <Zap size={20} />, effect: t.shop.hasteEffect, duration: '30s', cost: 500, color: 'yellow' },
@@ -31,46 +20,26 @@ export default function ShopTab() {
     { id: 'luck', name: t.shop.luck, icon: <Clover size={20} />, effect: t.shop.luckEffect, duration: '60s', cost: 1000, color: 'green' },
   ];
 
-  const [shopState, setShopState] = useState<ShopState>({
-    gold: 0,
-    crystals: 0,
-    ether: 0,
-    potionHaste: 0,
-    potionAcumen: 0,
-    potionLuck: 0,
-    keyWooden: 0,
-    keyBronze: 0,
-    keySilver: 0,
-    keyGold: 0,
-    enchantCharges: 0,
-  });
   const [buying, setBuying] = useState<string | null>(null);
 
   useEffect(() => {
     const socket = getSocket();
 
-    // Request player data on mount
-    socket.emit('player:get');
-
-    const updateShopState = (data: any) => {
-      if (!data) return;
-      setShopState({
-        gold: data.gold || 0,
-        crystals: data.ancientCoin || data.crystals || 0, // ancientCoin from server, crystals from shop:success
-        ether: data.ether || 0,
-        potionHaste: data.potionHaste || 0,
-        potionAcumen: data.potionAcumen || 0,
-        potionLuck: data.potionLuck || 0,
-        keyWooden: data.keyWooden || 0,
-        keyBronze: data.keyBronze || 0,
-        keySilver: data.keySilver || 0,
-        keyGold: data.keyGold || 0,
-        enchantCharges: data.enchantCharges || 0,
-      });
-    };
+    // v1.8.20: No more player:get - data comes from Zustand store populated by PhaserGame
 
     const handleShopSuccess = (data: any) => {
-      setShopState(prev => ({ ...prev, ...data }));
+      // Update Zustand store with shop result
+      if (data.gold !== undefined) setResources({ gold: data.gold });
+      if (data.crystals !== undefined) setResources({ crystals: data.crystals });
+      if (data.ether !== undefined) setResources({ ether: data.ether });
+      if (data.potionHaste !== undefined) setResources({ potionHaste: data.potionHaste });
+      if (data.potionAcumen !== undefined) setResources({ potionAcumen: data.potionAcumen });
+      if (data.potionLuck !== undefined) setResources({ potionLuck: data.potionLuck });
+      if (data.keyWooden !== undefined) setResources({ keyWooden: data.keyWooden });
+      if (data.keyBronze !== undefined) setResources({ keyBronze: data.keyBronze });
+      if (data.keySilver !== undefined) setResources({ keySilver: data.keySilver });
+      if (data.keyGold !== undefined) setResources({ keyGold: data.keyGold });
+      if (data.enchantCharges !== undefined) setResources({ enchantCharges: data.enchantCharges });
       setBuying(null);
     };
 
@@ -78,47 +47,14 @@ export default function ShopTab() {
       setBuying(null);
     };
 
-    // Sync ether when used in combat (from PhaserGame taps)
-    const handleTapResult = (data: { ether?: number }) => {
-      if (data.ether !== undefined) {
-        setShopState(prev => ({ ...prev, ether: data.ether! }));
-      }
-    };
-
-    // Sync consumables AND resources when task rewards are claimed
-    const handlePlayerState = (data: {
-      ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number;
-      gold?: number; ancientCoin?: number; enchantCharges?: number; lotteryTickets?: number;
-    }) => {
-      setShopState(prev => ({
-        ...prev,
-        ether: data.ether ?? prev.ether,
-        potionHaste: data.potionHaste ?? prev.potionHaste,
-        potionAcumen: data.potionAcumen ?? prev.potionAcumen,
-        potionLuck: data.potionLuck ?? prev.potionLuck,
-        gold: data.gold ?? prev.gold,
-        crystals: data.ancientCoin ?? prev.crystals,
-        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
-      }));
-    };
-
-    socket.on('player:data', updateShopState);
-    socket.on('auth:success', updateShopState);
     socket.on('shop:success', handleShopSuccess);
     socket.on('shop:error', handleShopError);
-    socket.on('tap:result', handleTapResult);
-    socket.on('player:state', handlePlayerState);
 
     return () => {
-      // IMPORTANT: Pass handler reference to only remove THIS component's listeners
-      socket.off('player:data', updateShopState);
-      socket.off('auth:success', updateShopState);
       socket.off('shop:success', handleShopSuccess);
       socket.off('shop:error', handleShopError);
-      socket.off('tap:result', handleTapResult);
-      socket.off('player:state', handlePlayerState);
     };
-  }, []);
+  }, [setResources]);
 
   const handleBuyEther = (quantity: number = 100) => {
     if (buying) return;
@@ -145,7 +81,7 @@ export default function ShopTab() {
   };
 
   const etherCost = 200; // 200 gold per 100 ether
-  const canAffordEther = shopState.gold >= etherCost;
+  const canAffordEther = resources.gold >= etherCost;
 
   // Keys pricing - 999 crystals for ANY key
   const KEY_COST_CRYSTALS = 999;
@@ -158,6 +94,27 @@ export default function ShopTab() {
 
   const ENCHANT_COST = 3000;
 
+  // Map potion IDs to store fields
+  const getPotionCount = (buffId: string) => {
+    switch (buffId) {
+      case 'haste': return resources.potionHaste;
+      case 'acumen': return resources.potionAcumen;
+      case 'luck': return resources.potionLuck;
+      default: return 0;
+    }
+  };
+
+  // Map key IDs to store fields
+  const getKeyCount = (keyId: string) => {
+    switch (keyId) {
+      case 'wooden': return resources.keyWooden;
+      case 'bronze': return resources.keyBronze;
+      case 'silver': return resources.keySilver;
+      case 'gold': return resources.keyGold;
+      default: return 0;
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-l2-dark p-4">
       {/* Adena Header */}
@@ -165,7 +122,7 @@ export default function ShopTab() {
         <div className="flex items-center gap-2">
           <Coins className="text-l2-gold" size={24} />
           <span className="text-xl font-bold text-l2-gold">
-            {shopState.gold.toLocaleString()}
+            {resources.gold.toLocaleString()}
           </span>
         </div>
         <span className="text-gray-400">{t.shop.gold}</span>
@@ -188,7 +145,7 @@ export default function ShopTab() {
               <span className="font-bold text-white">{lang === 'ru' ? 'Эфир' : 'Ether'}</span>
               <span className="text-xs text-cyan-400">x2 {lang === 'ru' ? 'урон' : 'damage'}</span>
             </div>
-            <p className="text-xs text-gray-500">{t.shop.owned}: {shopState.ether}</p>
+            <p className="text-xs text-gray-500">{t.shop.owned}: {resources.ether}</p>
           </div>
 
           <button
@@ -217,8 +174,8 @@ export default function ShopTab() {
 
         <div className="space-y-2">
           {BUFFS.map((buff) => {
-            const owned = shopState[`potion${buff.id.charAt(0).toUpperCase() + buff.id.slice(1)}` as keyof ShopState] as number || 0;
-            const canAfford = shopState.gold >= buff.cost;
+            const owned = getPotionCount(buff.id);
+            const canAfford = resources.gold >= buff.cost;
 
             return (
               <div
@@ -271,7 +228,7 @@ export default function ShopTab() {
           </h3>
           <div className="flex items-center gap-1 text-sm">
             <span className="text-purple-400">💎</span>
-            <span className="text-purple-400 font-bold">{shopState.crystals.toLocaleString()}</span>
+            <span className="text-purple-400 font-bold">{resources.crystals.toLocaleString()}</span>
           </div>
         </div>
         <p className="text-xs text-gray-500 mb-3">
@@ -280,9 +237,8 @@ export default function ShopTab() {
 
         <div className="grid grid-cols-2 gap-2">
           {KEYS.map((key) => {
-            const ownedKey = `key${key.id.charAt(0).toUpperCase() + key.id.slice(1)}` as keyof ShopState;
-            const owned = shopState[ownedKey] as number || 0;
-            const canAfford = shopState.crystals >= KEY_COST_CRYSTALS;
+            const owned = getKeyCount(key.id);
+            const canAfford = resources.crystals >= KEY_COST_CRYSTALS;
 
             return (
               <div
@@ -326,14 +282,14 @@ export default function ShopTab() {
             <div className="flex items-center gap-2">
               <span className="font-bold text-white">{lang === 'ru' ? 'Заряд заточки' : 'Enchant Charge'}</span>
             </div>
-            <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {shopState.enchantCharges}</p>
+            <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {resources.enchantCharges}</p>
           </div>
 
           <button
             onClick={handleBuyEnchantCharge}
-            disabled={shopState.gold < ENCHANT_COST || buying === 'enchant'}
+            disabled={resources.gold < ENCHANT_COST || buying === 'enchant'}
             className={`px-3 py-2 rounded-lg text-xs font-bold ${
-              shopState.gold >= ENCHANT_COST
+              resources.gold >= ENCHANT_COST
                 ? 'bg-l2-gold text-black hover:bg-l2-gold/80'
                 : 'bg-gray-700 text-gray-500'
             }`}

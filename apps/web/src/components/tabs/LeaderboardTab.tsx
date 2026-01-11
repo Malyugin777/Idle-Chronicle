@@ -113,12 +113,13 @@ export default function LeaderboardTab() {
     socket.on('leaderboard:alltime', handleAlltimeData);
     socket.on('boss:killed', handleBossKilled);
 
-    // Refresh current leaderboard periodically for real-time updates
+    // Refresh current leaderboard periodically (v1.8.19: 15s + visibility-aware)
     const interval = setInterval(() => {
-      if (activeTab === 'current') {
+      // Only poll when tab is visible AND we're on current boss tab
+      if (activeTab === 'current' && document.visibilityState === 'visible') {
         socket.emit('leaderboard:get');
       }
-    }, 2000);
+    }, 15000); // Changed from 2s to 15s to reduce server load
 
     return () => {
       // IMPORTANT: Pass handler reference to only remove THIS component's listeners

@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Gem } from 'lucide-react';
 import type { PlayerState, ActiveBuff } from '../types';
 import { APP_VERSION, formatCompact } from '../constants';
@@ -21,7 +22,8 @@ interface TopHUDProps {
   onShowDebug: () => void;
 }
 
-export default function TopHUD({
+// React.memo prevents re-renders when props haven't changed (v1.8.19)
+export default memo(function TopHUD({
   playerState,
   connected,
   playersOnline,
@@ -167,4 +169,4 @@ export default function TopHUD({
       </div>
     </div>
   );
-}
+});

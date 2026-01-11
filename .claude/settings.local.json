@@ -42,7 +42,8 @@
       "Bash(npx next build)",
       "Bash(timeout 5 node:*)",
       "Bash(npx prisma validate:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(wc:*)"
     ]
   }
 }

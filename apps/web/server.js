@@ -1127,17 +1127,6 @@ const STARTER_EQUIPMENT = [
   { code: 'starter-shield', slot: 'SHIELD', name: 'Щит новичка', icon: '🛡️', pDef: 2, setId: 'starter' },
 ];
 
-// DEBUG EQUIPMENT (для тестирования)
-const DEBUG_EQUIPMENT = {
-  code: 'debug-sword',
-  slot: 'WEAPON',
-  name: '[DEBUG] Меч разработчика',
-  icon: '⚔️',
-  pAtk: 1500,
-  rarity: 'EPIC',
-  setId: 'debug',
-};
-
 // Map item codes to set IDs
 const ITEM_SET_MAP = {
   'starter-sword': 'starter',
@@ -1344,6 +1333,61 @@ function getLevelFromXp(totalXp) {
     }
   }
   return 1;
+}
+
+// ═══════════════════════════════════════════════════════════
+// PLAYER STATE HELPERS (v1.8.19 - DRY refactor)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Build resource state object from player
+ * @param {Object} player - player object from onlineUsers
+ * @param {string[]|null} fields - optional array of fields to include (null = all resources)
+ * @returns {Object} - state object for player:state event
+ */
+function buildResourceState(player, fields = null) {
+  const allResources = {
+    gold: player.gold,
+    ancientCoin: player.ancientCoin,
+    lotteryTickets: player.lotteryTickets,
+    enchantCharges: player.enchantCharges,
+    protectionCharges: player.protectionCharges,
+  };
+
+  if (!fields) return allResources;
+
+  const result = {};
+  for (const field of fields) {
+    if (field in allResources) {
+      result[field] = allResources[field];
+    }
+  }
+  return result;
+}
+
+/**
+ * Emit player:state with resource sync
+ * @param {Object} socket - socket.io socket
+ * @param {Object} player - player object from onlineUsers
+ * @param {string[]|null} fields - optional array of fields (null = all resources)
+ */
+function emitResourceSync(socket, player, fields = null) {
+  socket.emit('player:state', buildResourceState(player, fields));
+}
+
+/**
+ * Emit combat state (stamina/mana for regen tick)
+ * @param {Object} socket - socket.io socket
+ * @param {Object} player - player object from onlineUsers
+ */
+function emitCombatState(socket, player) {
+  socket.emit('player:state', {
+    stamina: player.stamina,
+    maxStamina: player.maxStamina,
+    mana: player.mana,
+    maxMana: player.maxMana,
+    exhaustedUntil: player.exhaustedUntil,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4374,6 +4418,15 @@ app.prepare().then(async () => {
         player.potionHaste = user.potionHaste ?? 0;
         player.potionAcumen = user.potionAcumen ?? 0;
         player.potionLuck = user.potionLuck ?? 0;
+        // v1.8.19 FIX: Load ALL resources that emitResourceSync uses
+        player.ancientCoin = user.ancientCoin ?? 0;
+        player.lotteryTickets = user.lotteryTickets ?? 0;
+        player.enchantCharges = user.enchantCharges ?? 0;
+        player.protectionCharges = user.protectionCharges ?? 0;
+        player.keyWooden = user.keyWooden ?? 0;
+        player.keyBronze = user.keyBronze ?? 0;
+        player.keySilver = user.keySilver ?? 0;
+        player.keyGold = user.keyGold ?? 0;
         // Mark resources as loaded (SSOT ready)
         player.resourcesLoaded = true;
         player.dirty = false;
@@ -5707,13 +5760,7 @@ app.prepare().then(async () => {
         });
 
         // v1.8.15: Sync resources across all tabs
-        socket.emit('player:state', {
-          gold: player.gold,
-          ancientCoin: player.ancientCoin,
-          lotteryTickets: player.lotteryTickets,
-          enchantCharges: player.enchantCharges,
-          protectionCharges: player.protectionCharges,
-        });
+        emitResourceSync(socket, player);
       } catch (err) {
         // Release mutex on error
         chestClaimLocks.delete(chestId);
@@ -6030,13 +6077,7 @@ app.prepare().then(async () => {
         });
 
         // v1.8.15: Sync resources across all tabs
-        socket.emit('player:state', {
-          gold: player.gold,
-          ancientCoin: player.ancientCoin,
-          lotteryTickets: player.lotteryTickets,
-          enchantCharges: player.enchantCharges,
-          protectionCharges: player.protectionCharges,
-        });
+        emitResourceSync(socket, player);
       } catch (err) {
         // Release mutex on error
         chestClaimLocks.delete(chestId);
@@ -6637,58 +6678,6 @@ app.prepare().then(async () => {
             potionHaste: player.potionHaste,
             potionAcumen: player.potionAcumen,
             potionLuck: player.potionLuck,
-          });
-        } else if (data.type === 'debug-sword') {
-          // DEBUG: Бесплатный меч 1500 pAtk для тестирования
-          // Найти или создать шаблон в БД
-          let equipmentTemplate = await prisma.equipment.findUnique({
-            where: { code: DEBUG_EQUIPMENT.code },
-          });
-
-          if (!equipmentTemplate) {
-            equipmentTemplate = await prisma.equipment.create({
-              data: {
-                code: DEBUG_EQUIPMENT.code,
-                name: DEBUG_EQUIPMENT.name,
-                nameRu: DEBUG_EQUIPMENT.name,
-                icon: DEBUG_EQUIPMENT.icon,
-                slot: DEBUG_EQUIPMENT.slot,
-                rarity: DEBUG_EQUIPMENT.rarity,
-                pAtkMin: DEBUG_EQUIPMENT.pAtk,
-                pAtkMax: DEBUG_EQUIPMENT.pAtk,
-                pDefMin: 0,
-                pDefMax: 0,
-                droppable: false,
-              },
-            });
-          }
-
-          // Создать предмет в инвентаре игрока
-          const userEquip = await prisma.userEquipment.create({
-            data: {
-              userId: player.odamage,
-              equipmentId: equipmentTemplate.id,
-              pAtk: DEBUG_EQUIPMENT.pAtk,
-              pDef: 0,
-              enchant: 0,
-              isEquipped: false,
-            },
-          });
-
-          console.log(`[Shop] ${player.telegramId} bought DEBUG SWORD (1500 pAtk)`);
-
-          socket.emit('shop:success', {
-            gold: player.gold,
-            equipment: {
-              id: userEquip.id,
-              code: DEBUG_EQUIPMENT.code,
-              name: DEBUG_EQUIPMENT.name,
-              icon: DEBUG_EQUIPMENT.icon,
-              slot: DEBUG_EQUIPMENT.slot,
-              pAtk: DEBUG_EQUIPMENT.pAtk,
-              pDef: 0,
-              rarity: DEBUG_EQUIPMENT.rarity,
-            },
           });
         } else if (data.type === 'key') {
           // Buy chest key - 999 crystals for ANY key type
@@ -7335,13 +7324,7 @@ app.prepare().then(async () => {
           player.enchantCharges = updatedUser.enchantCharges;
           player.protectionCharges = updatedUser.protectionCharges;
 
-          socket.emit('player:state', {
-            gold: player.gold,
-            ancientCoin: player.ancientCoin,
-            lotteryTickets: player.lotteryTickets,
-            enchantCharges: player.enchantCharges,
-            protectionCharges: player.protectionCharges,
-          });
+          emitResourceSync(socket, player);
         }
       } catch (err) {
         console.error('[Tasks] Claim error:', err.message, err.stack);
@@ -7462,10 +7445,7 @@ app.prepare().then(async () => {
         socket.emit('ap:claimed', { threshold });
 
         // Send updated player state
-        socket.emit('player:state', {
-          gold: player.gold,
-          lotteryTickets: player.lotteryTickets,
-        });
+        emitResourceSync(socket, player, ['gold', 'lotteryTickets']);
 
         // Refresh AP status
         socket.emit('ap:status');
@@ -7652,12 +7632,7 @@ app.prepare().then(async () => {
         });
 
         // Send updated player state
-        socket.emit('player:state', {
-          ancientCoin: player.ancientCoin,
-          lotteryTickets: player.lotteryTickets,
-          enchantCharges: player.enchantCharges,
-          protectionCharges: player.protectionCharges,
-        });
+        emitResourceSync(socket, player, ['ancientCoin', 'lotteryTickets', 'enchantCharges', 'protectionCharges']);
 
         // Refresh status
         socket.emit('checkin:status');
@@ -8263,9 +8238,7 @@ app.prepare().then(async () => {
         });
 
         // Send updated player state
-        socket.emit('player:state', {
-          ancientCoin: player.ancientCoin,
-        });
+        emitResourceSync(socket, player, ['ancientCoin']);
 
         // Refresh forge data
         socket.emit('forge:get');
@@ -8354,10 +8327,7 @@ app.prepare().then(async () => {
         });
 
         // Send updated player state
-        socket.emit('player:state', {
-          ancientCoin: player.ancientCoin,
-          protectionCharges: player.protectionCharges,
-        });
+        emitResourceSync(socket, player, ['ancientCoin', 'protectionCharges']);
 
         // Refresh forge data
         socket.emit('forge:get');
@@ -8949,13 +8919,7 @@ app.prepare().then(async () => {
       if (changed) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          socket.emit('player:state', {
-            stamina: player.stamina,
-            maxStamina: player.maxStamina,
-            mana: player.mana,
-            maxMana: player.maxMana,
-            exhaustedUntil: player.exhaustedUntil,
-          });
+          emitCombatState(socket, player);
         }
       }
     }

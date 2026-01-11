@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import type { Skill, PlayerState, BossState } from '../types';
 
 interface SkillBarProps {
@@ -21,7 +22,8 @@ const SKILL_UNLOCK_LEVELS: Record<string, number> = {
   lightning: 3,
 };
 
-export default function SkillBar({
+// React.memo prevents re-renders when props haven't changed (v1.8.19)
+export default memo(function SkillBar({
   skills,
   playerState,
   bossState,
@@ -191,4 +193,4 @@ export default function SkillBar({
       </div>
     </div>
   );
-}
+});

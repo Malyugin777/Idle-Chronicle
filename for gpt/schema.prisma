@@ -1,0 +1,715 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// USERS
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id              String   @id @default(cuid())
+
+  // Telegram
+  telegramId      BigInt   @unique
+  username        String?
+  firstName       String?
+  photoUrl        String?
+  language        String   @default("en")  // ru, en
+
+  // Stats (L2-style)
+  level           Int      @default(1)
+  exp             BigInt   @default(0)
+  sp              Int      @default(0)     // Skill Points (дефицитный ресурс)
+
+  // Base Stats (legacy - for backward compatibility)
+  str             Int      @default(1)
+  dex             Int      @default(1)
+  luck            Int      @default(1)
+
+  // L2 Core Attributes (MVP)
+  power           Int      @default(10)    // СИЛ → Physical Power (P.Atk)
+  agility         Int      @default(10)    // ЛОВ → Attack Speed, Crit Chance
+  vitality        Int      @default(12)    // СТОЙ → Max Stamina (12 для "длинной сессии")
+  intellect       Int      @default(10)    // ИНТ → Skill Power
+  spirit          Int      @default(10)    // ДУХ → Max Mana, Mana Regen
+
+  // Derived Stats (legacy)
+  pAtk            Int      @default(10)
+  critChance      Float    @default(0.05)
+  critDamage      Float    @default(2.0)
+  attackSpeed     Float    @default(1.0)
+
+  // L2 Derived Stats (MVP формулы)
+  physicalPower   Int      @default(10)    // P.Atk = 10 (база кулаками)
+  maxHealth       Int      @default(140)   // 100 + (12-10)*20 = 140
+  physicalDefense Int      @default(0)     // P.Def = 0 (голый)
+
+  // Stamina System (СТОЙ влияет на длину сессии)
+  stamina         Int      @default(960)   // 800 + (12-10)*80 = 960
+  maxStamina      Int      @default(960)   // MaxStamina = 800 + (СТОЙ-10)*80
+  lastStaminaTick DateTime @default(now())
+  exhaustedUntil  DateTime?               // null = not exhausted, 5 сек при 0
+
+  // Mana System (ДУХ влияет на ману)
+  mana            Int      @default(100)   // MP max = 100 + (ДУХ-10)*10
+  maxMana         Int      @default(100)
+  manaRegen       Float    @default(1.0)   // 1 MP per second
+  lastManaTick    DateTime @default(now())
+
+  // Tap & Auto-Attack System
+  tapsPerSecond   Int      @default(3)    // Base 3 TPS, max 10
+  autoAttackSpeed Int      @default(0)    // Auto attacks per second, max 10
+
+  // First time player flag
+  isFirstLogin    Boolean  @default(true)
+
+  // Currencies
+  gold            BigInt   @default(0)
+  ancientCoin     Int      @default(0)
+  tonBalance      Float    @default(0)    // TON cryptocurrency balance
+
+  // Chest Slots System
+  chestSlots      Int      @default(5)    // Unlocked chest slots (5-10), buy more for 999 crystals
+  totalGoldEarned BigInt   @default(0)    // Total gold earned all-time
+
+  // Total chests opened by TYPE
+  totalChestsWooden   Int  @default(0)
+  totalChestsBronze   Int  @default(0)
+  totalChestsSilver   Int  @default(0)
+  totalChestsGold     Int  @default(0)
+
+  // Pity system: count silver+gold chests without Epic drop
+  // Resets to 0 when Epic drops
+  pityCounter         Int  @default(0)
+
+  // Enchant scrolls (дропаются из сундуков)
+  enchantScrolls  Int      @default(0)
+
+  // Crafting Materials
+  matEnchantDust  Int      @default(0)    // Пыль энчанта (от разбора шмота)
+
+  // Enchant System v1.2
+  enchantCharges       Int @default(10)   // Заряды для заточки (из сундуков)
+  protectionCharges    Int @default(0)    // Защита при заточке (редкий дроп + донат)
+  premiumCrystals      Int @default(0)    // Донат-валюта 💎
+
+  // Ether System (Эфирный цикл)
+  ether           Int      @default(100)
+  etherDust       Int      @default(0)     // Накапливается оффлайн (10/мин, лимит 4800)
+  autoEther       Boolean  @default(false)
+  autoAttack      Boolean  @default(false) // AUTO toggle
+
+  // Potions/Scrolls
+  potionHaste     Int      @default(0)
+  potionAcumen    Int      @default(0)
+  potionLuck      Int      @default(0)
+
+  // Chest Keys (моментальное открытие сундуков)
+  keyWooden       Int      @default(0)
+  keyBronze       Int      @default(0)
+  keySilver       Int      @default(0)
+  keyGold         Int      @default(0)
+
+  // Lottery Tickets (Wheel of Fortune)
+  lotteryTickets  Int      @default(0)
+
+  // ═══ ACTIVE SKILLS SYSTEM v1.4 ═══
+  // Legacy skill levels (kept for backward compat, will migrate to mastery)
+  skillFireball   Int      @default(1)   // Unlocked from start
+  skillIceball    Int      @default(0)   // Unlocks at hero Lv.2
+  skillLightning  Int      @default(0)   // Unlocks at hero Lv.3
+
+  // Mastery Ranks (0-10): +3% dmg per rank, upgraded with Gold+SP
+  skillFireballMastery    Int @default(0)
+  skillIceballMastery     Int @default(0)
+  skillLightningMastery   Int @default(0)
+
+  // Cumulative cast counters (for tier unlocks)
+  skillFireballCasts      Int @default(0)
+  skillIceballCasts       Int @default(0)
+  skillLightningCasts     Int @default(0)
+
+  // Activated tiers bitmask (0=none, 1=T1, 3=T1+T2, 7=T1-T3, 15=all)
+  // Tiers unlock at: 50, 200, 500, 1000 casts
+  // Tier bonuses after activation: +3%, +7%, +15%, +25% dmg
+  skillFireballTiers      Int @default(0)
+  skillIceballTiers       Int @default(0)
+  skillLightningTiers     Int @default(0)
+
+  // ═══ PASSIVE SKILLS (0-10 ranks each) ═══
+  passiveArcanePower      Int @default(0)  // +2% pAtk final per rank
+  passiveCritFocus        Int @default(0)  // +0.6% crit chance per rank (cap 60%)
+  passiveCritPower        Int @default(0)  // +6% crit damage per rank
+  passiveStaminaTraining  Int @default(0)  // +50 maxStamina per rank
+  passiveManaFlow         Int @default(0)  // +30 maxMana per rank
+  passiveEtherEfficiency  Int @default(0)  // -6% ether cost per rank (max 5 = -30%)
+
+  // Equipment (legacy weapon)
+  weaponId        String?
+  weapon          Weapon?  @relation(fields: [weaponId], references: [id])
+  weaponEnchant   Int      @default(0)
+
+  // Progression
+  totalDamage     BigInt   @default(0)
+  totalClicks     BigInt   @default(0)
+  bossesKilled    Int      @default(0)
+  highestDps      Int      @default(0)
+
+  // Offline
+  lastOnline      DateTime @default(now())
+  offlineEarnings BigInt   @default(0)
+
+  // Referral System (for invite tasks)
+  referralCode    String?  @unique  // User's own referral code (auto-generated)
+  referredById    String?           // Who invited this user (User.id)
+  referralValid   Boolean  @default(false)  // Has this user met minAction (1k dmg or 50 taps)?
+  totalInvites    Int      @default(0)      // How many valid invites this user made
+
+  // 14-Day Check-In Calendar (streak ladder)
+  checkInDay      Int      @default(1)      // Current streak day (1-14)
+  checkInLastDate String?                   // Last claimed date (YYYY-MM-DD)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inventory       InventoryItem[]
+  equipment       UserEquipment[]
+  damageLog       DamageLog[]
+  buffs           ActiveBuff[]
+  tasks           UserTask[]
+  chests          Chest[]
+  pendingRewards  PendingReward[]
+  badges          UserBadge[]
+
+  @@index([telegramId])
+  @@index([totalDamage])
+}
+
+// ═══════════════════════════════════════════════════════════
+// PENDING REWARDS (Boss kill rewards waiting to be claimed)
+// ═══════════════════════════════════════════════════════════
+
+model PendingReward {
+  id            String   @id @default(cuid())
+  userId        String
+
+  bossSessionId String   // Which boss kill this is for
+  bossName      String   // Cached boss name for display
+  bossIcon      String   @default("👹")
+
+  // Reward breakdown
+  rank          Int?     // Player's rank (1-100+), null if not in top
+  wasEligible   Boolean  @default(true) // Had 30sec activity
+
+  // Chest rewards
+  chestsWooden  Int      @default(0)
+  chestsBronze  Int      @default(0)
+  chestsSilver  Int      @default(0)
+  chestsGold    Int      @default(0)
+
+  // Crystal bonus (Gold +10, Silver +5)
+  crystals      Int      @default(0)
+
+  // Lottery tickets (Wheel of Fortune)
+  lotteryTickets Int     @default(0)
+
+  // Badge reward (if top-3)
+  badgeId       String?  // "slayer" or "elite"
+  badgeDuration Int?     // Duration in days (7 or 3)
+
+  claimed       Boolean  @default(false)
+  claimedAt     DateTime?
+
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bossSessionId])
+  @@unique([userId, bossSessionId]) // One reward per boss per user
+}
+
+// ═══════════════════════════════════════════════════════════
+// USER BADGES (Cosmetic badges with expiration)
+// ═══════════════════════════════════════════════════════════
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+
+  badgeId   String   // "slayer", "elite", etc.
+  name      String   // Display name
+  icon      String   // Emoji or icon
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// EQUIPMENT SYSTEM
+// ═══════════════════════════════════════════════════════════
+
+model Equipment {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  nameRu      String        @default("")
+  icon        String        @default("🗡️")
+
+  slot        EquipmentSlot
+  rarity      ItemRarity    @default(COMMON)
+
+  // Base stats (varies by rarity)
+  pAtkMin     Int           @default(0)
+  pAtkMax     Int           @default(0)
+  pDefMin     Int           @default(0)
+  pDefMax     Int           @default(0)
+
+  // Can drop from chests
+  droppable   Boolean       @default(true)
+
+  userEquipment UserEquipment[]
+}
+
+model UserEquipment {
+  id          String        @id @default(cuid())
+  userId      String
+  equipmentId String
+
+  // Rolled stats (fixed when obtained)
+  pAtk        Int           @default(0)
+  pDef        Int           @default(0)
+
+  // Enchant level (+1, +2, etc.)
+  enchant     Int           @default(0)
+
+  // Is currently equipped?
+  isEquipped  Boolean       @default(false)
+
+  // Broken Item System v1.2
+  isBroken       Boolean    @default(false)   // Сломан ли предмет
+  brokenUntil    DateTime?                    // Когда будет удалён (null = не сломан)
+  enchantOnBreak Int        @default(0)       // Уровень энчанта на момент поломки
+
+  createdAt   DateTime      @default(now())
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipment   Equipment     @relation(fields: [equipmentId], references: [id])
+
+  @@index([userId])
+  @@index([equipmentId])
+  @@index([isBroken, brokenUntil])  // Для cleanup expired broken items
+}
+
+enum EquipmentSlot {
+  WEAPON      // Оружие
+  HELMET      // Шлем
+  CHEST       // Нагрудник
+  GLOVES      // Перчатки
+  LEGS        // Поножи
+  BOOTS       // Ботинки
+  SHIELD      // Щит
+}
+
+enum ItemRarity {
+  COMMON      // Белый, без glow
+  UNCOMMON    // Зеленый, с glow
+  RARE        // Фиолетовый, с glow
+  EPIC        // Оранжевый, с glow
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEAPONS (legacy - keep for compatibility)
+// ═══════════════════════════════════════════════════════════
+
+model Weapon {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  grade       Grade    @default(NG)
+
+  pAtk        Int
+  critBonus   Float    @default(0)
+
+  cost        BigInt
+  requiredLvl Int      @default(1)
+
+  iconUrl     String?
+
+  users       User[]
+}
+
+enum Grade {
+  NG
+  D
+  C
+  B
+  A
+  S
+}
+
+// ═══════════════════════════════════════════════════════════
+// ACTIVE BUFFS
+// ═══════════════════════════════════════════════════════════
+
+model ActiveBuff {
+  id        String   @id @default(cuid())
+  userId    String
+
+  buffType  BuffType
+  value     Float
+  expiresAt DateTime
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, buffType])  // For upsert to extend buff timer
+  @@index([expiresAt])
+}
+
+enum BuffType {
+  HASTE
+  ACUMEN
+  LUCK
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHESTS (LOOT BOXES)
+// ═══════════════════════════════════════════════════════════
+
+model Chest {
+  id              String    @id @default(cuid())
+  userId          String
+  chestType       ChestType @default(WOODEN)
+
+  openingStarted  DateTime?   // null = not opening, set = timer started
+  openingDuration Int         // Duration in ms to open
+
+  fromBossId      String?     // Which boss dropped this chest
+  fromSessionId   String?     // Which session
+
+  createdAt       DateTime    @default(now())
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum ChestType {
+  WOODEN      // 🪵 Деревянный - 5 min
+  BRONZE      // 🟫 Бронзовый - 30 min
+  SILVER      // 🪙 Серебряный - 4 hours
+  GOLD        // 🟨 Золотой - 8 hours
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEMS & INVENTORY
+// ═══════════════════════════════════════════════════════════
+
+model Item {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+
+  type        ItemType
+  rarity      Rarity   @default(COMMON)
+  grade       Grade    @default(NG)
+
+  isRpgItem   Boolean  @default(true)
+  rpgValue    Int?
+
+  iconUrl     String?
+
+  inventory   InventoryItem[]
+  lootTables  BossLoot[]
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  itemId    String
+  quantity  Int      @default(1)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item      Item     @relation(fields: [itemId], references: [id])
+
+  @@unique([userId, itemId])
+}
+
+enum ItemType {
+  SCROLL
+  MATERIAL
+  RECIPE
+  ARMOR_PART
+  CURRENCY
+}
+
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORLD BOSS
+// ═══════════════════════════════════════════════════════════
+
+model Boss {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  title       String?
+
+  baseHp      BigInt
+  defense     Int      @default(0)
+  thornsDamage Int     @default(0)   // Обратка босса - тратит stamina игрока
+
+  ragePhases  Json
+
+  spineJson   String?
+  spineAtlas  String?
+  iconUrl     String?
+
+  isActive    Boolean  @default(false)
+  order       Int      @default(0)
+
+  timesKilled Int      @default(0)
+
+  lootTable   BossLoot[]
+  sessions    BossSession[]
+}
+
+model BossLoot {
+  id        String   @id @default(cuid())
+  bossId    String
+  itemId    String
+
+  dropChance Float
+  minQty     Int     @default(1)
+  maxQty     Int     @default(1)
+
+  minDamagePercent Float?
+
+  boss      Boss     @relation(fields: [bossId], references: [id])
+  item      Item     @relation(fields: [itemId], references: [id])
+}
+
+model BossSession {
+  id          String   @id @default(cuid())
+  bossId      String
+  bossName    String?    // Cached boss name
+
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+
+  maxHp       BigInt
+  totalDamage BigInt   @default(0)
+
+  // Winners
+  finalBlowBy     String?
+  finalBlowName   String?
+  finalBlowDamage BigInt?
+
+  topDamageBy     String?
+  topDamageName   String?
+  topDamage       BigInt?
+
+  // Prize pool
+  tonPool         Float    @default(0)
+  chestsPool      Int      @default(0)
+  expPool         BigInt   @default(0)
+
+  // Leaderboard snapshot (JSON array of top 20)
+  leaderboardSnapshot Json?
+
+  boss        Boss     @relation(fields: [bossId], references: [id])
+  damageLog   DamageLog[]
+
+  @@index([bossId])
+  @@index([endedAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAMAGE LOG
+// ═══════════════════════════════════════════════════════════
+
+model DamageLog {
+  id        String   @id @default(cuid())
+
+  sessionId String
+  odamage   String
+
+  damage    BigInt
+  clicks    Int
+  crits     Int
+
+  // Cached for leaderboard display
+  playerName  String?
+  playerPhoto String?
+  damagePercent Float?   // % of total boss damage
+
+  timestamp DateTime @default(now())
+
+  session   BossSession @relation(fields: [sessionId], references: [id])
+  user      User        @relation(fields: [odamage], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([odamage])
+}
+
+// ═══════════════════════════════════════════════════════════
+// TASKS
+// ═══════════════════════════════════════════════════════════
+
+model Task {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String
+
+  type        TaskType
+  target      Int
+
+  goldReward       BigInt @default(0)
+  ancientCoinReward Int   @default(0)
+
+  users       UserTask[]
+}
+
+model UserTask {
+  id        String   @id @default(cuid())
+  odamage    String
+  taskId    String
+
+  progress  Int      @default(0)
+  completed Boolean  @default(false)
+  claimedAt DateTime?
+
+  resetAt   DateTime @default(now())
+
+  user      User     @relation(fields: [odamage], references: [id], onDelete: Cascade)
+  task      Task     @relation(fields: [taskId], references: [id])
+
+  @@unique([odamage, taskId])
+}
+
+enum TaskType {
+  DAILY
+  WEEKLY
+  ACHIEVEMENT
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME STATE (Persistent server state across restarts)
+// ═══════════════════════════════════════════════════════════
+
+model GameState {
+  id              String   @id @default("singleton")  // Always "singleton"
+
+  // Current boss state
+  currentBossIndex Int     @default(0)
+  bossCurrentHp    BigInt  @default(500000)
+  bossMaxHp        BigInt  @default(500000)
+  bossName         String  @default("Serpent")
+  bossNameRu       String  @default("Змей")
+  bossIcon         String  @default("🐍")
+  bossDefense      Int     @default(0)
+  bossThorns       Int     @default(0)
+
+  // Boss rewards
+  bossGoldReward   Int     @default(1000000)
+  bossExpReward    BigInt  @default(1000000)
+  bossTonReward    Float   @default(10)
+  bossChestsReward Int     @default(10)
+
+  // Respawn timer (null = boss alive, timestamp = respawning)
+  respawnAt        DateTime?
+
+  // Session leaderboard (JSON - resets on boss kill)
+  sessionLeaderboard Json?
+
+  // Previous boss session (for leaderboard tab)
+  previousBossSession Json?
+
+  updatedAt        DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAILY TASK PROGRESS (Server-side SSOT)
+// ═══════════════════════════════════════════════════════════
+
+model DailyTaskProgress {
+  id          String   @id @default(cuid())
+  odamage     String   // Renamed from userId for consistency
+  dateKey     String   // YYYY-MM-DD (UTC)
+
+  // Counters
+  taps            Int @default(0)
+  bossDamage      Int @default(0)
+  skillUses       Int @default(0)
+  chestsOpened    Int @default(0)
+  enchantAttempts Int @default(0)
+  dismantleCount  Int @default(0)
+
+  // Flags
+  loginDone       Boolean @default(false)
+
+  // Claimed flags (JSON object: {taskId: true})
+  claimedTasks    Json    @default("{}")
+
+  // Completed tasks (JSON object: {taskId: true}) - for AP tracking
+  completedTasks  Json    @default("{}")
+
+  // Activity Points (AP) System
+  ap              Int     @default(0)
+  apClaimed30     Boolean @default(false)
+  apClaimed60     Boolean @default(false)
+  apClaimed100    Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([odamage, dateKey])
+  @@index([odamage])
+  @@index([dateKey])
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY TASK PROGRESS (Server-side SSOT)
+// ═══════════════════════════════════════════════════════════
+
+model WeeklyTaskProgress {
+  id          String   @id @default(cuid())
+  odamage     String   // Renamed from userId for consistency
+  weekKey     String   // YYYY-WW (ISO week number)
+
+  // Counters
+  weeklyBossDamage      BigInt @default(0)
+  weeklyChestsOpened    Int    @default(0)
+  weeklyEnchantAttempts Int    @default(0)
+  weeklyInvitesValid    Int    @default(0)
+  baseDaysCompleted     Int    @default(0)  // Days where D1-D5 all completed
+
+  // Claimed flags (JSON object: {taskId: true})
+  claimedTasks          Json   @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([odamage, weekKey])
+  @@index([odamage])
+  @@index([weekKey])
+}
