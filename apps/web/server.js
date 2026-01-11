@@ -5668,6 +5668,10 @@ app.prepare().then(async () => {
         }
 
         player.gold += goldReward;
+        player.enchantCharges = (player.enchantCharges || 0) + enchantCharges;
+        if (protectionDrop > 0) player.protectionCharges = (player.protectionCharges || 0) + protectionDrop;
+        if (crystalsDrop > 0) player.ancientCoin = (player.ancientCoin || 0) + crystalsDrop;
+        if (ticketsDrop > 0) player.lotteryTickets = (player.lotteryTickets || 0) + ticketsDrop;
 
         // === TASK TRACKING: chestsOpened ===
         try {
@@ -5700,6 +5704,15 @@ app.prepare().then(async () => {
             level: leveledUp ? newLevel : currentLevel,
             leveledUp,
           },
+        });
+
+        // v1.8.15: Sync resources across all tabs
+        socket.emit('player:state', {
+          gold: player.gold,
+          ancientCoin: player.ancientCoin,
+          lotteryTickets: player.lotteryTickets,
+          enchantCharges: player.enchantCharges,
+          protectionCharges: player.protectionCharges,
         });
       } catch (err) {
         // Release mutex on error
@@ -5968,6 +5981,10 @@ app.prepare().then(async () => {
 
         player.gold += goldReward;
         player[keyField] = keysAvailable - 1;
+        player.enchantCharges = (player.enchantCharges || 0) + enchantCharges;
+        if (protectionDrop > 0) player.protectionCharges = (player.protectionCharges || 0) + protectionDrop;
+        if (crystalsDrop > 0) player.ancientCoin = (player.ancientCoin || 0) + crystalsDrop;
+        if (ticketsDrop > 0) player.lotteryTickets = (player.lotteryTickets || 0) + ticketsDrop;
 
         // === TASK TRACKING: chestsOpened (via key) ===
         try {
@@ -6010,6 +6027,15 @@ app.prepare().then(async () => {
           keyBronze: player.keyBronze || 0,
           keySilver: player.keySilver || 0,
           keyGold: player.keyGold || 0,
+        });
+
+        // v1.8.15: Sync resources across all tabs
+        socket.emit('player:state', {
+          gold: player.gold,
+          ancientCoin: player.ancientCoin,
+          lotteryTickets: player.lotteryTickets,
+          enchantCharges: player.enchantCharges,
+          protectionCharges: player.protectionCharges,
         });
       } catch (err) {
         // Release mutex on error

@@ -1257,9 +1257,24 @@ export default function CharacterTab() {
       }
     };
 
-    // Sync ether when crafted
-    const handleEtherCraft = (data: { ether: number }) => {
-      setConsumables(prev => ({ ...prev, ether: data.ether }));
+    // Sync ether, etherDust, and gold when crafted
+    const handleEtherCraft = (data: { ether: number; etherDust?: number; gold?: number }) => {
+      setConsumables(prev => ({
+        ...prev,
+        ether: data.ether,
+        etherDust: data.etherDust ?? prev.etherDust,
+      }));
+      // Sync gold to heroState
+      if (data.gold !== undefined) {
+        const newGold = data.gold;
+        setHeroState(prev => {
+          if (!prev.baseStats) return prev;
+          return {
+            ...prev,
+            baseStats: { ...prev.baseStats, gold: newGold },
+          };
+        });
+      }
     };
 
     // Sync consumables AND resources when task rewards are claimed or enchant/forge used
@@ -1295,10 +1310,34 @@ export default function CharacterTab() {
       }
     };
 
-    // Sync ether when purchased from shop
-    const handleShopSuccess = (data: { ether?: number }) => {
-      if (data.ether !== undefined) {
-        setConsumables(prev => ({ ...prev, ether: data.ether! }));
+    // Sync resources when purchased from shop
+    const handleShopSuccess = (data: {
+      gold?: number;
+      ether?: number;
+      enchantCharges?: number;
+      potionHaste?: number;
+      potionAcumen?: number;
+      potionLuck?: number;
+    }) => {
+      // Sync consumables
+      setConsumables(prev => ({
+        ...prev,
+        ether: data.ether ?? prev.ether,
+        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
+        scrollHaste: data.potionHaste ?? prev.scrollHaste,
+        scrollAcumen: data.potionAcumen ?? prev.scrollAcumen,
+        scrollLuck: data.potionLuck ?? prev.scrollLuck,
+      }));
+      // Sync gold to heroState
+      if (data.gold !== undefined) {
+        const newGold = data.gold;
+        setHeroState(prev => {
+          if (!prev.baseStats) return prev;
+          return {
+            ...prev,
+            baseStats: { ...prev.baseStats, gold: newGold },
+          };
+        });
       }
     };
 
