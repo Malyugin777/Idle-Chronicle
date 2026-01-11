@@ -1122,7 +1122,9 @@ async function checkAndAwardAP(prisma, odamage, dailyProgress) {
 
 // Helper: Get yesterday's date key
 function getYesterdayDateKey() {
-  const yesterday = new Date();
+  // Use game day logic (06:00 MSK reset) for consistency
+  const today = getGameDay();
+  const yesterday = new Date(today);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   return yesterday.toISOString().split('T')[0];
 }
