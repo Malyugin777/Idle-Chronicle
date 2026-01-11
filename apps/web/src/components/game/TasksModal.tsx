@@ -42,6 +42,22 @@ interface CheckInReward {
   icon: string;
 }
 
+// AP values per task (synced with server)
+const AP_VALUES: Record<string, number> = {
+  D1_login: 10,
+  D2_bossDamage: 20,
+  D3_taps: 15,
+  D4_skills: 15,
+  D5_chest: 20,
+  G1_bossGrind: 30,
+  G5_enchant: 20,
+  G2_tapGrind: 20,
+  G4_openChests: 30,
+  G3_skillGrind: 20,
+  G6_dismantle: 30,
+  I1_invite: 30,
+};
+
 interface TaskCardProps {
   task: TaskData;
   lang: Language;
@@ -409,8 +425,11 @@ function TaskCard({ task, lang, onClaim, claiming, freeSlots }: TaskCardProps) {
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1">
-          <div className="text-[9px] text-gray-500 mb-1">
-            {lang === 'ru' ? 'Награда:' : 'Reward:'}
+          <div className="flex items-center gap-2 text-[9px] text-gray-500 mb-1">
+            <span>{lang === 'ru' ? 'Награда:' : 'Reward:'}</span>
+            {AP_VALUES[task.id] && (
+              <span className="text-purple-400 font-bold">+{AP_VALUES[task.id]} AP</span>
+            )}
           </div>
           <RewardPreview rewards={task.rewards} lang={lang} />
         </div>
