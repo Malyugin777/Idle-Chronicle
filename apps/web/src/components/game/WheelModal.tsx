@@ -138,42 +138,38 @@ class WheelScene extends Phaser.Scene {
   /**
    * Spin to a specific segment index
    *
-   * MATH: Segment 0 is at TOP when angle=0
-   * To land on segment N, we need to rotate the wheel so segment N is at TOP
+   * MATH:
+   * - Segment 0 STARTS at TOP (-π/2), its CENTER is at sliceAngle/2 clockwise from TOP
+   * - Pointer points DOWN at TOP position
+   * - To land pointer on CENTER of segment N:
+   *   Wheel must rotate so that segment N's center aligns with TOP
    *
-   * Each segment spans (360/N) degrees
-   * Segment i center is at: i * (360/N) degrees from segment 0
-   *
-   * To bring segment targetIndex under the pointer (top):
-   * We rotate BACKWARDS (negative) by targetIndex * sliceAngle
-   * But Phaser rotates clockwise for positive angles
-   * So we go: -(targetIndex * sliceAngle) + (fullRotations * 360)
+   * Segment N center = N * sliceAngle + sliceAngle/2 (clockwise from initial)
+   * To bring it to TOP: rotate wheel by -(N * sliceAngle + sliceAngle/2)
    */
   spinTo(targetIndex: number, callback?: () => void) {
     if (this.isSpinning) return;
     this.isSpinning = true;
 
     const numSegments = this.segments.length;
-    const sliceAngle = 360 / numSegments;
+    const sliceAngle = 360 / numSegments; // 36° for 10 segments
 
-    // Calculate target angle
-    // Segment 0 is at top when wheel angle = 0
-    // To put segment N at top: rotate by -N * sliceAngle
-    const targetSegmentAngle = -targetIndex * sliceAngle;
+    // CENTER of segment N is at (N + 0.5) * sliceAngle from starting position
+    // To bring it under pointer: rotate by negative of that
+    const segmentCenterOffset = (targetIndex + 0.5) * sliceAngle;
+    const targetAngle = -segmentCenterOffset;
 
-    // Add small random offset within segment (±25% from center) for realism
-    const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.5;
+    // Random offset within segment (±35% from center, stay inside segment)
+    const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.7;
 
-    // Add 5-7 full clockwise rotations for spin effect
-    // Since we're going negative (counter-clockwise visually),
-    // we subtract full rotations
+    // Normalize target to [0, -360) range
+    const normalizedTarget = ((targetAngle + randomOffset) % 360 + 360) % 360 - 360;
+
+    // Add 5-7 full rotations (clockwise = negative in Phaser when going this direction)
     const rotations = 5 + Math.floor(Math.random() * 3);
-    const fullRotation = -rotations * 360;
+    const finalAngle = normalizedTarget - rotations * 360;
 
-    // Final angle: start from current, go full rotations, land on target
-    const finalAngle = this.currentAngle + fullRotation + targetSegmentAngle + randomOffset - (this.currentAngle % 360);
-
-    console.log(`[Wheel] Spinning to segment ${targetIndex}, finalAngle=${finalAngle.toFixed(1)}°`);
+    console.log(`[Wheel] Target segment ${targetIndex} (${this.segments[targetIndex]?.label}), center=${segmentCenterOffset.toFixed(1)}°, final=${finalAngle.toFixed(1)}°`);
 
     this.tweens.add({
       targets: this.wheelContainer,
