@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { usePlayerStore } from '@/stores/playerStore';
-import { Flame, Zap, Clover, Coins, Sparkles, Key, Gem } from 'lucide-react';
+import { Flame, Zap, Clover, Coins, Sparkles, Key } from 'lucide-react';
 import { detectLanguage, useTranslation, Language } from '@/lib/i18n';
 
 export default function ShopTab() {
@@ -81,21 +81,7 @@ export default function ShopTab() {
     getSocket().emit('shop:buy', { type: 'enchant' });
   };
 
-  const handleExchange = (quantity: number = 1) => {
-    if (buying) return;
-    setBuying('exchange');
-    getSocket().emit('shop:buy', { type: 'exchange', quantity });
-  };
-
-  const handleBuyTickets = (quantity: number = 1) => {
-    if (buying) return;
-    setBuying('tickets');
-    getSocket().emit('shop:buy', { type: 'tickets', quantity });
-  };
-
   const etherCost = 200; // 200 gold per 100 ether
-  const EXCHANGE_RATE = 1; // 1 gold = 1 crystal (debug 1:1)
-  const TICKET_COST = 5; // crystals per ticket
   const canAffordEther = resources.gold >= etherCost;
 
   // Keys pricing - 999 crystals for ANY key
@@ -141,127 +127,6 @@ export default function ShopTab() {
           </span>
         </div>
         <span className="text-gray-400">{t.shop.gold}</span>
-      </div>
-
-      {/* Exchange Section - Gold → Crystals */}
-      <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">
-          <Gem size={14} className="inline mr-1" />
-          {lang === 'ru' ? 'Обмен валюты' : 'Currency Exchange'}
-        </h3>
-        <p className="text-xs text-gray-500 mb-3">
-          {lang === 'ru' ? 'Обменивайте золото на кристаллы' : 'Exchange gold for crystals'}
-        </p>
-
-        <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg mb-2">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-            <span className="text-xl">💎</span>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{lang === 'ru' ? 'Кристаллы' : 'Crystals'}</span>
-              <span className="text-xs text-purple-400">1:1</span>
-            </div>
-            <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {resources.crystals} 💎</p>
-          </div>
-
-          <button
-            onClick={() => handleExchange(100)}
-            disabled={resources.gold < 100 || buying === 'exchange'}
-            className={`px-3 py-2 rounded-lg text-xs font-bold ${
-              resources.gold >= 100
-                ? 'bg-purple-600 text-white hover:bg-purple-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            {buying === 'exchange' ? '...' : '🪙100 → 💎100'}
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleExchange(500)}
-            disabled={resources.gold < 500 || buying === 'exchange'}
-            className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.gold >= 500
-                ? 'bg-purple-600/60 text-white hover:bg-purple-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            🪙500 → 💎500
-          </button>
-          <button
-            onClick={() => handleExchange(1000)}
-            disabled={resources.gold < 1000 || buying === 'exchange'}
-            className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.gold >= 1000
-                ? 'bg-purple-600/60 text-white hover:bg-purple-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            🪙1K → 💎1K
-          </button>
-        </div>
-      </div>
-
-      {/* Lottery Tickets Section */}
-      <div className="bg-l2-panel rounded-lg p-4 mb-4">
-        <h3 className="text-sm text-gray-400 mb-3">
-          🎟️ {lang === 'ru' ? 'Билеты лотереи' : 'Lottery Tickets'}
-        </h3>
-        <p className="text-xs text-gray-500 mb-3">
-          {lang === 'ru' ? 'Для Колеса Фортуны' : 'For Wheel of Fortune'}
-        </p>
-
-        <div className="flex items-center gap-3 p-3 bg-black/30 rounded-lg mb-2">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-            <span className="text-xl">🎟️</span>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{lang === 'ru' ? 'Билет' : 'Ticket'}</span>
-              <span className="text-xs text-amber-400">= {TICKET_COST} 💎</span>
-            </div>
-            <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {resources.lotteryTickets} 🎟️</p>
-          </div>
-
-          <button
-            onClick={() => handleBuyTickets(1)}
-            disabled={resources.crystals < TICKET_COST || buying === 'tickets'}
-            className={`px-3 py-2 rounded-lg text-xs font-bold ${
-              resources.crystals >= TICKET_COST
-                ? 'bg-amber-600 text-white hover:bg-amber-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            {buying === 'tickets' ? '...' : `💎${TICKET_COST} → 🎟️1`}
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleBuyTickets(5)}
-            disabled={resources.crystals < TICKET_COST * 5 || buying === 'tickets'}
-            className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.crystals >= TICKET_COST * 5
-                ? 'bg-amber-600/60 text-white hover:bg-amber-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            💎{TICKET_COST * 5} → 🎟️5
-          </button>
-          <button
-            onClick={() => handleBuyTickets(10)}
-            disabled={resources.crystals < TICKET_COST * 10 || buying === 'tickets'}
-            className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.crystals >= TICKET_COST * 10
-                ? 'bg-amber-600/60 text-white hover:bg-amber-500'
-                : 'bg-gray-700 text-gray-500'
-            }`}
-          >
-            💎{TICKET_COST * 10} → 🎟️10
-          </button>
-        </div>
       </div>
 
       {/* Ether Section */}

@@ -6098,7 +6098,7 @@ app.prepare().then(async () => {
       const BOOST_COST = 999; // 999 кристаллов
 
       try {
-        if ((player.crystals || 0) < BOOST_COST) {
+        if ((player.ancientCoin || 0) < BOOST_COST) {
           socket.emit('chest:error', { message: 'Not enough crystals' });
           return;
         }
@@ -6121,7 +6121,7 @@ app.prepare().then(async () => {
         const newDuration = Math.max(0, chest.openingDuration - BOOST_TIME);
 
         // Списываем кристаллы
-        player.crystals -= BOOST_COST;
+        player.ancientCoin -= BOOST_COST;
         await prisma.$transaction([
           prisma.chest.update({
             where: { id: chestId },
@@ -6129,7 +6129,7 @@ app.prepare().then(async () => {
           }),
           prisma.user.update({
             where: { id: player.odamage },
-            data: { crystals: player.crystals },
+            data: { ancientCoin: player.ancientCoin },
           }),
         ]);
         console.log(`[Chest] Boosted chest ${chestId} by 30min, cost ${BOOST_COST} crystals`);
@@ -6137,7 +6137,7 @@ app.prepare().then(async () => {
         socket.emit('chest:boosted', {
           chestId,
           newDuration,
-          crystals: player.crystals,
+          crystals: player.ancientCoin,
         });
       } catch (err) {
         console.error('[Chest] Boost error:', err.message);
@@ -6744,65 +6744,8 @@ app.prepare().then(async () => {
             gold: player.gold,
             enchantCharges: player.enchantCharges,
           });
-        } else if (data.type === 'exchange') {
-          // Exchange gold → crystals (1:1 ratio, min 100)
-          const EXCHANGE_RATE = 1; // 1 gold = 1 crystal (debug)
-          const quantity = data.quantity || 1;
-          const totalCost = EXCHANGE_RATE * quantity;
-
-          if (player.gold < totalCost) {
-            socket.emit('shop:error', { message: 'Not enough gold' });
-            return;
-          }
-
-          // SSOT: Use decrement for gold, increment for crystals
-          const updatedUser = await prisma.user.update({
-            where: { id: player.odamage },
-            data: {
-              gold: { decrement: BigInt(totalCost) },
-              ancientCoin: { increment: quantity },
-            },
-            select: { gold: true, ancientCoin: true },
-          });
-          player.gold = Number(updatedUser.gold);
-          player.ancientCoin = updatedUser.ancientCoin;
-
-          console.log(`[Shop] ${player.telegramId} exchanged ${totalCost} gold for ${quantity} crystals`);
-
-          socket.emit('shop:success', {
-            gold: player.gold,
-            crystals: player.ancientCoin,
-          });
-        } else if (data.type === 'tickets') {
-          // Buy lottery tickets (5 crystals = 1 ticket)
-          const TICKET_COST = 5; // crystals per ticket
-          const quantity = data.quantity || 1;
-          const totalCost = TICKET_COST * quantity;
-
-          if ((player.ancientCoin || 0) < totalCost) {
-            socket.emit('shop:error', { message: 'Not enough crystals' });
-            return;
-          }
-
-          // SSOT: Use decrement for crystals, increment for tickets
-          const updatedUser = await prisma.user.update({
-            where: { id: player.odamage },
-            data: {
-              ancientCoin: { decrement: totalCost },
-              lotteryTickets: { increment: quantity },
-            },
-            select: { ancientCoin: true, lotteryTickets: true },
-          });
-          player.ancientCoin = updatedUser.ancientCoin;
-          player.lotteryTickets = updatedUser.lotteryTickets;
-
-          console.log(`[Shop] ${player.telegramId} bought ${quantity} lottery tickets for ${totalCost} crystals`);
-
-          socket.emit('shop:success', {
-            crystals: player.ancientCoin,
-            lotteryTickets: player.lotteryTickets,
-          });
         }
+        // NOTE: exchange and tickets handlers removed in v1.8.31
       } catch (err) {
         console.error('[Shop] Error:', err.message);
         socket.emit('shop:error', { message: 'Purchase failed' });
