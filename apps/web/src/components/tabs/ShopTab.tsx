@@ -94,7 +94,7 @@ export default function ShopTab() {
   };
 
   const etherCost = 200; // 200 gold per 100 ether
-  const EXCHANGE_RATE = 10000; // gold per crystal
+  const EXCHANGE_RATE = 1000; // gold per crystal (1K = 1💎)
   const TICKET_COST = 5; // crystals per ticket
   const canAffordEther = resources.gold >= etherCost;
 

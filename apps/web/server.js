@@ -6745,8 +6745,8 @@ app.prepare().then(async () => {
             enchantCharges: player.enchantCharges,
           });
         } else if (data.type === 'exchange') {
-          // Exchange gold → crystals (10000 gold = 1 crystal)
-          const EXCHANGE_RATE = 10000; // gold per crystal
+          // Exchange gold → crystals (1000 gold = 1 crystal)
+          const EXCHANGE_RATE = 1000; // gold per crystal
           const quantity = data.quantity || 1;
           const totalCost = EXCHANGE_RATE * quantity;
 
