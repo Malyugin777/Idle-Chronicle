@@ -8048,7 +8048,7 @@ app.prepare().then(async () => {
             matEnchantDust: true,
             enchantCharges: true,
             protectionCharges: true,
-            premiumCrystals: true,
+            ancientCoin: true,
           },
         });
 
@@ -8101,12 +8101,12 @@ app.prepare().then(async () => {
         socket.emit('forge:data', {
           inventory,
           brokenItems: broken,
-          // v1.2: новая структура ресурсов
+          // v1.2: ресурсы для кузницы (premiumCrystals = ancientCoin 💎 на клиенте)
           resources: {
             enchantDust: user?.matEnchantDust || 0,
             enchantCharges: user?.enchantCharges || 0,
             protectionCharges: user?.protectionCharges || 0,
-            premiumCrystals: user?.premiumCrystals || 0,
+            premiumCrystals: user?.ancientCoin || 0,  // 💎 для восстановления (ancientCoin в БД)
             gold: Number(user?.gold || 0),
           },
         });
@@ -8209,21 +8209,22 @@ app.prepare().then(async () => {
         const baseCost = RESTORE_COST_BASE[rarity] || 10;
         const restoreCost = Math.floor(baseCost * (1 + item.enchantOnBreak * 0.25));
 
-        // Check user crystals
+        // Check user crystals (ancientCoin = 💎)
         const user = await prisma.user.findUnique({
           where: { id: player.odamage },
-          select: { premiumCrystals: true },
+          select: { ancientCoin: true },
         });
 
-        if ((user?.premiumCrystals || 0) < restoreCost) {
-          socket.emit('forge:error', { message: `Need ${restoreCost} crystals` });
+        if ((user?.ancientCoin || 0) < restoreCost) {
+          socket.emit('forge:error', { message: `Need ${restoreCost} 💎` });
           return;
         }
 
         // Restore item: enchant = enchantOnBreak - 1, isBroken = false
         const newEnchant = Math.max(0, item.enchantOnBreak - 1);
 
-        await prisma.$transaction([
+        // SSOT: Use decrement for ancientCoin
+        const [_, updatedUser] = await prisma.$transaction([
           prisma.userEquipment.update({
             where: { id: itemId },
             data: {
@@ -8235,17 +8236,24 @@ app.prepare().then(async () => {
           }),
           prisma.user.update({
             where: { id: player.odamage },
-            data: { premiumCrystals: { decrement: restoreCost } },
+            data: { ancientCoin: { decrement: restoreCost } },
+            select: { ancientCoin: true },
           }),
         ]);
+        player.ancientCoin = updatedUser.ancientCoin;
 
-        console.log(`[Forge] ${player.odamage} restored ${item.equipment.name} for ${restoreCost} crystals, enchant: ${item.enchantOnBreak} -> ${newEnchant}`);
+        console.log(`[Forge] ${player.odamage} restored ${item.equipment.name} for ${restoreCost} 💎, enchant: ${item.enchantOnBreak} -> ${newEnchant}`);
 
         socket.emit('forge:restored', {
           itemId,
           itemName: item.equipment.nameRu || item.equipment.name,
           newEnchant,
           cost: restoreCost,
+        });
+
+        // Send updated player state
+        socket.emit('player:state', {
+          ancientCoin: player.ancientCoin,
         });
 
         // Refresh forge data
@@ -8306,28 +8314,38 @@ app.prepare().then(async () => {
       try {
         const user = await prisma.user.findUnique({
           where: { id: player.odamage },
-          select: { premiumCrystals: true },
+          select: { ancientCoin: true },
         });
 
-        if ((user?.premiumCrystals || 0) < cost) {
-          socket.emit('shop:error', { message: `Need ${cost} crystals` });
+        if ((user?.ancientCoin || 0) < cost) {
+          socket.emit('shop:error', { message: `Need ${cost} 💎` });
           return;
         }
 
-        await prisma.user.update({
+        // SSOT: Use decrement for ancientCoin
+        const updatedUser = await prisma.user.update({
           where: { id: player.odamage },
           data: {
-            premiumCrystals: { decrement: cost },
+            ancientCoin: { decrement: cost },
             protectionCharges: { increment: quantity },
           },
+          select: { ancientCoin: true, protectionCharges: true },
         });
+        player.ancientCoin = updatedUser.ancientCoin;
+        player.protectionCharges = updatedUser.protectionCharges;
 
-        console.log(`[Shop] ${player.odamage} bought ${quantity}x protection for ${cost} crystals`);
+        console.log(`[Shop] ${player.odamage} bought ${quantity}x protection for ${cost} 💎`);
 
         socket.emit('shop:purchased', {
           item: 'protection',
           quantity,
           cost,
+        });
+
+        // Send updated player state
+        socket.emit('player:state', {
+          ancientCoin: player.ancientCoin,
+          protectionCharges: player.protectionCharges,
         });
 
         // Refresh forge data
