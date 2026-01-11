@@ -998,13 +998,26 @@ async function incrementDailyCounter(prisma, odamage, counterName, amount = 1) {
   };
 
   if (weeklyCounterMap[counterName]) {
-    await getOrCreateWeeklyProgress(prisma, odamage, weekKey);
-    const weeklyUpdate = {};
-    weeklyUpdate[weeklyCounterMap[counterName]] = { increment: amount };
-    await prisma.weeklyTaskProgress.update({
-      where: { odamage_weekKey: { odamage, weekKey } },
-      data: weeklyUpdate,
-    });
+    try {
+      await getOrCreateWeeklyProgress(prisma, odamage, weekKey);
+      const weeklyField = weeklyCounterMap[counterName];
+      const weeklyUpdate = {};
+      // BigInt for damage field, regular number for others
+      weeklyUpdate[weeklyField] = {
+        increment: weeklyField === 'weeklyBossDamage' ? BigInt(amount) : amount
+      };
+      const result = await prisma.weeklyTaskProgress.update({
+        where: { odamage_weekKey: { odamage, weekKey } },
+        data: weeklyUpdate,
+        select: { [weeklyField]: true },
+      });
+      // Log for debugging
+      if (counterName === 'bossDamage' && amount > 10000) {
+        console.log(`[WeeklyTask] ${odamage} +${amount} damage -> total: ${result[weeklyField]}`);
+      }
+    } catch (e) {
+      console.error(`[WeeklyTask] Failed to update ${counterName}:`, e.message);
+    }
   }
 
   // Check and award AP for newly completed tasks
