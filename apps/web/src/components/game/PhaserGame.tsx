@@ -129,6 +129,8 @@ export default function PhaserGame() {
   const [hasClaimable, setHasClaimable] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [serverUptime, setServerUptime] = useState<string>('');
+  const [fps, setFps] = useState(0);
+  const [showFps, setShowFps] = useState(false);
 
   // Loading screen state (show until all data received)
   const [loadingState, setLoadingState] = useState({
@@ -137,6 +139,28 @@ export default function PhaserGame() {
     player: false,
   });
   const isLoading = !loadingState.auth || !loadingState.boss || !loadingState.player;
+
+  // FPS counter for GPU diagnostics
+  useEffect(() => {
+    if (!showFps) return;
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let animId: number;
+
+    const measure = () => {
+      frameCount++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        setFps(frameCount);
+        frameCount = 0;
+        lastTime = now;
+      }
+      animId = requestAnimationFrame(measure);
+    };
+    animId = requestAnimationFrame(measure);
+
+    return () => cancelAnimationFrame(animId);
+  }, [showFps]);
 
   // Check exhaustion
   const isExhausted = useCallback(() => {
@@ -832,13 +856,22 @@ export default function PhaserGame() {
                 {Math.floor(respawnCountdown / 3600000)}:{String(Math.floor((respawnCountdown % 3600000) / 60000)).padStart(2, '0')}:{String(Math.floor((respawnCountdown % 60000) / 1000)).padStart(2, '0')}
               </div>
             </div>
-            <div className="text-center mt-2">
+            <div className="text-center mt-2 flex items-center justify-center gap-2">
               <span
                 className="text-[8px] text-gray-600 cursor-pointer hover:text-gray-400"
                 onClick={() => setShowDebug(true)}
               >
                 {APP_VERSION}
               </span>
+              {showFps && (
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                  fps >= 50 ? 'bg-green-900/50 text-green-400' :
+                  fps >= 30 ? 'bg-yellow-900/50 text-yellow-400' :
+                  'bg-red-900/50 text-red-400'
+                }`}>
+                  {fps} FPS
+                </span>
+              )}
             </div>
           </div>
         ) : (
@@ -1561,6 +1594,21 @@ export default function PhaserGame() {
       <EnchantModal isOpen={showEnchant} onClose={() => setShowEnchant(false)} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FPS OVERLAY - Fixed position when enabled */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {showFps && (
+        <div className="fixed top-2 right-2 z-[100] pointer-events-none">
+          <div className={`px-2 py-1 rounded text-xs font-mono font-bold backdrop-blur-sm ${
+            fps >= 50 ? 'bg-green-900/70 text-green-400 border border-green-500/30' :
+            fps >= 30 ? 'bg-yellow-900/70 text-yellow-400 border border-yellow-500/30' :
+            'bg-red-900/70 text-red-400 border border-red-500/30 animate-pulse'
+          }`}>
+            {fps} FPS
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
       {/* LOADING OVERLAY - Shows while data loading */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {isLoading && <LoadingScreen loadingState={loadingState} lang={lang} />}
@@ -1587,6 +1635,33 @@ export default function PhaserGame() {
               <div className="bg-black/40 rounded-lg p-3">
                 <div className="text-gray-500 text-xs mb-1">Version</div>
                 <div className="text-white font-mono">{APP_VERSION}</div>
+              </div>
+
+              {/* FPS Counter */}
+              <div className="bg-black/40 rounded-lg p-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-gray-500 text-xs mb-1">FPS Counter</div>
+                    <div className={`font-mono font-bold ${fps >= 50 ? 'text-green-400' : fps >= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {showFps ? `${fps} FPS` : 'Disabled'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowFps(prev => !prev)}
+                    className={`px-3 py-1.5 rounded text-xs font-bold ${
+                      showFps ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500'
+                    }`}
+                  >
+                    {showFps ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
+                {showFps && (
+                  <div className="mt-2 text-[10px] text-gray-500">
+                    {fps < 30 && '⚠️ Low FPS - possible GPU issue'}
+                    {fps >= 30 && fps < 50 && '⚡ Moderate FPS'}
+                    {fps >= 50 && '✅ Good FPS'}
+                  </div>
+                )}
               </div>
 
               {/* Boss State */}
