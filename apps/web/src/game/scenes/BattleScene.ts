@@ -32,13 +32,6 @@ export class BattleScene extends Phaser.Scene {
   // Event emitter for React communication
   private emitter: Phaser.Events.EventEmitter;
 
-  // FPS throttle - render only every 33ms (30 FPS)
-  private lastRenderTime = 0;
-  private readonly TARGET_FRAME_TIME = 1000 / 30; // 33.33ms for 30 FPS
-
-  // Manual loop interval ID (to clean up on destroy)
-  private loopIntervalId: ReturnType<typeof setInterval> | null = null;
-
   constructor() {
     super({ key: 'BattleScene' });
     this.emitter = new Phaser.Events.EventEmitter();
@@ -64,39 +57,6 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale;
-
-    // ═══════════════════════════════════════════════════════════
-    // FPS LIMIT - Step mode для точного контроля
-    // ═══════════════════════════════════════════════════════════
-    // CLEANUP: Clear any existing interval from previous scene instance
-    if (this.loopIntervalId) {
-      clearInterval(this.loopIntervalId);
-      this.loopIntervalId = null;
-    }
-
-    // Отключаем автоматический loop
-    this.game.loop.stop();
-
-    // Ручной step каждые 33ms (30 FPS)
-    this.loopIntervalId = setInterval(() => {
-      if (this.game && this.game.loop) {
-        this.game.loop.tick();  // Один тик = один кадр
-      }
-    }, 1000 / 30);
-
-    // Cleanup on scene shutdown/destroy
-    this.events.once('shutdown', () => {
-      if (this.loopIntervalId) {
-        clearInterval(this.loopIntervalId);
-        this.loopIntervalId = null;
-      }
-    });
-    this.events.once('destroy', () => {
-      if (this.loopIntervalId) {
-        clearInterval(this.loopIntervalId);
-        this.loopIntervalId = null;
-      }
-    });
 
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
@@ -376,7 +336,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createBloodSplatter(x: number, y: number) {
-    const numDrops = 6; // Reduced from 12 for GPU optimization
+    const numDrops = 12;
     for (let i = 0; i < numDrops; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 60 + Math.random() * 100;
@@ -410,7 +370,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createHitSparks(x: number, y: number) {
-    const numSparks = 8; // Reduced from 15 for GPU optimization
+    const numSparks = 15;
     for (let i = 0; i < numSparks; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 50 + Math.random() * 100;
@@ -535,7 +495,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createDebris(x: number, y: number) {
-    const numDebris = 4; // Reduced from 8 for GPU optimization
+    const numDebris = 8;
     for (let i = 0; i < numDebris; i++) {
       const debris = this.add.graphics();
       const size = 2 + Math.random() * 4;
@@ -858,18 +818,7 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  update(time: number) {
-    // ═══════════════════════════════════════════════════════════
-    // FPS THROTTLE - Skip frames to limit to ~30 FPS
-    // ═══════════════════════════════════════════════════════════
-    const elapsed = time - this.lastRenderTime;
-    if (elapsed < this.TARGET_FRAME_TIME) {
-      // Skip this frame - not enough time passed
-      // Pause rendering by making scene invisible temporarily
-      return;
-    }
-    this.lastRenderTime = time;
-
-    // Actual update logic (if any) goes here
+  update() {
+    // No UI updates needed - all handled by React
   }
 }

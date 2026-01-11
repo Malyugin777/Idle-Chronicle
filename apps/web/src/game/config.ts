@@ -5,7 +5,7 @@ import { BattleScene } from './scenes/BattleScene';
 const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,  // Пусть Phaser выбирает лучший рендерер
+  type: Phaser.AUTO,
   parent: 'game-container',
   transparent: true, // Background handled by React
   scale: {
@@ -16,10 +16,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     zoom: 1 / dpr,  // Handle high-DPI displays
   },
   scene: [BattleScene],
-  // FPS настройка - реальный лимит ставится в сцене через game.loop
+  // FPS limit to reduce GPU load
   fps: {
-    target: 30,
-    forceSetTimeOut: true,
+    target: 30,        // 30 FPS достаточно для idle кликера
+    forceSetTimeOut: true,  // Более стабильное ограничение
   },
   physics: {
     default: 'arcade',
