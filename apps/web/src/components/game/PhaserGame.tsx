@@ -11,6 +11,7 @@ import { getTaskManager } from '@/lib/taskManager';
 import TasksModal from './TasksModal';
 import ForgeModal from './ForgeModal';
 import EnchantModal from './EnchantModal';
+import WheelModal from './WheelModal';
 
 // ═══════════════════════════════════════════════════════════
 // Extracted types and components
@@ -137,6 +138,7 @@ export default function PhaserGame() {
   const [showTasks, setShowTasks] = useState(false);
   const [showForge, setShowForge] = useState(false);
   const [showEnchant, setShowEnchant] = useState(false);
+  const [showWheel, setShowWheel] = useState(false);
   const [hasClaimable, setHasClaimable] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [fps, setFps] = useState(0);
@@ -747,6 +749,18 @@ export default function PhaserGame() {
           <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-400" />
         )}
       </button>
+      {/* Wheel of Fortune Button */}
+      <button
+        onClick={() => setShowWheel(true)}
+        className="absolute top-[27rem] left-2 z-10 w-12 h-12 bg-gradient-to-b from-yellow-700/60 to-amber-900/80
+                   rounded-lg border border-yellow-600/50 flex flex-col items-center justify-center
+                   active:scale-90 transition-all hover:border-yellow-500/70 shadow-lg shadow-yellow-900/30"
+      >
+        <span className="text-xl">🎡</span>
+        <span className="text-[7px] text-yellow-300 font-bold mt-0.5">
+          {lang === 'ru' ? 'КОЛЕСО' : 'WHEEL'}
+        </span>
+      </button>
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* DAMAGE FEED - Right side, premium combat log */}
@@ -1317,6 +1331,11 @@ export default function PhaserGame() {
       {/* ENCHANT MODAL */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <EnchantModal isOpen={showEnchant} onClose={() => setShowEnchant(false)} />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* WHEEL OF FORTUNE MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <WheelModal isOpen={showWheel} onClose={() => setShowWheel(false)} lang={lang} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* FPS OVERLAY - Fixed position when enabled */}

@@ -8710,6 +8710,145 @@ app.prepare().then(async () => {
       }
     });
 
+    // ═══════════════════════════════════════════════════════════
+    // WHEEL OF FORTUNE - Lottery spin system (SSOT)
+    // Server determines result, client only animates
+    // ═══════════════════════════════════════════════════════════
+
+    const WHEEL_SEGMENTS = [
+      { id: 0, label: '+5K 🪙', color: '#D97706', weight: 25, rewardType: 'gold', rewardAmount: 5000 },
+      { id: 1, label: '+10 💎', color: '#7C3AED', weight: 15, rewardType: 'crystals', rewardAmount: 10 },
+      { id: 2, label: '+10K 🪙', color: '#F59E0B', weight: 20, rewardType: 'gold', rewardAmount: 10000 },
+      { id: 3, label: '+1 ⚡', color: '#3B82F6', weight: 18, rewardType: 'enchantCharges', rewardAmount: 1 },
+      { id: 4, label: '+20K 🪙', color: '#EAB308', weight: 10, rewardType: 'gold', rewardAmount: 20000 },
+      { id: 5, label: '+1 🛡️', color: '#8B5CF6', weight: 5, rewardType: 'protectionCharges', rewardAmount: 1 },
+      { id: 6, label: '+5 💎', color: '#A855F7', weight: 20, rewardType: 'crystals', rewardAmount: 5 },
+      { id: 7, label: '+1 🗝️', color: '#10B981', weight: 2, rewardType: 'keyWooden', rewardAmount: 1 },
+      { id: 8, label: '+2 ⚡', color: '#2563EB', weight: 8, rewardType: 'enchantCharges', rewardAmount: 2 },
+      { id: 9, label: '+1 🎟️', color: '#EC4899', weight: 7, rewardType: 'lotteryTickets', rewardAmount: 1 },
+    ];
+
+    // Helper: weighted random selection
+    function weightedRandom(segments) {
+      const totalWeight = segments.reduce((sum, s) => sum + s.weight, 0);
+      let random = Math.random() * totalWeight;
+      for (let i = 0; i < segments.length; i++) {
+        random -= segments[i].weight;
+        if (random <= 0) return i;
+      }
+      return segments.length - 1;
+    }
+
+    // WHEEL:GET - Get segments config and ticket count
+    socket.on('wheel:get', async () => {
+      if (!player.odamage) {
+        socket.emit('wheel:data', { segments: WHEEL_SEGMENTS, tickets: 0, canSpin: false });
+        return;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { lotteryTickets: true },
+        });
+
+        const tickets = user?.lotteryTickets || 0;
+        socket.emit('wheel:data', {
+          segments: WHEEL_SEGMENTS,
+          tickets,
+          canSpin: tickets > 0,
+        });
+      } catch (err) {
+        console.error('[Wheel] Get error:', err.message);
+        socket.emit('wheel:data', { segments: WHEEL_SEGMENTS, tickets: 0, canSpin: false });
+      }
+    });
+
+    // WHEEL:SPIN - Spin the wheel (SSOT: server determines result)
+    socket.on('wheel:spin', async (_, callback) => {
+      if (!player.odamage) {
+        if (callback) callback({ error: 'NOT_AUTHENTICATED' });
+        return;
+      }
+
+      try {
+        // Check tickets atomically
+        const user = await prisma.user.findUnique({
+          where: { id: player.odamage },
+          select: { lotteryTickets: true },
+        });
+
+        if (!user || user.lotteryTickets < 1) {
+          if (callback) callback({ error: 'NO_TICKETS' });
+          socket.emit('wheel:error', { message: 'No lottery tickets' });
+          return;
+        }
+
+        // Determine winning segment (server-side random)
+        const winningIndex = weightedRandom(WHEEL_SEGMENTS);
+        const segment = WHEEL_SEGMENTS[winningIndex];
+
+        // Build reward update
+        const rewardUpdate = { lotteryTickets: { decrement: 1 } };
+        rewardUpdate[segment.rewardType] = { increment: segment.rewardAmount };
+
+        // Apply reward atomically
+        const updated = await prisma.user.update({
+          where: { id: player.odamage },
+          data: rewardUpdate,
+          select: {
+            gold: true,
+            ancientCoin: true,
+            lotteryTickets: true,
+            enchantCharges: true,
+            protectionCharges: true,
+            keyWooden: true,
+            keyBronze: true,
+            keySilver: true,
+            keyGold: true,
+          },
+        });
+
+        // Sync player memory
+        player.lotteryTickets = updated.lotteryTickets;
+        if (segment.rewardType === 'gold') player.gold = Number(updated.gold);
+
+        console.log(`[Wheel] ${player.odamage} spun -> ${segment.label} (index=${winningIndex})`);
+
+        // Send result to client
+        const result = {
+          winningIndex,
+          reward: {
+            type: segment.rewardType,
+            amount: segment.rewardAmount,
+            label: segment.label,
+          },
+          ticketsAfter: updated.lotteryTickets,
+        };
+
+        if (callback) callback(result);
+        socket.emit('wheel:result', result);
+
+        // Sync resources via player:state
+        socket.emit('player:state', {
+          gold: Number(updated.gold),
+          crystals: Number(updated.ancientCoin),
+          lotteryTickets: updated.lotteryTickets,
+          enchantCharges: updated.enchantCharges,
+          protectionCharges: updated.protectionCharges,
+          keyWooden: updated.keyWooden,
+          keyBronze: updated.keyBronze,
+          keySilver: updated.keySilver,
+          keyGold: updated.keyGold,
+        });
+
+      } catch (err) {
+        console.error('[Wheel] Spin error:', err.message);
+        if (callback) callback({ error: 'INTERNAL_ERROR' });
+        socket.emit('wheel:error', { message: 'Spin failed' });
+      }
+    });
+
     // DISCONNECT
     socket.on('disconnect', async () => {
       console.log(`[Socket] Disconnected: ${socket.id}, userId: ${player.odamage || 'guest'}`);
