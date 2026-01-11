@@ -613,23 +613,37 @@ function weightedRandom(weights) {
 // TASK SYSTEM v2.0 — Daily/Weekly with server-side SSOT
 // ═══════════════════════════════════════════════════════════
 
-// Helper: get date key (YYYY-MM-DD in UTC)
-function getDateKey(date = new Date()) {
-  return date.toISOString().split('T')[0];
+// Helper: get "game day" date adjusted for 06:00 MSK reset (03:00 UTC)
+// Before 03:00 UTC = still "yesterday", after 03:00 UTC = "today"
+function getGameDay(date = new Date()) {
+  const utcHours = date.getUTCHours();
+  const adjusted = new Date(date);
+  // If before 03:00 UTC (06:00 MSK), consider it previous day
+  if (utcHours < 3) {
+    adjusted.setUTCDate(adjusted.getUTCDate() - 1);
+  }
+  return adjusted;
 }
 
-// Helper: get week key (YYYY-WNN)
+// Helper: get date key (YYYY-MM-DD) with 06:00 MSK reset
+function getDateKey(date = new Date()) {
+  return getGameDay(date).toISOString().split('T')[0];
+}
+
+// Helper: get week key (YYYY-WNN) with 06:00 MSK reset
 function getWeekKey(date = new Date()) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const gameDay = getGameDay(date);
+  const d = new Date(Date.UTC(gameDay.getUTCFullYear(), gameDay.getUTCMonth(), gameDay.getUTCDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
 }
 
-// Helper: get rotation index (0, 1, or 2) for grind tasks
+// Helper: get rotation index (0, 1, or 2) for grind tasks with 06:00 MSK reset
 function getGrindRotationIndex(date = new Date()) {
-  const daysSinceEpoch = Math.floor(date.getTime() / 86400000);
+  const gameDay = getGameDay(date);
+  const daysSinceEpoch = Math.floor(gameDay.getTime() / 86400000);
   return daysSinceEpoch % 3;
 }
 

@@ -85,14 +85,20 @@ export default function ShopTab() {
       }
     };
 
-    // Sync consumables when task rewards are claimed
-    const handlePlayerState = (data: { ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number }) => {
+    // Sync consumables AND resources when task rewards are claimed
+    const handlePlayerState = (data: {
+      ether?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number;
+      gold?: number; ancientCoin?: number; enchantCharges?: number; lotteryTickets?: number;
+    }) => {
       setShopState(prev => ({
         ...prev,
         ether: data.ether ?? prev.ether,
         potionHaste: data.potionHaste ?? prev.potionHaste,
         potionAcumen: data.potionAcumen ?? prev.potionAcumen,
         potionLuck: data.potionLuck ?? prev.potionLuck,
+        gold: data.gold ?? prev.gold,
+        crystals: data.ancientCoin ?? prev.crystals,
+        enchantCharges: data.enchantCharges ?? prev.enchantCharges,
       }));
     };
 
@@ -144,10 +150,10 @@ export default function ShopTab() {
   // Keys pricing - 999 crystals for ANY key
   const KEY_COST_CRYSTALS = 999;
   const KEYS = [
-    { id: 'wooden', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🔑', color: 'amber' },
-    { id: 'bronze', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🗝️', color: 'orange' },
+    { id: 'wooden', name: lang === 'ru' ? 'Деревянный' : 'Wooden', icon: '🗝️', color: 'amber' },
+    { id: 'bronze', name: lang === 'ru' ? 'Бронзовый' : 'Bronze', icon: '🔑', color: 'orange' },
     { id: 'silver', name: lang === 'ru' ? 'Серебряный' : 'Silver', icon: '🔐', color: 'gray' },
-    { id: 'gold', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🏆', color: 'yellow' },
+    { id: 'gold', name: lang === 'ru' ? 'Золотой' : 'Gold', icon: '🔑', color: 'yellow' },
   ];
 
   const ENCHANT_COST = 3000;

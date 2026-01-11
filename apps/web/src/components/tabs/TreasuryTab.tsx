@@ -253,10 +253,13 @@ export default function TreasuryTab() {
       }
     };
 
-    // Sync crystals when task rewards are claimed
-    const handlePlayerState = (data: { ancientCoin?: number }) => {
+    // Sync resources when task rewards are claimed
+    const handlePlayerState = (data: { ancientCoin?: number; gold?: number }) => {
       if (data.ancientCoin !== undefined) {
         setCrystals(data.ancientCoin);
+      }
+      if (data.gold !== undefined) {
+        setGold(data.gold);
       }
     };
 

@@ -45,7 +45,7 @@ interface ChestOpenModalProps {
 const CHEST_CONFIG: Record<ChestType, { icon: string; nameRu: string; nameEn: string; color: string; bgColor: string }> = {
   WOODEN: { icon: '🪵', nameRu: 'Деревянный', nameEn: 'Wooden', color: 'text-amber-500', bgColor: 'from-amber-900/80 to-amber-950/90' },
   BRONZE: { icon: '🟫', nameRu: 'Бронзовый', nameEn: 'Bronze', color: 'text-orange-400', bgColor: 'from-orange-900/80 to-orange-950/90' },
-  SILVER: { icon: '🪙', nameRu: 'Серебряный', nameEn: 'Silver', color: 'text-gray-300', bgColor: 'from-gray-700/80 to-gray-900/90' },
+  SILVER: { icon: '🥈', nameRu: 'Серебряный', nameEn: 'Silver', color: 'text-gray-300', bgColor: 'from-gray-700/80 to-gray-900/90' },
   GOLD: { icon: '🟨', nameRu: 'Золотой', nameEn: 'Gold', color: 'text-yellow-400', bgColor: 'from-yellow-700/80 to-yellow-900/90' },
 };
 
@@ -283,7 +283,7 @@ export default function ChestOpenModal({ chestType, rewards, isOpening, onClose,
                 <div className="flex items-center justify-center gap-3 bg-gradient-to-r from-amber-500/30 to-yellow-500/30 rounded-xl p-4 border border-amber-500/50 animate-pulse">
                   <span className="text-2xl">🔑</span>
                   <span className="text-lg font-bold text-amber-400">
-                    +1 {rewards.keyDrop === 'WOODEN' ? '🗝️' : rewards.keyDrop === 'BRONZE' ? '🔑' : rewards.keyDrop === 'SILVER' ? '🔐' : '🏆'}
+                    +1 {rewards.keyDrop === 'WOODEN' ? '🗝️' : rewards.keyDrop === 'BRONZE' ? '🔑' : rewards.keyDrop === 'SILVER' ? '🔐' : '🔑'}
                     {lang === 'ru' ? ' Ключ!' : ' Key!'}
                   </span>
                 </div>

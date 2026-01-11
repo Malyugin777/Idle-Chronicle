@@ -1262,8 +1262,12 @@ export default function CharacterTab() {
       setConsumables(prev => ({ ...prev, ether: data.ether }));
     };
 
-    // Sync consumables when task rewards are claimed or enchant/forge used
-    const handlePlayerState = (data: { ether?: number; etherDust?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number; enchantCharges?: number; protectionCharges?: number }) => {
+    // Sync consumables AND resources when task rewards are claimed or enchant/forge used
+    const handlePlayerState = (data: {
+      ether?: number; etherDust?: number; potionHaste?: number; potionAcumen?: number; potionLuck?: number;
+      enchantCharges?: number; protectionCharges?: number;
+      gold?: number; ancientCoin?: number; sp?: number; lotteryTickets?: number;
+    }) => {
       setConsumables(prev => ({
         ether: data.ether ?? prev.ether,
         etherDust: data.etherDust ?? prev.etherDust,
@@ -1273,6 +1277,22 @@ export default function CharacterTab() {
         enchantCharges: data.enchantCharges ?? prev.enchantCharges,
         protectionCharges: data.protectionCharges ?? prev.protectionCharges,
       }));
+      // Also sync gold/crystals/sp to heroState
+      if (data.gold !== undefined || data.ancientCoin !== undefined || data.sp !== undefined || data.lotteryTickets !== undefined) {
+        setHeroState(prev => {
+          if (!prev.baseStats) return prev;
+          return {
+            ...prev,
+            baseStats: {
+              ...prev.baseStats,
+              gold: data.gold ?? prev.baseStats.gold,
+              ancientCoin: data.ancientCoin ?? prev.baseStats.ancientCoin,
+              sp: data.sp ?? prev.baseStats.sp,
+              lotteryTickets: data.lotteryTickets ?? prev.baseStats.lotteryTickets,
+            },
+          };
+        });
+      }
     };
 
     // Sync ether when purchased from shop

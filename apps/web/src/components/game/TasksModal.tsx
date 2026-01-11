@@ -83,7 +83,7 @@ function RewardPreview({ rewards, lang }: { rewards: TaskReward[]; lang: Languag
       protectionCharges: '🛡️',
       woodenChest: '🪵',
       bronzeChest: '🟫',
-      silverChest: '🪙',
+      silverChest: '🥈',
       goldChest: '🟨',
     };
     return icons[type] || '🎁';
