@@ -3844,17 +3844,20 @@ app.prepare().then(async () => {
         });
 
         if (user) {
-          // Calculate expToNext based on level
-          const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
+          // Calculate exp progress using LEVEL_THRESHOLDS
+          const currentLevelThreshold = LEVEL_THRESHOLDS[user.level - 1] || 0;
+          const nextLevelThreshold = LEVEL_THRESHOLDS[user.level] || LEVEL_THRESHOLDS[MAX_LEVEL - 1];
+          const expProgress = Number(user.exp) - currentLevelThreshold;
+          const expRequired = nextLevelThreshold - currentLevelThreshold;
 
           socket.emit('player:data', {
             id: user.id,
             username: user.username,
             firstName: user.firstName,
             level: user.level,
-            // EXP
-            exp: Number(user.exp),
-            expToNext: expToNext,
+            // EXP - progress to next level (not total)
+            exp: expProgress,
+            expToNext: expRequired,
             // Legacy stats
             str: user.str,
             dex: user.dex,
@@ -4533,8 +4536,11 @@ app.prepare().then(async () => {
         // Recalculate stats from equipped items
         await recalculateEquipmentStats(player, prisma);
 
-        // Calculate expToNext based on level
-        const expToNext = Math.floor(1000 * Math.pow(1.5, user.level - 1));
+        // Calculate exp progress using LEVEL_THRESHOLDS
+        const currentLevelThreshold = LEVEL_THRESHOLDS[user.level - 1] || 0;
+        const nextLevelThreshold = LEVEL_THRESHOLDS[user.level] || LEVEL_THRESHOLDS[MAX_LEVEL - 1];
+        const expProgress = Number(user.exp) - currentLevelThreshold;
+        const expRequired = nextLevelThreshold - currentLevelThreshold;
 
         // FIX: Mark user as active AFTER offline calc (for future reconnects)
         userLastHeartbeat.set(user.id, Date.now());
@@ -4544,9 +4550,9 @@ app.prepare().then(async () => {
           username: user.username,
           firstName: user.firstName,
           level: user.level,
-          // EXP & SP
-          exp: Number(user.exp),
-          expToNext: expToNext,
+          // EXP & SP - progress to next level (not total)
+          exp: expProgress,
+          expToNext: expRequired,
           sp: user.sp || 0,
           // Legacy stats
           str: user.str,
