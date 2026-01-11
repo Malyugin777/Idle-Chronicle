@@ -32,6 +32,10 @@ export class BattleScene extends Phaser.Scene {
   // Event emitter for React communication
   private emitter: Phaser.Events.EventEmitter;
 
+  // FPS throttle - render only every 33ms (30 FPS)
+  private lastRenderTime = 0;
+  private readonly TARGET_FRAME_TIME = 1000 / 30; // 33.33ms for 30 FPS
+
   constructor() {
     super({ key: 'BattleScene' });
     this.emitter = new Phaser.Events.EventEmitter();
@@ -59,9 +63,26 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     // ═══════════════════════════════════════════════════════════
-    // FPS LIMIT - Канонический способ через game.loop
+    // FPS LIMIT - Принудительный 30 FPS через sleep/wake
+    // Phaser 3 игнорирует targetFps с WebGL, поэтому хакаем
     // ═══════════════════════════════════════════════════════════
-    this.game.loop.targetFps = 30;  // Целевой FPS
+    const targetFrameTime = 1000 / 30; // 30 FPS
+
+    // Внешний интервал (работает даже когда game loop спит)
+    setInterval(() => {
+      if (this.game && this.game.loop) {
+        this.game.loop.wake();
+        // Сразу уснуть после одного кадра
+        requestAnimationFrame(() => {
+          if (this.game && this.game.loop) {
+            this.game.loop.sleep();
+          }
+        });
+      }
+    }, targetFrameTime);
+
+    // Начать в спящем режиме
+    this.game.loop.sleep();
 
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
@@ -823,7 +844,18 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  update() {
-    // No UI updates needed - all handled by React
+  update(time: number) {
+    // ═══════════════════════════════════════════════════════════
+    // FPS THROTTLE - Skip frames to limit to ~30 FPS
+    // ═══════════════════════════════════════════════════════════
+    const elapsed = time - this.lastRenderTime;
+    if (elapsed < this.TARGET_FRAME_TIME) {
+      // Skip this frame - not enough time passed
+      // Pause rendering by making scene invisible temporarily
+      return;
+    }
+    this.lastRenderTime = time;
+
+    // Actual update logic (if any) goes here
   }
 }
