@@ -186,23 +186,26 @@ class WheelScene extends Phaser.Scene {
     const numSegments = this.segments.length;
     const sliceAngle = 360 / numSegments; // 36° for 10 segments
 
-    // Segment N center is at (N + 0.5) * sliceAngle CLOCKWISE from TOP
-    // To bring it under the pointer (at TOP), wheel must rotate CLOCKWISE by that amount
-    // In Phaser, positive angle = clockwise rotation
-    const segmentCenterOffset = (targetIndex + 0.5) * sliceAngle;
+    // MATH:
+    // - Segment 0 starts at TOP, segment N is at N * sliceAngle clockwise from TOP
+    // - Segment N center is at (N + 0.5) * sliceAngle from TOP
+    // - When wheel rotates CLOCKWISE (positive angle), segments move clockwise
+    // - So segment that was LEFT of pointer comes UNDER pointer
+    // - To bring segment N under pointer: rotate by (360 - segmentCenter)
+    // - This makes segment N "arrive from the left"
 
-    // Random offset within segment (±35% from center, stay inside segment)
-    const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.7;
+    const segmentCenter = (targetIndex + 0.5) * sliceAngle;
+    const targetAngle = 360 - segmentCenter;
 
-    // Target angle (positive = clockwise)
-    const targetAngle = segmentCenterOffset + randomOffset;
+    // Random offset within segment (±30% from center)
+    const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.6;
 
-    // Normalize to [0, 360) then add full rotations (5-7 spins clockwise)
-    const normalizedTarget = ((targetAngle % 360) + 360) % 360;
+    // Normalize and add rotations
+    const normalizedTarget = ((targetAngle + randomOffset) % 360 + 360) % 360;
     const rotations = 5 + Math.floor(Math.random() * 3);
     const finalAngle = normalizedTarget + rotations * 360;
 
-    console.log(`[Wheel] Target: ${this.segments[targetIndex]?.label} (idx ${targetIndex}), angle=${finalAngle.toFixed(1)}°`);
+    console.log(`[Wheel] Segment ${targetIndex} (${this.segments[targetIndex]?.label}), center=${segmentCenter}°, target=${targetAngle}°, final=${finalAngle.toFixed(0)}°`);
 
     // Main spin with tick tracking
     this.tweens.add({
