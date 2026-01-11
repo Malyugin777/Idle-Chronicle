@@ -44,7 +44,8 @@
       "Bash(npx prisma validate:*)",
       "Bash(git reset:*)",
       "Bash(wc:*)",
-      "Bash(git cherry-pick:*)"
+      "Bash(git cherry-pick:*)",
+      "Bash(git revert:*)"
     ]
   }
 }
