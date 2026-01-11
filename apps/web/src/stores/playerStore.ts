@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════
-// PLAYER STORE - Global state for player resources (v1.8.19)
-// Uses Zustand for cross-tab synchronization
+// PLAYER STORE - Global state for player resources (v1.8.21)
+// Uses Zustand with persist for cross-tab synchronization
 // ═══════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 // Resources that are synced from server via player:state event
 export interface PlayerResources {
@@ -50,6 +51,7 @@ interface PlayerStore {
   // State
   resources: PlayerResources;
   isLoaded: boolean;
+  lastSync: number; // Timestamp of last server sync
 
   // Actions
   setResources: (partial: Partial<PlayerResources>) => void;
@@ -84,28 +86,91 @@ const initialResources: PlayerResources = {
   psCap: 24,
 };
 
-export const usePlayerStore = create<PlayerStore>((set) => ({
-  resources: initialResources,
-  isLoaded: false,
+export const usePlayerStore = create<PlayerStore>()(
+  persist(
+    (set) => ({
+      resources: initialResources,
+      isLoaded: false,
+      lastSync: 0,
 
-  // Partial update (for player:state events with subset of fields)
-  setResources: (partial) => set((state) => ({
-    resources: { ...state.resources, ...partial },
-    isLoaded: true,
-  })),
+      // Partial update (for player:state events with subset of fields)
+      setResources: (partial) => set((state) => ({
+        resources: { ...state.resources, ...partial },
+        isLoaded: true,
+        lastSync: Date.now(),
+      })),
 
-  // Full state update (for player:get response)
-  setFullState: (data) => set({
-    resources: data,
-    isLoaded: true,
-  }),
+      // Full state update (for player:get response)
+      setFullState: (data) => set({
+        resources: data,
+        isLoaded: true,
+        lastSync: Date.now(),
+      }),
 
-  // Reset on disconnect
-  reset: () => set({
-    resources: initialResources,
-    isLoaded: false,
-  }),
-}));
+      // Reset on disconnect
+      reset: () => set({
+        resources: initialResources,
+        isLoaded: false,
+        lastSync: 0,
+      }),
+    }),
+    {
+      name: 'idle-chronicle-player', // localStorage key
+      storage: createJSONStorage(() => localStorage),
+      // Only persist stable resources, not combat stats that change rapidly
+      partialize: (state) => ({
+        resources: {
+          // Currencies (stable)
+          gold: state.resources.gold,
+          crystals: state.resources.crystals,
+          lotteryTickets: state.resources.lotteryTickets,
+          // Crafting (stable)
+          ether: state.resources.ether,
+          etherDust: state.resources.etherDust,
+          enchantCharges: state.resources.enchantCharges,
+          protectionCharges: state.resources.protectionCharges,
+          // Potions (stable)
+          potionHaste: state.resources.potionHaste,
+          potionAcumen: state.resources.potionAcumen,
+          potionLuck: state.resources.potionLuck,
+          // Keys (stable)
+          keyWooden: state.resources.keyWooden,
+          keyBronze: state.resources.keyBronze,
+          keySilver: state.resources.keySilver,
+          keyGold: state.resources.keyGold,
+          // Character (stable)
+          level: state.resources.level,
+          exp: state.resources.exp,
+          sp: state.resources.sp,
+          // Combat stats - use defaults, will be overwritten by server
+          stamina: initialResources.stamina,
+          maxStamina: state.resources.maxStamina,
+          mana: initialResources.mana,
+          maxMana: state.resources.maxMana,
+          exhaustedUntil: null,
+          ps: initialResources.ps,
+          psCap: state.resources.psCap,
+        },
+        lastSync: state.lastSync,
+        // Don't persist isLoaded - always start as false
+      }),
+      // Merge persisted state with initial state
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<PlayerStore>;
+        return {
+          ...current,
+          resources: {
+            ...current.resources,
+            ...(persistedState.resources || {}),
+          },
+          lastSync: persistedState.lastSync || 0,
+          // isLoaded stays false until server confirms
+          isLoaded: false,
+        };
+      },
+    }
+  )
+);
 
 // Selector hooks for specific resource groups
 export const useGold = () => usePlayerStore((state) => state.resources.gold);
@@ -129,3 +194,9 @@ export const useCombatStats = () => usePlayerStore((state) => ({
   maxMana: state.resources.maxMana,
   exhaustedUntil: state.resources.exhaustedUntil,
 }));
+
+// Check if cached data is stale (older than 5 minutes)
+export const useIsCacheStale = () => usePlayerStore((state) => {
+  const fiveMinutes = 5 * 60 * 1000;
+  return Date.now() - state.lastSync > fiveMinutes;
+});
