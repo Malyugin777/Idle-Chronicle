@@ -60,6 +60,7 @@ const CONSUMABLE_TOOLTIPS: Record<string, { ru: string; en: string }> = {
   scrollLuck: { ru: 'Свиток удачи — +10% шанс крита на 60 сек', en: 'Luck Scroll — +10% crit chance for 60s' },
   enchantCharges: { ru: 'Заряд заточки — 1 заряд = 1 попытка улучшения', en: 'Enchant Charge — 1 charge = 1 upgrade attempt' },
   protectionCharges: { ru: 'Безопасная заточка — защищает от поломки', en: 'Protection — prevents item from breaking' },
+  lotteryTickets: { ru: 'Лотерейный билет — участие в розыгрыше', en: 'Lottery Ticket — participate in lottery' },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1181,7 +1182,7 @@ export default function CharacterTab() {
   const [showStatsPopup, setShowStatsPopup] = useState(false);
   const [showSkillsPopup, setShowSkillsPopup] = useState(false);
   const [selectedConsumable, setSelectedConsumable] = useState<string | null>(null);
-  const [consumables, setConsumables] = useState({ ether: 0, etherDust: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0, enchantCharges: 0, protectionCharges: 0 });
+  const [consumables, setConsumables] = useState({ ether: 0, etherDust: 0, scrollHaste: 0, scrollAcumen: 0, scrollLuck: 0, enchantCharges: 0, protectionCharges: 0, lotteryTickets: 0 });
   const [lang] = useState<Language>(() => detectLanguage());
   const t = useTranslation(lang);
 
@@ -1204,6 +1205,7 @@ export default function CharacterTab() {
         scrollLuck: data.potionLuck || 0,     // Server sends potionLuck
         enchantCharges: data.enchantCharges || 0,
         protectionCharges: data.protectionCharges || 0,
+        lotteryTickets: data.lotteryTickets || 0,
       });
       setIsLoading(false);
     };
@@ -1291,9 +1293,10 @@ export default function CharacterTab() {
         scrollLuck: data.potionLuck ?? prev.scrollLuck,
         enchantCharges: data.enchantCharges ?? prev.enchantCharges,
         protectionCharges: data.protectionCharges ?? prev.protectionCharges,
+        lotteryTickets: data.lotteryTickets ?? prev.lotteryTickets,
       }));
       // Also sync gold/crystals/sp to heroState
-      if (data.gold !== undefined || data.ancientCoin !== undefined || data.sp !== undefined || data.lotteryTickets !== undefined) {
+      if (data.gold !== undefined || data.ancientCoin !== undefined || data.sp !== undefined) {
         setHeroState(prev => {
           if (!prev.baseStats) return prev;
           return {
@@ -1303,7 +1306,6 @@ export default function CharacterTab() {
               gold: data.gold ?? prev.baseStats.gold,
               ancientCoin: data.ancientCoin ?? prev.baseStats.ancientCoin,
               sp: data.sp ?? prev.baseStats.sp,
-              lotteryTickets: data.lotteryTickets ?? prev.baseStats.lotteryTickets,
             },
           };
         });
@@ -1520,6 +1522,9 @@ export default function CharacterTab() {
   if (consumables.scrollLuck > 0) {
     consumableSlots.push({ id: 'scrollLuck', dbField: 'scrollLuck', icon: '🍀', count: consumables.scrollLuck, color: 'text-green-400' });
   }
+  if (consumables.lotteryTickets > 0) {
+    consumableSlots.push({ id: 'lotteryTickets', dbField: 'lotteryTickets', icon: '🎟️', count: consumables.lotteryTickets, color: 'text-yellow-300' });
+  }
 
   const totalSlots = heroState.inventory.length + consumableSlots.length;
 
@@ -1547,9 +1552,6 @@ export default function CharacterTab() {
                 </span>
                 <span className="text-sm text-purple-400 font-bold flex items-center gap-1">
                   <Gem size={14} /> {stats.ancientCoin || 0}
-                </span>
-                <span className="text-sm text-yellow-300 font-bold flex items-center gap-1">
-                  🎟️ {stats.lotteryTickets || 0}
                 </span>
               </div>
             </div>
