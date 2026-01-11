@@ -58,6 +58,11 @@ export class BattleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
+    // ═══════════════════════════════════════════════════════════
+    // FPS LIMIT - Канонический способ через game.loop
+    // ═══════════════════════════════════════════════════════════
+    this.game.loop.targetFps = 30;  // Целевой FPS
+
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
 
