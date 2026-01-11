@@ -5,7 +5,7 @@ import { BattleScene } from './scenes/BattleScene';
 const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+  type: Phaser.CANVAS,  // CANVAS вместо AUTO - меньше GPU нагрузки
   parent: 'game-container',
   transparent: true, // Background handled by React
   scale: {
@@ -19,7 +19,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // FPS limit to reduce GPU load
   fps: {
     target: 30,        // 30 FPS достаточно для idle кликера
-    forceSetTimeOut: true,  // Более стабильное ограничение
+    min: 20,           // Минимум 20 FPS
+    limit: 30,         // Жёсткий лимит 30 FPS
+    forceSetTimeOut: true,  // Использовать setTimeout вместо RAF
+    smoothStep: false,  // Отключить интерполяцию
   },
   physics: {
     default: 'arcade',
@@ -32,6 +35,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     pixelArt: false,
     antialias: true,
     powerPreference: 'low-power',  // Экономия GPU
+    batchSize: 512,  // Уменьшить размер батча
   },
   audio: {
     disableWebAudio: true,
