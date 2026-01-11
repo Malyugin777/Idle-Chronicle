@@ -2291,59 +2291,9 @@ app.prepare().then(async () => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ONE-TIME MIGRATION: Convert generic equipment to novice set
+  // SEED EQUIPMENT - Starter items NOT droppable
   // ═══════════════════════════════════════════════════════════
   try {
-    // Check if there are any non-starter equipment templates
-    const genericEquipment = await prisma.equipment.findMany({
-      where: {
-        code: { not: { startsWith: 'starter-' } },
-      },
-    });
-
-    if (genericEquipment.length > 0) {
-      console.log(`[Migration] Found ${genericEquipment.length} generic equipment items to migrate`);
-
-      // Map slot to starter code
-      const slotToStarter = {
-        WEAPON: 'starter-sword',
-        HELMET: 'starter-helmet',
-        CHEST: 'starter-chest',
-        GLOVES: 'starter-gloves',
-        LEGS: 'starter-legs',
-        BOOTS: 'starter-boots',
-        SHIELD: 'starter-shield',
-      };
-
-      for (const generic of genericEquipment) {
-        const starterCode = slotToStarter[generic.slot];
-        if (!starterCode) continue;
-
-        // Find starter equipment for this slot
-        const starter = await prisma.equipment.findUnique({
-          where: { code: starterCode },
-        });
-
-        if (starter) {
-          // Reassign all UserEquipment from generic to starter
-          const updated = await prisma.userEquipment.updateMany({
-            where: { equipmentId: generic.id },
-            data: { equipmentId: starter.id },
-          });
-
-          if (updated.count > 0) {
-            console.log(`[Migration] Moved ${updated.count} items from ${generic.code} to ${starterCode}`);
-          }
-
-          // Delete the generic equipment template
-          await prisma.equipment.delete({ where: { id: generic.id } });
-          console.log(`[Migration] Deleted generic equipment: ${generic.code}`);
-        }
-      }
-
-      console.log('[Migration] Generic equipment migration complete');
-    }
-
     // Starter items are NOT droppable (они выдаются только новичкам)
     await prisma.equipment.updateMany({
       where: { code: { startsWith: 'starter-' } },
