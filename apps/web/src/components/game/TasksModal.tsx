@@ -142,6 +142,13 @@ function APProgressBar({ ap, milestones, onClaim, claiming, freeSlots, lang }: A
     return '🟫';
   };
 
+  const getMilestoneRewardText = (threshold: number): string => {
+    // 30: 5000 gold, 60: 2 tickets, 100: 1 bronzeChest
+    if (threshold === 30) return '5K';
+    if (threshold === 60) return 'x2';
+    return 'x1';
+  };
+
   const getMilestoneStatus = (threshold: number) => {
     const m = milestones[threshold];
     if (!m) return 'locked';
@@ -199,7 +206,10 @@ function APProgressBar({ ap, milestones, onClaim, claiming, freeSlots, lang }: A
                   : 'bg-black/30 border border-white/10'
               }`}
             >
-              <span className="text-xl">{getMilestoneIcon(threshold)}</span>
+              <div className="flex items-center gap-0.5">
+                <span className="text-lg">{getMilestoneIcon(threshold)}</span>
+                <span className="text-[10px] text-white font-bold">{getMilestoneRewardText(threshold)}</span>
+              </div>
               <span className="text-[9px] text-gray-400">{threshold} AP</span>
               {status === 'claimed' ? (
                 <Check size={12} className="text-green-400" />
