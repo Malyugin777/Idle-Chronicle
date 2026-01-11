@@ -24,14 +24,14 @@ interface WheelModalProps {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PHASER WHEEL SCENE
+// PHASER WHEEL SCENE - Proper angle calculation
 // ═══════════════════════════════════════════════════════════
 
 class WheelScene extends Phaser.Scene {
   private wheelContainer!: Phaser.GameObjects.Container;
   private segments: WheelSegment[] = [];
   private isSpinning = false;
-  private onSpinComplete?: (index: number) => void;
+  private currentAngle = 0;
 
   constructor() {
     super({ key: 'WheelScene' });
@@ -39,25 +39,27 @@ class WheelScene extends Phaser.Scene {
 
   init(data: { segments: WheelSegment[] }) {
     this.segments = data.segments || [];
+    this.currentAngle = 0;
   }
 
   create() {
     const centerX = 160;
     const centerY = 160;
-    const radius = 140;
+    const radius = 130;
+    const numSegments = this.segments.length;
+    const sliceAngle = (Math.PI * 2) / numSegments;
 
-    // Create container for wheel
+    // Create container for wheel (will rotate)
     this.wheelContainer = this.add.container(centerX, centerY);
 
-    // Draw wheel segments
-    const segmentAngle = (Math.PI * 2) / this.segments.length;
     const graphics = this.add.graphics();
 
+    // Draw segments - segment 0 starts at TOP (-π/2)
     this.segments.forEach((segment, i) => {
-      const startAngle = i * segmentAngle - Math.PI / 2;
-      const endAngle = startAngle + segmentAngle;
+      const startAngle = i * sliceAngle - Math.PI / 2;
+      const endAngle = startAngle + sliceAngle;
 
-      // Draw segment
+      // Fill segment
       graphics.fillStyle(parseInt(segment.color.replace('#', '0x')), 1);
       graphics.beginPath();
       graphics.moveTo(0, 0);
@@ -65,90 +67,125 @@ class WheelScene extends Phaser.Scene {
       graphics.closePath();
       graphics.fillPath();
 
-      // Draw border
-      graphics.lineStyle(2, 0x1f2937, 1);
+      // Segment border (darker)
+      graphics.lineStyle(3, 0x1f2937, 1);
       graphics.beginPath();
       graphics.moveTo(0, 0);
-      graphics.arc(0, 0, radius, startAngle, endAngle, false);
-      graphics.closePath();
-      graphics.strokePath();
+      graphics.lineTo(Math.cos(startAngle) * radius, Math.sin(startAngle) * radius);
+      graphics.stroke();
+    });
 
-      // Add label
-      const labelAngle = startAngle + segmentAngle / 2;
+    // Outer circle border
+    graphics.lineStyle(4, 0x374151, 1);
+    graphics.strokeCircle(0, 0, radius);
+
+    this.wheelContainer.add(graphics);
+
+    // Add labels - positioned at center of each segment
+    this.segments.forEach((segment, i) => {
+      const midAngle = i * sliceAngle - Math.PI / 2 + sliceAngle / 2;
       const labelRadius = radius * 0.65;
-      const labelX = Math.cos(labelAngle) * labelRadius;
-      const labelY = Math.sin(labelAngle) * labelRadius;
+      const labelX = Math.cos(midAngle) * labelRadius;
+      const labelY = Math.sin(midAngle) * labelRadius;
 
       const label = this.add.text(labelX, labelY, segment.label, {
-        fontSize: '12px',
-        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        fontFamily: 'Arial Black, sans-serif',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 3,
+        strokeThickness: 4,
       });
       label.setOrigin(0.5, 0.5);
-      label.setRotation(labelAngle + Math.PI / 2);
+      // Rotate text to be readable (perpendicular to radius)
+      label.setRotation(midAngle + Math.PI / 2);
 
       this.wheelContainer.add(label);
     });
 
-    // Add graphics to container
-    this.wheelContainer.addAt(graphics, 0);
+    // Center hub
+    const hub = this.add.graphics();
+    hub.fillStyle(0x1f2937, 1);
+    hub.fillCircle(0, 0, 22);
+    hub.lineStyle(4, 0xfbbf24, 1);
+    hub.strokeCircle(0, 0, 22);
+    hub.fillStyle(0xfbbf24, 1);
+    hub.fillCircle(0, 0, 8);
+    this.wheelContainer.add(hub);
 
-    // Draw center circle
-    const centerCircle = this.add.graphics();
-    centerCircle.fillStyle(0x1f2937, 1);
-    centerCircle.fillCircle(0, 0, 20);
-    centerCircle.lineStyle(3, 0xfbbf24, 1);
-    centerCircle.strokeCircle(0, 0, 20);
-    this.wheelContainer.add(centerCircle);
+    // Outer decorative ring (golden)
+    const outerRing = this.add.graphics();
+    outerRing.lineStyle(8, 0xb45309, 1);
+    outerRing.strokeCircle(centerX, centerY, radius + 6);
+    outerRing.lineStyle(3, 0xfbbf24, 1);
+    outerRing.strokeCircle(centerX, centerY, radius + 10);
 
-    // Draw pointer (triangle at top)
+    // Pointer (triangle at top, pointing DOWN into wheel)
     const pointer = this.add.graphics();
-    pointer.fillStyle(0xef4444, 1);
+    pointer.fillStyle(0xdc2626, 1);
     pointer.beginPath();
-    pointer.moveTo(centerX, 10);
-    pointer.lineTo(centerX - 12, 35);
-    pointer.lineTo(centerX + 12, 35);
+    pointer.moveTo(centerX, 25);          // tip pointing down
+    pointer.lineTo(centerX - 14, 5);      // top-left
+    pointer.lineTo(centerX + 14, 5);      // top-right
     pointer.closePath();
     pointer.fillPath();
-    pointer.lineStyle(2, 0x7f1d1d, 1);
+    pointer.lineStyle(3, 0x7f1d1d, 1);
     pointer.strokePath();
-
-    // Outer ring
-    const outerRing = this.add.graphics();
-    outerRing.lineStyle(6, 0xfbbf24, 1);
-    outerRing.strokeCircle(centerX, centerY, radius + 5);
+    // Small circle at base
+    pointer.fillStyle(0x991b1b, 1);
+    pointer.fillCircle(centerX, 8, 6);
   }
 
+  /**
+   * Spin to a specific segment index
+   *
+   * MATH: Segment 0 is at TOP when angle=0
+   * To land on segment N, we need to rotate the wheel so segment N is at TOP
+   *
+   * Each segment spans (360/N) degrees
+   * Segment i center is at: i * (360/N) degrees from segment 0
+   *
+   * To bring segment targetIndex under the pointer (top):
+   * We rotate BACKWARDS (negative) by targetIndex * sliceAngle
+   * But Phaser rotates clockwise for positive angles
+   * So we go: -(targetIndex * sliceAngle) + (fullRotations * 360)
+   */
   spinTo(targetIndex: number, callback?: () => void) {
     if (this.isSpinning) return;
     this.isSpinning = true;
 
-    const segmentAngle = 360 / this.segments.length;
-    // Target angle: pointer at top (270°), center of segment
-    const targetAngle = 270 - (targetIndex * segmentAngle) - (segmentAngle / 2);
-    // Add random offset within segment (±30% of segment)
-    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.6;
-    // Add 5-7 full rotations
+    const numSegments = this.segments.length;
+    const sliceAngle = 360 / numSegments;
+
+    // Calculate target angle
+    // Segment 0 is at top when wheel angle = 0
+    // To put segment N at top: rotate by -N * sliceAngle
+    const targetSegmentAngle = -targetIndex * sliceAngle;
+
+    // Add small random offset within segment (±25% from center) for realism
+    const randomOffset = (Math.random() - 0.5) * sliceAngle * 0.5;
+
+    // Add 5-7 full clockwise rotations for spin effect
+    // Since we're going negative (counter-clockwise visually),
+    // we subtract full rotations
     const rotations = 5 + Math.floor(Math.random() * 3);
-    const finalAngle = targetAngle + randomOffset + (rotations * 360);
+    const fullRotation = -rotations * 360;
+
+    // Final angle: start from current, go full rotations, land on target
+    const finalAngle = this.currentAngle + fullRotation + targetSegmentAngle + randomOffset - (this.currentAngle % 360);
+
+    console.log(`[Wheel] Spinning to segment ${targetIndex}, finalAngle=${finalAngle.toFixed(1)}°`);
 
     this.tweens.add({
       targets: this.wheelContainer,
       angle: finalAngle,
-      duration: 4000,
+      duration: 3500,
       ease: 'Cubic.easeOut',
       onComplete: () => {
+        this.currentAngle = finalAngle;
         this.isSpinning = false;
         if (callback) callback();
-        if (this.onSpinComplete) this.onSpinComplete(targetIndex);
       },
     });
-  }
-
-  setOnSpinComplete(callback: (index: number) => void) {
-    this.onSpinComplete = callback;
   }
 
   getIsSpinning() {
@@ -166,22 +203,15 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [segments, setSegments] = useState<WheelSegment[]>([]);
-  const [tickets, setTickets] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [lastReward, setLastReward] = useState<{ label: string; type: string; amount: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Get tickets from Zustand (real-time sync)
-  const zustandTickets = usePlayerStore((state) => state.resources.lotteryTickets);
+  // Get tickets from Zustand (SSOT - only source of truth)
+  const tickets = usePlayerStore((state) => state.resources.lotteryTickets);
+  const setResources = usePlayerStore((state) => state.setResources);
 
-  // Update local tickets when Zustand updates
-  useEffect(() => {
-    if (zustandTickets !== undefined) {
-      setTickets(zustandTickets);
-    }
-  }, [zustandTickets]);
-
-  // Fetch wheel data on open
+  // Fetch wheel config on open
   useEffect(() => {
     if (!isOpen) return;
 
@@ -189,9 +219,10 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
     setLoading(true);
     setLastReward(null);
 
-    const handleWheelData = (data: { segments: WheelSegment[]; tickets: number; canSpin: boolean }) => {
+    const handleWheelData = (data: { segments: WheelSegment[]; tickets: number }) => {
       setSegments(data.segments);
-      setTickets(data.tickets);
+      // Update Zustand with server tickets (in case out of sync)
+      setResources({ lotteryTickets: data.tickets });
       setLoading(false);
     };
 
@@ -201,7 +232,7 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
     return () => {
       socket.off('wheel:data', handleWheelData);
     };
-  }, [isOpen]);
+  }, [isOpen, setResources]);
 
   // Initialize Phaser when segments are ready
   useEffect(() => {
@@ -218,30 +249,20 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
       width: 320,
       height: 320,
       parent: containerRef.current,
-      backgroundColor: '#111827',
+      backgroundColor: '#0f172a',
       scene: WheelScene,
-      physics: { default: 'arcade' },
     };
 
     gameRef.current = new Phaser.Game(config);
 
-    // Wait for scene to be ready
-    gameRef.current.events.once('ready', () => {
-      const scene = gameRef.current?.scene.getScene('WheelScene') as WheelScene;
-      if (scene) {
-        scene.scene.restart({ segments });
-        sceneRef.current = scene;
-      }
-    });
-
-    // Restart scene with segments after a short delay
+    // Wait for scene to initialize
     setTimeout(() => {
       const scene = gameRef.current?.scene.getScene('WheelScene') as WheelScene;
       if (scene) {
         scene.scene.restart({ segments });
         sceneRef.current = scene;
       }
-    }, 100);
+    }, 150);
 
     return () => {
       if (gameRef.current) {
@@ -252,7 +273,7 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
     };
   }, [isOpen, segments]);
 
-  // Handle spin
+  // Handle spin - SSOT: server decides everything
   const handleSpin = useCallback(() => {
     if (spinning || tickets < 1 || !sceneRef.current) return;
 
@@ -267,12 +288,14 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
         return;
       }
 
-      const { winningIndex, reward, ticketsAfter } = response;
+      const { winningIndex, reward } = response;
 
-      // Animate wheel to winning segment
+      console.log(`[Wheel] Server says: segment ${winningIndex}, reward: ${reward.label}`);
+
+      // Animate wheel to the winning segment
+      // Resources will be updated via player:state event from server
       sceneRef.current?.spinTo(winningIndex, () => {
         setLastReward(reward);
-        setTickets(ticketsAfter);
         setSpinning(false);
       });
     });
@@ -281,63 +304,71 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-      <div className="bg-gradient-to-b from-gray-900 to-gray-950 rounded-2xl border border-yellow-600/50
-                      shadow-2xl shadow-yellow-900/20 w-[340px] max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
+      <div className="bg-gradient-to-b from-slate-900 to-slate-950 rounded-2xl border-2 border-amber-600/60
+                      shadow-2xl shadow-amber-900/30 w-[350px] max-h-[95vh] overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-3 bg-gradient-to-r from-yellow-900/40 to-amber-900/40
-                        border-b border-yellow-700/30 flex items-center justify-between">
+        <div className="px-4 py-3 bg-gradient-to-r from-amber-900/50 to-yellow-900/50
+                        border-b border-amber-700/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🎡</span>
-            <span className="text-yellow-400 font-bold">
+            <span className="text-2xl">🎰</span>
+            <span className="text-amber-400 font-bold text-lg">
               {lang === 'ru' ? 'Колесо Фортуны' : 'Wheel of Fortune'}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-xl font-bold w-8 h-8
-                       flex items-center justify-center rounded-full hover:bg-gray-800/50"
+            disabled={spinning}
+            className="text-gray-400 hover:text-white text-2xl font-bold w-8 h-8
+                       flex items-center justify-center rounded-full hover:bg-gray-800/50
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
             ×
           </button>
         </div>
 
         {/* Tickets display */}
-        <div className="px-4 py-2 bg-gray-800/50 border-b border-gray-700/50 flex items-center justify-center gap-2">
-          <span className="text-gray-400">{lang === 'ru' ? 'Ваши билеты:' : 'Your tickets:'}</span>
-          <span className="text-yellow-400 font-bold text-lg">🎟️ {tickets}</span>
+        <div className="px-4 py-2 bg-slate-800/60 border-b border-slate-700/50
+                        flex items-center justify-center gap-3">
+          <span className="text-slate-400 text-sm">{lang === 'ru' ? 'Ваши билеты:' : 'Your tickets:'}</span>
+          <span className="text-amber-400 font-bold text-xl">🎟️ {tickets}</span>
         </div>
 
         {/* Wheel container */}
-        <div className="p-4 flex flex-col items-center">
+        <div className="p-3 flex flex-col items-center bg-gradient-to-b from-slate-800/30 to-transparent">
           {loading ? (
             <div className="w-[320px] h-[320px] flex items-center justify-center">
-              <span className="text-gray-400">{lang === 'ru' ? 'Загрузка...' : 'Loading...'}</span>
+              <div className="text-slate-400 animate-pulse">
+                {lang === 'ru' ? 'Загрузка...' : 'Loading...'}
+              </div>
             </div>
           ) : (
-            <div ref={containerRef} className="w-[320px] h-[320px] rounded-xl overflow-hidden" />
+            <div
+              ref={containerRef}
+              className="w-[320px] h-[320px] rounded-2xl overflow-hidden shadow-lg shadow-black/50"
+            />
           )}
 
           {/* Reward display */}
           {lastReward && (
-            <div className="mt-3 px-4 py-2 bg-gradient-to-r from-green-900/50 to-emerald-900/50
-                            rounded-lg border border-green-500/50 animate-pulse">
-              <span className="text-green-400 font-bold">
-                {lang === 'ru' ? 'Выигрыш: ' : 'Won: '}{lastReward.label}
+            <div className="mt-3 px-5 py-2.5 bg-gradient-to-r from-emerald-900/60 to-green-900/60
+                            rounded-xl border-2 border-emerald-500/60 shadow-lg shadow-emerald-900/30">
+              <span className="text-emerald-400 font-bold text-lg">
+                🎉 {lang === 'ru' ? 'Выигрыш: ' : 'Won: '}{lastReward.label}
               </span>
             </div>
           )}
         </div>
 
         {/* Action buttons */}
-        <div className="px-4 pb-4 flex gap-3">
+        <div className="px-4 pb-4 pt-2 flex gap-3">
           <button
             onClick={handleSpin}
             disabled={spinning || tickets < 1 || loading}
-            className={`flex-1 py-3 rounded-lg font-bold text-lg transition-all
+            className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all shadow-lg
                         ${spinning || tickets < 1 || loading
-                          ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-yellow-600 to-amber-600 text-white hover:from-yellow-500 hover:to-amber-500 active:scale-95'
+                          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white hover:from-amber-500 hover:to-yellow-500 active:scale-95 shadow-amber-900/40'
                         }`}
           >
             {spinning
@@ -349,8 +380,9 @@ export default function WheelModal({ isOpen, onClose, lang = 'ru' }: WheelModalP
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-3 bg-gray-700 text-gray-300 rounded-lg font-bold
-                       hover:bg-gray-600 transition-all"
+            disabled={spinning}
+            className="px-5 py-3 bg-slate-700 text-slate-300 rounded-xl font-bold
+                       hover:bg-slate-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {lang === 'ru' ? 'Закрыть' : 'Close'}
           </button>
