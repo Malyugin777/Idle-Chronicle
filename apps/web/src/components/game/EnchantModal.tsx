@@ -107,16 +107,31 @@ export default function EnchantModal({ isOpen, onClose }: EnchantModalProps) {
       setEnchanting(false);
     };
 
+    // Restore/Abandon handlers - refresh forge data after operation
+    const handleRestored = () => {
+      setLoading(false);
+      socket.emit('forge:get'); // Refresh data
+    };
+
+    const handleAbandoned = () => {
+      setLoading(false);
+      socket.emit('forge:get'); // Refresh data
+    };
+
     socket.on('forge:data', handleForgeData);
     socket.on('forge:error', handleForgeError);
     socket.on('enchant:result', handleEnchantResult);
     socket.on('enchant:error', handleEnchantError);
+    socket.on('forge:restored', handleRestored);
+    socket.on('forge:abandoned', handleAbandoned);
 
     return () => {
       socket.off('forge:data', handleForgeData);
       socket.off('forge:error', handleForgeError);
       socket.off('enchant:result', handleEnchantResult);
       socket.off('enchant:error', handleEnchantError);
+      socket.off('forge:restored', handleRestored);
+      socket.off('forge:abandoned', handleAbandoned);
     };
   }, [isOpen]);
 

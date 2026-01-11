@@ -8240,9 +8240,6 @@ app.prepare().then(async () => {
 
         // Send updated player state
         emitResourceSync(socket, player, ['ancientCoin']);
-
-        // Refresh forge data
-        socket.emit('forge:get');
       } catch (err) {
         console.error('[Forge] Restore error:', err.message);
         socket.emit('forge:error', { message: 'Failed to restore item' });
@@ -8280,9 +8277,6 @@ app.prepare().then(async () => {
           itemId,
           itemName: item.equipment.nameRu || item.equipment.name,
         });
-
-        // Refresh forge data
-        socket.emit('forge:get');
       } catch (err) {
         console.error('[Forge] Abandon error:', err.message);
         socket.emit('forge:error', { message: 'Failed to abandon item' });
