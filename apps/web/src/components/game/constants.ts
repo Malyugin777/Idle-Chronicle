@@ -4,7 +4,7 @@
 
 import type { Skill } from './types';
 
-export const APP_VERSION = 'v1.7.8';
+export const APP_VERSION = 'v1.7.9';
 
 // ═══════════════════════════════════════════════════════════
 // STANDARDIZED ICONS - Use these everywhere for consistency

@@ -7307,12 +7307,19 @@ app.prepare().then(async () => {
         // Send updated user state
         const updatedUser = await prisma.user.findUnique({ where: { id: player.odamage } });
         if (updatedUser) {
+          // CRITICAL: Sync player memory with DB to prevent other handlers from overwriting
+          player.gold = Number(updatedUser.gold);
+          player.ancientCoin = updatedUser.ancientCoin;
+          player.lotteryTickets = updatedUser.lotteryTickets;
+          player.enchantCharges = updatedUser.enchantCharges;
+          player.protectionCharges = updatedUser.protectionCharges;
+
           socket.emit('player:state', {
-            gold: Number(updatedUser.gold),
-            ancientCoin: updatedUser.ancientCoin,
-            lotteryTickets: updatedUser.lotteryTickets,
-            enchantCharges: updatedUser.enchantCharges,
-            protectionCharges: updatedUser.protectionCharges,
+            gold: player.gold,
+            ancientCoin: player.ancientCoin,
+            lotteryTickets: player.lotteryTickets,
+            enchantCharges: player.enchantCharges,
+            protectionCharges: player.protectionCharges,
           });
         }
       } catch (err) {
@@ -7405,15 +7412,21 @@ app.prepare().then(async () => {
             },
           });
         } else if (reward.type === 'gold') {
-          await prisma.user.update({
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: { gold: { increment: BigInt(reward.amount) } },
+            select: { gold: true },
           });
+          // CRITICAL: Sync player memory with DB
+          player.gold = Number(updatedUser.gold);
         } else if (reward.type === 'tickets') {
-          await prisma.user.update({
+          const updatedUser = await prisma.user.update({
             where: { id: player.odamage },
             data: { lotteryTickets: { increment: reward.amount } },
+            select: { lotteryTickets: true },
           });
+          // CRITICAL: Sync player memory with DB
+          player.lotteryTickets = updatedUser.lotteryTickets;
         }
 
         // Mark as claimed
@@ -7426,6 +7439,12 @@ app.prepare().then(async () => {
 
         console.log(`[AP] ${player.odamage} claimed ${threshold} AP milestone`);
         socket.emit('ap:claimed', { threshold });
+
+        // Send updated player state
+        socket.emit('player:state', {
+          gold: player.gold,
+          lotteryTickets: player.lotteryTickets,
+        });
 
         // Refresh AP status
         socket.emit('ap:status');
@@ -7582,10 +7601,16 @@ app.prepare().then(async () => {
           }
 
           if (Object.keys(userUpdate).length > 0) {
-            await prisma.user.update({
+            const updatedUser = await prisma.user.update({
               where: { id: player.odamage },
               data: userUpdate,
+              select: { ancientCoin: true, lotteryTickets: true, enchantCharges: true, protectionCharges: true },
             });
+            // CRITICAL: Sync player memory with DB
+            player.ancientCoin = updatedUser.ancientCoin;
+            player.lotteryTickets = updatedUser.lotteryTickets;
+            player.enchantCharges = updatedUser.enchantCharges;
+            player.protectionCharges = updatedUser.protectionCharges;
           }
         }
 
@@ -7603,6 +7628,14 @@ app.prepare().then(async () => {
         socket.emit('checkin:claimed', {
           day: newDay,
           reward,
+        });
+
+        // Send updated player state
+        socket.emit('player:state', {
+          ancientCoin: player.ancientCoin,
+          lotteryTickets: player.lotteryTickets,
+          enchantCharges: player.enchantCharges,
+          protectionCharges: player.protectionCharges,
         });
 
         // Refresh status
