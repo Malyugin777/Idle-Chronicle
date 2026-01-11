@@ -94,7 +94,7 @@ export default function ShopTab() {
   };
 
   const etherCost = 200; // 200 gold per 100 ether
-  const EXCHANGE_RATE = 1000; // gold per crystal (1K = 1💎)
+  const EXCHANGE_RATE = 1; // 1 gold = 1 crystal (debug 1:1)
   const TICKET_COST = 5; // crystals per ticket
   const canAffordEther = resources.gold >= etherCost;
 
@@ -159,47 +159,47 @@ export default function ShopTab() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{lang === 'ru' ? 'Кристалл' : 'Crystal'}</span>
-              <span className="text-xs text-purple-400">= {EXCHANGE_RATE.toLocaleString()} 🪙</span>
+              <span className="font-bold text-white">{lang === 'ru' ? 'Кристаллы' : 'Crystals'}</span>
+              <span className="text-xs text-purple-400">1:1</span>
             </div>
             <p className="text-xs text-gray-500">{lang === 'ru' ? 'Есть:' : 'Have:'} {resources.crystals} 💎</p>
           </div>
 
           <button
-            onClick={() => handleExchange(1)}
-            disabled={resources.gold < EXCHANGE_RATE || buying === 'exchange'}
+            onClick={() => handleExchange(100)}
+            disabled={resources.gold < 100 || buying === 'exchange'}
             className={`px-3 py-2 rounded-lg text-xs font-bold ${
-              resources.gold >= EXCHANGE_RATE
+              resources.gold >= 100
                 ? 'bg-purple-600 text-white hover:bg-purple-500'
                 : 'bg-gray-700 text-gray-500'
             }`}
           >
-            {buying === 'exchange' ? '...' : `🪙 ${(EXCHANGE_RATE / 1000)}K → 💎1`}
+            {buying === 'exchange' ? '...' : '🪙100 → 💎100'}
           </button>
         </div>
 
         <div className="flex gap-2">
           <button
-            onClick={() => handleExchange(5)}
-            disabled={resources.gold < EXCHANGE_RATE * 5 || buying === 'exchange'}
+            onClick={() => handleExchange(500)}
+            disabled={resources.gold < 500 || buying === 'exchange'}
             className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.gold >= EXCHANGE_RATE * 5
+              resources.gold >= 500
                 ? 'bg-purple-600/60 text-white hover:bg-purple-500'
                 : 'bg-gray-700 text-gray-500'
             }`}
           >
-            x5 = 💎5
+            🪙500 → 💎500
           </button>
           <button
-            onClick={() => handleExchange(10)}
-            disabled={resources.gold < EXCHANGE_RATE * 10 || buying === 'exchange'}
+            onClick={() => handleExchange(1000)}
+            disabled={resources.gold < 1000 || buying === 'exchange'}
             className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${
-              resources.gold >= EXCHANGE_RATE * 10
+              resources.gold >= 1000
                 ? 'bg-purple-600/60 text-white hover:bg-purple-500'
                 : 'bg-gray-700 text-gray-500'
             }`}
           >
-            x10 = 💎10
+            🪙1K → 💎1K
           </button>
         </div>
       </div>

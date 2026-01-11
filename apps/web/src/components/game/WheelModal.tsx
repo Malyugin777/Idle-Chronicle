@@ -24,32 +24,32 @@ interface WheelModalProps {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PHASER WHEEL SCENE - Real premium wheel with visible segments
+// PHASER WHEEL SCENE - Classic pie-slice wheel
+// Segments go from center to edge like pizza slices
+// Text along radius (from center outward)
 // ═══════════════════════════════════════════════════════════
 
-// Bright, saturated colors for segments (override server colors)
-const SEGMENT_COLORS = [
-  '#F59E0B', // amber
-  '#8B5CF6', // violet
+// Bright alternating colors for pie slices
+const SLICE_COLORS = [
   '#EF4444', // red
-  '#10B981', // emerald
+  '#F59E0B', // amber
+  '#22C55E', // green
   '#3B82F6', // blue
+  '#A855F7', // purple
   '#EC4899', // pink
   '#F97316', // orange
-  '#06B6D4', // cyan
-  '#A855F7', // purple
-  '#22C55E', // green
+  '#14B8A6', // teal
+  '#8B5CF6', // violet
+  '#EAB308', // yellow
 ];
 
 class WheelScene extends Phaser.Scene {
   private wheelContainer!: Phaser.GameObjects.Container;
   private pointer!: Phaser.GameObjects.Graphics;
-  private winHighlight!: Phaser.GameObjects.Graphics;
   private segments: WheelSegment[] = [];
   private isSpinning = false;
   private currentAngle = 0;
   private lastSegmentIndex = -1;
-  private winningIndex = -1;
 
   constructor() {
     super({ key: 'WheelScene' });
@@ -59,286 +59,128 @@ class WheelScene extends Phaser.Scene {
     this.segments = data.segments || [];
     this.currentAngle = 0;
     this.lastSegmentIndex = -1;
-    this.winningIndex = -1;
   }
 
   create() {
     const centerX = 160;
     const centerY = 160;
-    const radius = 120;
+    const radius = 125;
     const numSegments = this.segments.length;
     const sliceAngle = (Math.PI * 2) / numSegments;
 
-    // Create wheel texture via offscreen canvas
-    const wheelTexture = this.createWheelTexture(radius, numSegments);
-    this.textures.addCanvas('wheel', wheelTexture);
-
-    // Create container for wheel (will rotate)
+    // Container for the wheel
     this.wheelContainer = this.add.container(centerX, centerY);
 
-    // Add wheel sprite from canvas texture
-    const wheelSprite = this.add.image(0, 0, 'wheel');
-    this.wheelContainer.add(wheelSprite);
+    // Draw pie slices using Phaser Graphics
+    const wheel = this.add.graphics();
 
-    // Add labels INSIDE each segment (NOT along circumference!)
+    this.segments.forEach((segment, i) => {
+      const startAngle = i * sliceAngle - Math.PI / 2;
+      const endAngle = startAngle + sliceAngle;
+      const color = parseInt(SLICE_COLORS[i % SLICE_COLORS.length].replace('#', '0x'));
+
+      // Fill pie slice
+      wheel.fillStyle(color, 1);
+      wheel.beginPath();
+      wheel.moveTo(0, 0);
+      wheel.arc(0, 0, radius, startAngle, endAngle, false);
+      wheel.closePath();
+      wheel.fillPath();
+
+      // Darker border between slices
+      wheel.lineStyle(2, 0x000000, 0.4);
+      wheel.beginPath();
+      wheel.moveTo(0, 0);
+      wheel.lineTo(Math.cos(startAngle) * radius, Math.sin(startAngle) * radius);
+      wheel.stroke();
+
+      // Light inner edge
+      wheel.lineStyle(1, 0xffffff, 0.3);
+      wheel.beginPath();
+      wheel.moveTo(Math.cos(startAngle) * 25, Math.sin(startAngle) * 25);
+      wheel.lineTo(Math.cos(startAngle) * (radius - 3), Math.sin(startAngle) * (radius - 3));
+      wheel.stroke();
+    });
+
+    // Outer rim
+    wheel.lineStyle(4, 0x000000, 0.5);
+    wheel.strokeCircle(0, 0, radius);
+
+    this.wheelContainer.add(wheel);
+
+    // Add text labels - along the radius (from center to edge)
     this.segments.forEach((segment, i) => {
       const midAngle = i * sliceAngle - Math.PI / 2 + sliceAngle / 2;
-      const labelRadius = radius * 0.6;
+      const labelRadius = radius * 0.55; // Position text at 55% of radius
       const labelX = Math.cos(midAngle) * labelRadius;
       const labelY = Math.sin(midAngle) * labelRadius;
 
-      // Make text almost horizontal - only slight tilt towards center
-      // Calculate angle to make text readable (pointing outward from center)
-      let textAngle = midAngle + Math.PI / 2;
-      // Flip text on bottom half so it's not upside down
-      if (midAngle > 0 && midAngle < Math.PI) {
-        textAngle += Math.PI;
-      }
-
+      // Text rotated to point outward from center (along radius)
       const label = this.add.text(labelX, labelY, segment.label, {
-        fontSize: '18px',
+        fontSize: '15px',
         fontFamily: 'Arial Black, sans-serif',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 6,
-        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 4, fill: true },
+        strokeThickness: 4,
       });
       label.setOrigin(0.5, 0.5);
-      label.setRotation(textAngle);
+      // Rotate so text reads from center outward
+      label.setRotation(midAngle);
       this.wheelContainer.add(label);
     });
 
-    // Golden center hub ("bolt") with 3D depth
+    // Center hub (gold button)
     const hub = this.add.graphics();
     hub.fillStyle(0x1f2937, 1);
-    hub.fillCircle(0, 0, 28);
-    // Bronze outer ring
-    hub.lineStyle(8, 0x78350f, 1);
-    hub.strokeCircle(0, 0, 26);
-    // Gold middle ring
-    hub.lineStyle(4, 0xb45309, 1);
-    hub.strokeCircle(0, 0, 22);
-    hub.lineStyle(2, 0xfbbf24, 1);
-    hub.strokeCircle(0, 0, 18);
-    // Inner gold button
+    hub.fillCircle(0, 0, 22);
+    hub.lineStyle(4, 0xfbbf24, 1);
+    hub.strokeCircle(0, 0, 20);
     hub.fillStyle(0xfbbf24, 1);
     hub.fillCircle(0, 0, 14);
-    // Highlight on button
-    hub.fillStyle(0xfef3c7, 0.7);
-    hub.fillCircle(-4, -4, 6);
-    // Small center dot
-    hub.fillStyle(0x92400e, 1);
-    hub.fillCircle(0, 0, 4);
+    hub.fillStyle(0xfef3c7, 0.6);
+    hub.fillCircle(-3, -3, 5);
     this.wheelContainer.add(hub);
 
-    // Outer decorative golden frame (thick 3D effect)
+    // Golden outer frame
     const frame = this.add.graphics();
-    frame.lineStyle(12, 0x451a03, 1); // Dark brown base
-    frame.strokeCircle(centerX, centerY, radius + 10);
-    frame.lineStyle(8, 0x78350f, 1); // Bronze
+    frame.lineStyle(8, 0x78350f, 1);
     frame.strokeCircle(centerX, centerY, radius + 6);
-    frame.lineStyle(4, 0xb45309, 1); // Bronze highlight
+    frame.lineStyle(4, 0xfbbf24, 1);
     frame.strokeCircle(centerX, centerY, radius + 2);
-    frame.lineStyle(2, 0xfbbf24, 1); // Gold inner edge
-    frame.strokeCircle(centerX, centerY, radius);
 
-    // Win highlight overlay (hidden initially)
-    this.winHighlight = this.add.graphics();
-    this.winHighlight.setVisible(false);
-
-    // Premium pointer with 3D effect
+    // Pointer at top
     this.pointer = this.add.graphics();
     this.drawPointer(1);
   }
 
-  private createWheelTexture(radius: number, numSegments: number): HTMLCanvasElement {
-    const size = radius * 2 + 40;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-    const cx = size / 2;
-    const cy = size / 2;
-    const sliceAngle = (Math.PI * 2) / numSegments;
-
-    // Draw each segment with BRIGHT colors and gradient
-    this.segments.forEach((segment, i) => {
-      const startAngle = i * sliceAngle - Math.PI / 2;
-      const endAngle = startAngle + sliceAngle;
-
-      // Use bright colors (override server's dark colors)
-      const baseColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
-
-      // Create radial gradient (bright center, slightly darker edge)
-      const grad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
-      grad.addColorStop(0, this.lightenColor(baseColor, 50));
-      grad.addColorStop(0.4, this.lightenColor(baseColor, 20));
-      grad.addColorStop(0.7, baseColor);
-      grad.addColorStop(1, this.darkenColor(baseColor, 30));
-
-      // Draw segment
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, radius, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      // White inner arc (highlight near center)
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.35, startAngle + 0.05, endAngle - 0.05);
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Segment divider (dark line)
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(startAngle) * radius, cy + Math.sin(startAngle) * radius);
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Light edge on divider
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(startAngle + 0.02) * 30, cy + Math.sin(startAngle + 0.02) * 30);
-      ctx.lineTo(cx + Math.cos(startAngle + 0.02) * (radius - 5), cy + Math.sin(startAngle + 0.02) * (radius - 5));
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    });
-
-    // Inner shadow ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.32, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 6;
-    ctx.stroke();
-
-    // Gloss overlay (top half shine)
-    const glossGrad = ctx.createLinearGradient(cx, cy - radius, cx, cy);
-    glossGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
-    glossGrad.addColorStop(0.5, 'rgba(255,255,255,0.08)');
-    glossGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius - 2, -Math.PI, 0);
-    ctx.lineTo(cx + radius - 2, cy);
-    ctx.arc(cx, cy, radius * 0.35, 0, -Math.PI, true);
-    ctx.closePath();
-    ctx.fillStyle = glossGrad;
-    ctx.fill();
-
-    return canvas;
-  }
-
-  private lightenColor(hex: string, percent: number): string {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const r = Math.min(255, (num >> 16) + percent);
-    const g = Math.min(255, ((num >> 8) & 0x00FF) + percent);
-    const b = Math.min(255, (num & 0x0000FF) + percent);
-    return `rgb(${r},${g},${b})`;
-  }
-
-  private darkenColor(hex: string, percent: number): string {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const r = Math.max(0, (num >> 16) - percent);
-    const g = Math.max(0, ((num >> 8) & 0x00FF) - percent);
-    const b = Math.max(0, (num & 0x0000FF) - percent);
-    return `rgb(${r},${g},${b})`;
-  }
-
   private drawPointer(scale: number) {
-    const centerX = 160;
+    const cx = 160;
     this.pointer.clear();
 
     // Shadow
     this.pointer.fillStyle(0x000000, 0.3);
-    this.pointer.beginPath();
-    this.pointer.moveTo(centerX + 2, 30 * scale);
-    this.pointer.lineTo(centerX - 16 * scale + 2, 6);
-    this.pointer.lineTo(centerX + 16 * scale + 2, 6);
-    this.pointer.closePath();
-    this.pointer.fillPath();
+    this.pointer.fillTriangle(cx + 2, 28 * scale, cx - 12 * scale + 2, 4, cx + 12 * scale + 2, 4);
 
-    // Main pointer (red with gradient effect)
+    // Red pointer
     this.pointer.fillStyle(0xdc2626, 1);
-    this.pointer.beginPath();
-    this.pointer.moveTo(centerX, 28 * scale);
-    this.pointer.lineTo(centerX - 15 * scale, 4);
-    this.pointer.lineTo(centerX + 15 * scale, 4);
-    this.pointer.closePath();
-    this.pointer.fillPath();
+    this.pointer.fillTriangle(cx, 26 * scale, cx - 11 * scale, 2, cx + 11 * scale, 2);
 
-    // Dark border
+    // Border
     this.pointer.lineStyle(2, 0x7f1d1d, 1);
-    this.pointer.strokePath();
+    this.pointer.strokeTriangle(cx, 26 * scale, cx - 11 * scale, 2, cx + 11 * scale, 2);
 
-    // Highlight stripe
+    // Highlight
     this.pointer.fillStyle(0xfca5a5, 0.5);
-    this.pointer.beginPath();
-    this.pointer.moveTo(centerX - 3, 24 * scale);
-    this.pointer.lineTo(centerX - 10 * scale, 6);
-    this.pointer.lineTo(centerX - 5 * scale, 6);
-    this.pointer.lineTo(centerX - 1, 22 * scale);
-    this.pointer.closePath();
-    this.pointer.fillPath();
+    this.pointer.fillTriangle(cx - 2, 20 * scale, cx - 8 * scale, 4, cx - 4 * scale, 4);
 
     // Base circle
     this.pointer.fillStyle(0x991b1b, 1);
-    this.pointer.fillCircle(centerX, 6, 8 * scale);
-    this.pointer.lineStyle(2, 0x7f1d1d, 1);
-    this.pointer.strokeCircle(centerX, 6, 8 * scale);
-    this.pointer.fillStyle(0xfecaca, 0.4);
-    this.pointer.fillCircle(centerX - 2, 4, 3 * scale);
-  }
-
-  private tickPointer() {
-    // Quick pulse animation on pointer
-    this.tweens.add({
-      targets: { scale: 1 },
-      scale: 1.15,
-      duration: 50,
-      yoyo: true,
-      onUpdate: (tween) => {
-        this.drawPointer(tween.getValue() ?? 1);
-      },
-    });
-  }
-
-  private showWinHighlight(segmentIndex: number) {
-    const centerX = 160;
-    const centerY = 160;
-    const radius = 125;
-    const numSegments = this.segments.length;
-    const sliceAngle = (Math.PI * 2) / numSegments;
-    const startAngle = segmentIndex * sliceAngle - Math.PI / 2;
-    const endAngle = startAngle + sliceAngle;
-
-    // Flash the winning segment
-    let flashCount = 0;
-    const flashInterval = setInterval(() => {
-      this.winHighlight.clear();
-      if (flashCount % 2 === 0) {
-        this.winHighlight.lineStyle(6, 0xfbbf24, 0.9);
-        this.winHighlight.beginPath();
-        this.winHighlight.arc(centerX, centerY, radius - 3,
-          startAngle + this.wheelContainer.rotation * Math.PI / 180,
-          endAngle + this.wheelContainer.rotation * Math.PI / 180);
-        this.winHighlight.strokePath();
-      }
-      this.winHighlight.setVisible(true);
-      flashCount++;
-      if (flashCount >= 6) {
-        clearInterval(flashInterval);
-        this.winHighlight.setVisible(false);
-      }
-    }, 150);
+    this.pointer.fillCircle(cx, 5, 7 * scale);
   }
 
   spinTo(targetIndex: number, callback?: () => void) {
     if (this.isSpinning) return;
     this.isSpinning = true;
-    this.winningIndex = targetIndex;
     this.lastSegmentIndex = -1;
 
     const numSegments = this.segments.length;
@@ -375,16 +217,20 @@ class WheelScene extends Phaser.Scene {
         const currentSegment = Math.floor(normalizedAngle / sliceAngle) % numSegments;
 
         if (currentSegment !== this.lastSegmentIndex && this.lastSegmentIndex !== -1) {
-          this.tickPointer();
+          // Pointer tick pulse
+          this.tweens.add({
+            targets: { s: 1 },
+            s: 1.1,
+            duration: 30,
+            yoyo: true,
+            onUpdate: (tw) => this.drawPointer(tw.getValue() ?? 1),
+          });
         }
         this.lastSegmentIndex = currentSegment;
       },
       onComplete: () => {
         this.currentAngle = finalAngle;
         this.isSpinning = false;
-
-        // Show win highlight
-        this.showWinHighlight(targetIndex);
 
         // Bounce effect at the end
         this.tweens.add({
