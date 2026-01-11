@@ -63,26 +63,17 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     // ═══════════════════════════════════════════════════════════
-    // FPS LIMIT - Принудительный 30 FPS через sleep/wake
-    // Phaser 3 игнорирует targetFps с WebGL, поэтому хакаем
+    // FPS LIMIT - Step mode для точного контроля
     // ═══════════════════════════════════════════════════════════
-    const targetFrameTime = 1000 / 30; // 30 FPS
+    // Отключаем автоматический loop
+    this.game.loop.stop();
 
-    // Внешний интервал (работает даже когда game loop спит)
+    // Ручной step каждые 33ms (30 FPS)
     setInterval(() => {
       if (this.game && this.game.loop) {
-        this.game.loop.wake();
-        // Сразу уснуть после одного кадра
-        requestAnimationFrame(() => {
-          if (this.game && this.game.loop) {
-            this.game.loop.sleep();
-          }
-        });
+        this.game.loop.tick();  // Один тик = один кадр
       }
-    }, targetFrameTime);
-
-    // Начать в спящем режиме
-    this.game.loop.sleep();
+    }, 1000 / 30);
 
     // Transparent background (React handles the gradient)
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
