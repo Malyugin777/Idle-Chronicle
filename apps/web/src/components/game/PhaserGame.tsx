@@ -295,7 +295,20 @@ export default function PhaserGame() {
             languageCode: (user as any).language_code,
             initData: webApp.initData,
           });
+          return;
         }
+      }
+      // DEV MODE: localhost fallback for browser testing
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.log('[DEV] Using mock Telegram user for local testing');
+        socket.emit('auth', {
+          telegramId: 999999999,
+          username: 'dev_tester',
+          firstName: 'Developer',
+          photoUrl: null,
+          languageCode: 'en',
+          initData: 'dev_mode',
+        });
       }
     };
 

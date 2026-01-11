@@ -4211,8 +4211,14 @@ app.prepare().then(async () => {
       try {
         console.log(`[Auth] Attempt for telegramId: ${data.telegramId}`);
 
-        // Verify Telegram initData if provided and token is set
-        if (data.initData && TELEGRAM_BOT_TOKEN && !SKIP_TELEGRAM_AUTH) {
+        // DEV MODE: Skip verification for local testing
+        const isDevMode = data.initData === 'dev_mode';
+        if (isDevMode) {
+          console.log(`[Auth] DEV MODE enabled for telegramId: ${data.telegramId}`);
+        }
+
+        // Verify Telegram initData if provided and token is set (skip in dev mode)
+        if (data.initData && TELEGRAM_BOT_TOKEN && !SKIP_TELEGRAM_AUTH && !isDevMode) {
           const isValid = verifyTelegramAuth(data.initData);
           if (!isValid) {
             console.warn(`[Auth] Invalid signature, but allowing anyway for: ${data.telegramId}`);
